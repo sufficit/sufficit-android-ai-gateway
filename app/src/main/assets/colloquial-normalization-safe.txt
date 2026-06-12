@@ -1,0 +1,12 @@
+# Regras seguras de normalizacao coloquial.
+# Formato:
+# min_strength|regex => replacement
+# Linhas vazias e linhas iniciadas com # sao ignoradas.
+
+0.01|\bintendi\b => entendi
+0.01|\bentindi\b => entendi
+0.34|\bintend[ií]do\b => entendido
+0.34|\bentend[ií]do\b => entendido
+0.01|\bxu\s*xu\b => xuxu
+0.01|\bchu\s*chu\b => xuxu
+0.01|\bchuchu\b => xuxu

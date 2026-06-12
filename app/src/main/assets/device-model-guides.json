@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "id": "samsung-galaxy-a51",
+      "displayName": "Samsung Galaxy A51",
+      "manufacturerContains": ["samsung"],
+      "modelContains": ["sm-a515", "galaxy a51", "a51"],
+      "hardwareContains": ["exynos9611", "exynos 9611"],
+      "notes": "Aparelho antigo, mas funcional para gateway de sala. O melhor equilibrio observado foi modelo local tiny com NNAPI. Modelos maiores ficaram lentos demais para uso continuo.",
+      "recommendations": [
+        {
+          "transcriptionMode": "local",
+          "localModelId": "sherpa-whisper-tiny",
+          "localExecutionMode": "nnapi",
+          "status": "validated",
+          "experienceLevel": "otima",
+          "summary": "Melhor equilibrio real entre latencia e entendimento para uso de sala."
+        },
+        {
+          "transcriptionMode": "local",
+          "localModelId": "sherpa-whisper-small",
+          "localExecutionMode": "nnapi",
+          "status": "functional",
+          "experienceLevel": "limitada",
+          "summary": "Funciona, mas a latencia ficou alta demais para experiencia de fala natural."
+        },
+        {
+          "transcriptionMode": "local",
+          "localModelId": "sherpa-whisper-turbo",
+          "localExecutionMode": "nnapi",
+          "status": "functional",
+          "experienceLevel": "fraca",
+          "summary": "Consegue rodar, mas ficou lento e pesado para o hardware deste aparelho."
+        },
+        {
+          "transcriptionMode": "local",
+          "localModelId": "whisper.cpp-vulkan",
+          "localExecutionMode": "gpu",
+          "status": "broken",
+          "experienceLevel": "inviavel",
+          "summary": "Tentativas com Vulkan/ggml GPU falharam neste aparelho e nao devem ser sugeridas."
+        },
+        {
+          "transcriptionMode": "remote",
+          "remoteModel": "gpt-4o-transcribe",
+          "status": "validated",
+          "experienceLevel": "otima",
+          "summary": "Melhor qualidade geral quando a latencia de rede e aceitavel."
+        }
+      ]
+    }
+  ]
+}

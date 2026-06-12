@@ -1,0 +1,27 @@
+.gradle/
+.kotlin/
+.idea/
+.tools/
+build/
+local.properties
+*.iml
+app/build/
+captures/
+.DS_Store
+**/.cxx/
+**/tmp/
+app/.cxx/
+
+# copilot chat compact
+.s*
+*.token
+
+# secrets-and-tokens (never commit real credentials)
+.elevenlabs.token
+temp_*.xml
+fix_*.py
+app/src/main/assets/config.json
+app/src/main/assets/config.local.json
+*.keystore
+*.jks
+keystore.properties

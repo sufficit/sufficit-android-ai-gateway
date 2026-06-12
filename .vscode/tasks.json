@@ -1,0 +1,113 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "diagnosticar-remmina-waydroid",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/hugodeco/.config/remmina && printf '%s\\n' '--- arquivos ---' && ls -l Waydroid-CT-8010.remmina waydroid-vnc.crt /home/hugodeco/.ssh/id_ed25519 2>&1 && printf '%s\\n' '--- teste ssh/vnc remoto ---' && ssh -i /home/hugodeco/.ssh/id_ed25519 -p 26492 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@143.208.224.38 'printf \"SSH_OK\\n\"; if timeout 5 bash -lc \"</dev/tcp/172.16.1.17/5900\" 2>/dev/null; then printf \"VNC_172_OK\\n\"; else printf \"VNC_172_FAIL\\n\"; fi; if timeout 5 bash -lc \"</dev/tcp/127.0.0.1/5900\" 2>/dev/null; then printf \"VNC_LOOPBACK_OK\\n\"; else printf \"VNC_LOOPBACK_FAIL\\n\"; fi'"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "diagnosticar-remmina-waydroid-2",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"cd /home/hugodeco/.config/remmina && printf \"%s\\n\" \"--- arquivos ---\" && ls -l Waydroid-CT-8010.remmina waydroid-vnc.crt /home/hugodeco/.ssh/id_ed25519 2>&1 && printf \"%s\\n\" \"--- teste ssh/vnc remoto ---\" && ssh -i /home/hugodeco/.ssh/id_ed25519 -p 26492 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@143.208.224.38 \"printf \\\"SSH_OK\\\\n\\\"; if timeout 5 bash -lc \\\"</dev/tcp/172.16.1.17/5900\\\" 2>/dev/null; then printf \\\"VNC_172_OK\\\\n\\\"; else printf \\\"VNC_172_FAIL\\\\n\\\"; fi; if timeout 5 bash -lc \\\"</dev/tcp/127.0.0.1/5900\\\" 2>/dev/null; then printf \\\"VNC_LOOPBACK_OK\\\\n\\\"; else printf \\\"VNC_LOOPBACK_FAIL\\\\n\\\"; fi\""
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "inspecionar-rfb-waydroid",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-lc",
+				"ssh -i /home/hugodeco/.ssh/id_ed25519 -p 26492 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@143.208.224.38 \"python3 -c 'import socket; s=socket.create_connection((\\\"172.16.1.17\\\",5900),5); banner=s.recv(12); print(\\\"BANNER\\\", repr(banner)); s.sendall(b\\\"RFB 003.008\\\\n\\\"); data=s.recv(64); print(\\\"SECURITY_TYPES\\\", list(data), repr(data)); s.close()'\""
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "inspecionar-rfb-waydroid-2",
+			"type": "shell",
+			"command": "ssh",
+			"args": [
+				"-i",
+				"/home/hugodeco/.ssh/id_ed25519",
+				"-p",
+				"26492",
+				"-o",
+				"BatchMode=yes",
+				"-o",
+				"StrictHostKeyChecking=accept-new",
+				"-o",
+				"ConnectTimeout=10",
+				"root@143.208.224.38",
+				"python3",
+				"-c",
+				"import socket; s=socket.create_connection(('172.16.1.17',5900),5); banner=s.recv(12); print('BANNER', repr(banner)); s.sendall(b'RFB 003.008\\n'); data=s.recv(64); print('SECURITY_TYPES', list(data), repr(data)); s.close()"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "inspecionar-rfb-waydroid-3",
+			"type": "shell",
+			"command": "ssh -i /home/hugodeco/.ssh/id_ed25519 -p 26492 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 root@143.208.224.38 \"python3 -c \\\"import socket; host=\\\\\\\"172.16.1.17\\\\\\\"; s=socket.create_connection((host,5900),5); banner=s.recv(12); print(\\\\\\\"BANNER\\\\\\\",repr(banner)); s.sendall(b\\\\\\\"RFB 003.008\\\\\\\\n\\\\\\\"); data=s.recv(64); print(\\\\\\\"SECURITY_TYPES\\\\\\\",list(data),repr(data)); s.close()\\\"\"",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "copilot-smoke-echo",
+			"type": "shell",
+			"command": "printf",
+			"args": [
+				"task-output-ok\\n"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "diagnosticar-vnc-pam-waydroid",
+			"type": "shell",
+			"command": "ssh",
+			"args": [
+				"-i",
+				"/home/hugodeco/.ssh/id_ed25519",
+				"-p",
+				"26492",
+				"-o",
+				"BatchMode=yes",
+				"-o",
+				"StrictHostKeyChecking=accept-new",
+				"-o",
+				"ConnectTimeout=10",
+				"root@143.208.224.38",
+				"pct",
+				"exec",
+				"8010",
+				"--",
+				"sh",
+				"-lc",
+				"printf '%s\\n' '--- pam weston ---'; cat /etc/pam.d/weston-remote-access 2>/dev/null || true; printf '%s\\n' '--- root/user status ---'; getent passwd root || true; passwd -S root 2>/dev/null || true; printf '%s\\n' '--- weston process ---'; pgrep -a weston || true"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}
