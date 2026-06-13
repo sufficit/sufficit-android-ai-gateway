@@ -44,8 +44,24 @@ Topologia preferida:
 - Whisper = STT
 - OpenClaw = orquestração e resposta
 
+## API HTTP de controle
+
+Servidor HTTP embarcado controla **todas** as funções e configurações por
+comandos HTTP — inclusive participar da conversa (injetar turnos do usuário e
+ouvir a resposta do agente). Desligado por padrão; exige token; opção de bind
+em LAN. Habilite em Configuração → "API HTTP de controle".
+
+```bash
+curl -X POST http://<ip>:8765/api/conversation \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"text": "que horas são?", "speak": true}'
+```
+
+Referência completa: [docs/http-control-api.md](./docs/http-control-api.md).
+
 ## Documentação inicial
 
+- [API HTTP de controle](./docs/http-control-api.md)
 - [Visão de arquitetura](./docs/architecture.md)
 - [Roadmap da primeira versão](./docs/roadmap.md)
 - [Instalação e teste em Android](./docs/android-testing.md)

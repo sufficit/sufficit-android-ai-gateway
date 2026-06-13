@@ -125,7 +125,14 @@ data class GatewaySettings(
     val ambientGainStabilityReduction: Double = GatewaySettingsStore.DEFAULT_AMBIENT_GAIN_STABILITY_REDUCTION,
     val ambientGainMinGain: Double = GatewaySettingsStore.DEFAULT_AMBIENT_GAIN_MIN_GAIN,
     val ambientGainSmoothingFast: Double = GatewaySettingsStore.DEFAULT_AMBIENT_GAIN_SMOOTHING_FAST,
-    val ambientGainSmoothingSlow: Double = GatewaySettingsStore.DEFAULT_AMBIENT_GAIN_SMOOTHING_SLOW
+    val ambientGainSmoothingSlow: Double = GatewaySettingsStore.DEFAULT_AMBIENT_GAIN_SMOOTHING_SLOW,
+    // HTTP control API (servidor embarcado no aparelho): controla todas as
+    // funcoes/configuracoes e permite participar da conversa via HTTP.
+    // Desligada por padrao; exige token quando habilitada.
+    val apiEnabled: Boolean = GatewaySettingsStore.DEFAULT_API_ENABLED,
+    val apiPort: Int = GatewaySettingsStore.DEFAULT_API_PORT,
+    val apiBindAllInterfaces: Boolean = GatewaySettingsStore.DEFAULT_API_BIND_ALL_INTERFACES,
+    val apiToken: String = GatewaySettingsStore.DEFAULT_API_TOKEN
 ) {
     val openClawGatewayUrl: String
         get() = GatewaySettingsStore.buildGatewayUrl(openClawServerAddress)
@@ -717,7 +724,13 @@ class GatewaySettingsStore(private val context: Context) {
         val DEFAULT_AMBIENT_GAIN_SMOOTHING_SLOW: Double
             get() = GatewayConfigCatalog.currentSeed().ambientGainSmoothingSlow
 
-
+        // API HTTP: defaults FIXOS (nao via currentSeed — o seed/bootstrap
+        // usa estes defaults, causaria recursao). Desligada e sem token por
+        // padrao; porta na faixa alta de usuario.
+        const val DEFAULT_API_ENABLED = false
+        const val DEFAULT_API_PORT = 8765
+        const val DEFAULT_API_BIND_ALL_INTERFACES = true
+        const val DEFAULT_API_TOKEN = ""
 
         private fun resolveTranscriptionMode(
             storedMode: TranscriptionMode,

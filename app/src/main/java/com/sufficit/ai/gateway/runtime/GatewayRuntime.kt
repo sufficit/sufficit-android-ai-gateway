@@ -190,6 +190,10 @@ object GatewayRuntime {
 
     fun chatMessages(): StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
 
+    fun clearChat() {
+        chatFlow.value = emptyList()
+    }
+
     fun appendChatMessage(role: ChatRole, text: String) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return

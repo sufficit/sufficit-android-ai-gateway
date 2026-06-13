@@ -72,6 +72,7 @@ dependencies {
     implementation("com.google.mediapipe:hands:0.10.20")
     implementation("com.google.mediapipe:facemesh:0.10.20")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("net.i2p.crypto:eddsa:0.3.0")
     implementation(files("libs/sherpa_onnx-nnapi-release.aar"))
 

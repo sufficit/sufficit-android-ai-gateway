@@ -78,7 +78,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
+class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.sufficit.ai.gateway.api.GatewayApiActions {
     private val captureRunning = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
     private var captureExecutor: ExecutorService? = null
@@ -88,6 +88,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
     private var noiseSuppressor: NoiseSuppressor? = null
     private var lastNotificationText: String = "Escuta de sala iniciando."
     private var settingsStore: GatewaySettingsStore? = null
+
+    // API HTTP de controle (servidor embarcado). Sobe/cai conforme apiEnabled.
+    private var apiServer: com.sufficit.ai.gateway.api.GatewayApiServer? = null
+
+    // injectConversation(speak=false): suprime a fala da PROXIMA resposta do
+    // agente uma unica vez (consumido em handleOpenClawReply).
+    @Volatile private var suppressNextReplySpeech = false
     private val whisperApiClient = WhisperApiClient()
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
     private var persistentOpenClawConnection: OpenClawGatewayPersistentConnection? = null
@@ -186,6 +193,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         super.onCreate()
         OpenClawGatewayClient.appContext = applicationContext
         settingsStore = GatewaySettingsStore(this)
+        startApiServerIfEnabled(loadCurrentSettings())
         transcriptionExecutor = object : ThreadPoolExecutor(
             1,
             1,
@@ -279,6 +287,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
                 markDirectAddressNow()
                 return START_STICKY
             }
+            // Config da API mudou na UI: reinicia o servidor HTTP com os
+            // novos valores (porta/bind/token/enabled).
+            ACTION_RELOAD_API -> {
+                restartApiServer(loadCurrentSettings())
+                return START_STICKY
+            }
             ACTION_STOP -> {
                 // Com palavra de ativacao configurada, "parar" suspende so a
                 // transcricao: a captura segue em espera escutando pela palavra.
@@ -318,6 +332,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        stopApiServer()
         shutdownCapture()
         releaseLocalWhisperEngine()
         releaseLocalSherpaOnnxEngine()
@@ -3779,12 +3794,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         if (!reply.isSystemInfo && !requiresAttention && displayReply.isNotBlank()) {
             GatewayRuntime.appendChatMessage(ChatRole.ASSISTANT, displayReply)
         }
-        if (reply.shouldSpeak && !reply.isSystemInfo && spokenReply.isNotBlank()) {
+        // API injectConversation(speak=false) suprime a fala desta resposta.
+        val speechSuppressedByApi = suppressNextReplySpeech
+        if (speechSuppressedByApi) {
+            suppressNextReplySpeech = false
+        }
+        if (reply.shouldSpeak && !reply.isSystemInfo && spokenReply.isNotBlank() && !speechSuppressedByApi) {
             speakAssistantReply(spokenReply)
         } else {
             Log.i(
                 TAG,
-                "Reply OpenClaw sem fala automatica. attention=$requiresAttention systemInfo=${reply.isSystemInfo} tags=${reply.tags.joinToString(",")}"
+                "Reply OpenClaw sem fala automatica. attention=$requiresAttention systemInfo=${reply.isSystemInfo} apiSuppressed=$speechSuppressedByApi tags=${reply.tags.joinToString(",")}"
             )
         }
         Log.i(
@@ -3828,11 +3848,35 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         currentSettings: GatewaySettings
     ): GatewaySettingsPatchResult? {
         val patch = reply.settingsPatch ?: return null
+        return applyConfigPatchInternal(patch, currentSettings)
+    }
+
+    /**
+     * Aplica um patch de configuracao (do reply do OpenClaw OU da API HTTP):
+     * persiste e dispara os efeitos colaterais necessarios — refresh de TTS,
+     * reconexao, restart de captura e restart da API. Ponto unico para
+     * qualquer origem de mudanca remota de config.
+     */
+    private fun applyConfigPatchInternal(
+        patch: JSONObject,
+        currentSettings: GatewaySettings = loadCurrentSettings()
+    ): GatewaySettingsPatchResult {
         val store = settingsStore ?: GatewaySettingsStore(this)
-        val result = currentSettings.applyWebSocketSettingsPatch(patch)
+        // Aceita patch SECCIONADO (igual config.json: {general:{...}}), FLAT
+        // ({cameraGestureEnabled:...}) ou misto: achata as secoes conhecidas
+        // e preserva chaves planas de topo.
+        val flat = com.sufficit.ai.gateway.config.flattenSectionedJson(patch)
+        val keys = patch.keys()
+        while (keys.hasNext()) {
+            val k = keys.next()
+            if (patch.opt(k) !is JSONObject && !flat.has(k)) {
+                flat.put(k, patch.opt(k))
+            }
+        }
+        val result = currentSettings.applyWebSocketSettingsPatch(flat)
         if (result.appliedKeys.isEmpty()) {
             if (result.ignoredKeys.isNotEmpty()) {
-                Log.w(TAG, "Patch remoto ignorado pelo Android: ${result.ignoredKeys.joinToString(",")}")
+                Log.w(TAG, "Patch ignorado: ${result.ignoredKeys.joinToString(",")}")
             }
             return result
         }
@@ -3847,14 +3891,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         if (result.requiresCaptureRestart && captureRunning.get()) {
             restartCaptureForRemoteSettings()
         }
+        if (result.requiresApiRestart) {
+            restartApiServer(result.settings)
+        }
 
         if (result.ignoredKeys.isNotEmpty()) {
             Log.w(
                 TAG,
-                "Patch remoto aplicado parcialmente. applied=${result.appliedKeys.joinToString(",")} ignored=${result.ignoredKeys.joinToString(",")}"
+                "Patch aplicado parcialmente. applied=${result.appliedKeys.joinToString(",")} ignored=${result.ignoredKeys.joinToString(",")}"
             )
         } else {
-            Log.i(TAG, "Patch remoto aplicado no Android: ${result.appliedKeys.joinToString(",")}")
+            Log.i(TAG, "Patch aplicado: ${result.appliedKeys.joinToString(",")}")
         }
         return result
     }
@@ -3882,6 +3929,127 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         Log.i(TAG, "Reiniciando captura para aplicar configuracao remota do Android.")
         shutdownCapture()
         startCaptureIfNeeded()
+    }
+
+    // ------------------------------------------------------------------
+    // API HTTP de controle (GatewayApiActions + lifecycle do servidor)
+    // ------------------------------------------------------------------
+
+    private fun startApiServerIfEnabled(settings: GatewaySettings) {
+        if (!settings.apiEnabled) return
+        if (apiServer != null) return
+        apiServer = com.sufficit.ai.gateway.api.GatewayApiServer.startIfEnabled(
+            enabled = settings.apiEnabled,
+            token = settings.apiToken,
+            port = settings.apiPort,
+            bindAll = settings.apiBindAllInterfaces,
+            tokenProvider = { loadCurrentSettings().apiToken },
+            actions = this
+        )
+    }
+
+    private fun stopApiServer() {
+        runCatching { apiServer?.stop() }
+        apiServer = null
+    }
+
+    private fun restartApiServer(settings: GatewaySettings) {
+        // Adia o restart para a resposta HTTP do patch que mudou a config da
+        // API conseguir sair antes do socket cair (mudanca de porta/token/
+        // enabled chega pela propria API).
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            stopApiServer()
+            startApiServerIfEnabled(loadCurrentSettings())
+        }, 250L)
+    }
+
+    // ---- GatewayApiActions ----
+
+    override fun currentSettings(): GatewaySettings = loadCurrentSettings()
+
+    override fun applyConfigPatch(patch: JSONObject): GatewaySettingsPatchResult =
+        applyConfigPatchInternal(patch)
+
+    override fun startListening() {
+        standbyMode = false
+        if (!captureRunning.get()) {
+            startCaptureIfNeeded()
+        }
+        GatewayRuntime.setListening(active = true, statusText = "Escuta iniciada por API.")
+    }
+
+    override fun stopListening() {
+        if (captureRunning.get() && isWakeWordStandbyAvailable()) {
+            standby()
+            return
+        }
+        stopRequested.set(true)
+        shutdownCapture()
+        GatewayRuntime.setListening(active = false, statusText = "Escuta parada por API.")
+    }
+
+    override fun standby() {
+        if (!captureRunning.get()) return
+        standbyMode = true
+        GatewayRuntime.setListening(
+            active = false,
+            statusText = "Em espera (API). Diga a palavra de ativacao para retomar."
+        )
+        refreshNotification("Em espera | aguardando palavra de ativacao")
+    }
+
+    override fun wake() {
+        standbyMode = false
+        if (!captureRunning.get()) {
+            startCaptureIfNeeded()
+        }
+        wakeDevice(loadCurrentSettings().screenHoldSeconds * 1000L)
+        GatewayRuntime.setListening(active = true, statusText = "Retomado por API.")
+    }
+
+    override fun say(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
+        speakAssistantReply(trimmed)
+    }
+
+    override fun injectConversation(text: String, speak: Boolean) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
+        suppressNextReplySpeech = !speak
+        markDirectAddressNow()
+        scheduleTranscriptDispatchToOpenClaw(
+            phrase = trimmed,
+            state = GatewayRuntime.state().value,
+            immediate = true
+        )
+    }
+
+    override fun interruptAssistant() {
+        interruptAssistantSpeechByTouch()
+    }
+
+    override fun triggerGesture(gestureId: String) {
+        // Reproduz o efeito do gesto da camera sem o reconhecedor. Atualiza o
+        // estado continuo (overlay/rodape) e dispara a acao equivalente.
+        GatewayRuntime.setGestureCommand(gestureId)
+        when (gestureId) {
+            GestureCommandIds.INDEX_UP -> {
+                markDirectAddressNow()
+                wake()
+            }
+            GestureCommandIds.FIST -> finalizeSegment()
+            GestureCommandIds.OPEN_HAND -> interruptAssistant()
+        }
+    }
+
+    override fun finalizeSegment() {
+        finalizeSegmentRequested.set(true)
+        commitAfterTranscriptionRequestedAt.set(System.currentTimeMillis())
+    }
+
+    override fun clearChat() {
+        GatewayRuntime.clearChat()
     }
 
     private fun buildOpenClawConfig(
@@ -4201,6 +4369,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
         private const val ACTION_START = "com.sufficit.ai.gateway.action.START"
         private const val ACTION_INTERRUPT_ASSISTANT = "com.sufficit.ai.gateway.action.INTERRUPT_ASSISTANT"
         private const val ACTION_STOP = "com.sufficit.ai.gateway.action.STOP"
+        private const val ACTION_RELOAD_API = "com.sufficit.ai.gateway.action.RELOAD_API"
         private const val ASSISTANT_SPEECH_GRACE_MS = 1_500L
         private const val OPENCLAW_UNCERTAIN_PREFIX = "[?]"
         private const val OPENCLAW_REASONING_HOLD_MS = 2200L
@@ -4358,6 +4527,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener {
                 action = ACTION_MARK_DIRECT_ADDRESS
             }
             context.startService(intent)
+        }
+
+        /** Recarrega a API HTTP apos mudanca de configuracao na UI. */
+        fun reloadApi(context: Context) {
+            val intent = Intent(context, RoomAudioForegroundService::class.java).apply {
+                action = ACTION_RELOAD_API
+            }
+            runCatching { context.startService(intent) }
         }
 
         /** Envia uma mensagem digitada do chat para o OpenClaw. */

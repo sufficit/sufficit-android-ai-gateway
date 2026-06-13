@@ -253,7 +253,14 @@ fun buildSettings(
         screenMode = ScreenMode.fromPersistedValue(input.screenModeValue),
         screenHoldSeconds = parsedScreenHoldSeconds.coerceIn(1, 120),
         transcriptClearTimeoutSecs = parsedTranscriptClearTimeoutSecs.coerceIn(0, 300),
-        openClawAccumulationWindowSecs = parsedOpenClawAccumulationWindowSecs.coerceIn(1, 10)
+        openClawAccumulationWindowSecs = parsedOpenClawAccumulationWindowSecs.coerceIn(1, 10),
+        // Campos da API nao sao gerenciados por este snapshot da UI principal
+        // (tem secao propria). Preserva o que ja esta persistido para o save
+        // de normalizacao nao zerar a config da API.
+        apiEnabled = runtimeCurrent?.apiEnabled ?: GatewaySettingsStore.DEFAULT_API_ENABLED,
+        apiPort = runtimeCurrent?.apiPort ?: GatewaySettingsStore.DEFAULT_API_PORT,
+        apiBindAllInterfaces = runtimeCurrent?.apiBindAllInterfaces ?: GatewaySettingsStore.DEFAULT_API_BIND_ALL_INTERFACES,
+        apiToken = runtimeCurrent?.apiToken ?: GatewaySettingsStore.DEFAULT_API_TOKEN
     )
 }
 

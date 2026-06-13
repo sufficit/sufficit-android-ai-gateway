@@ -8,7 +8,12 @@ data class GatewaySettingsPatchResult(
     val ignoredKeys: List<String>,
     val requiresCaptureRestart: Boolean,
     val requiresReconnect: Boolean,
-    val requiresTtsRefresh: Boolean
+    val requiresTtsRefresh: Boolean,
+    val requiresApiRestart: Boolean = false
+)
+
+private val API_RESTART_PATCH_KEYS = setOf(
+    "apiEnabled", "apiPort", "apiBindAllInterfaces", "apiToken"
 )
 
 private val CAPTURE_RESTART_PATCH_KEYS = setOf(
@@ -165,6 +170,12 @@ fun flattenSectionedJson(root: JSONObject): JSONObject {
     }
     root.optJSONObject("card")?.let { s ->
         copyKey(s, "clearTimeoutSecs", "transcriptClearTimeoutSecs")
+    }
+    root.optJSONObject("api")?.let { s ->
+        copyKey(s, "enabled", "apiEnabled")
+        copyKey(s, "port", "apiPort")
+        copyKey(s, "bindAllInterfaces", "apiBindAllInterfaces")
+        copyKey(s, "token", "apiToken")
     }
     root.optJSONObject("debug")?.let { s ->
         copyKey(s, "speechHoldMs", "debugSpeechHoldMs")
@@ -555,6 +566,22 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
                 val value = doubleValue(key)
                 if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainSmoothingSlow = value.coerceIn(0.01, 0.50)))
             }
+            "apiEnabled" -> {
+                val value = booleanValue(key)
+                if (value == null) ignored += key else applyIfChanged(key, updated.copy(apiEnabled = value))
+            }
+            "apiPort" -> {
+                val value = intValue(key)
+                if (value == null) ignored += key else applyIfChanged(key, updated.copy(apiPort = value.coerceIn(1024, 65535)))
+            }
+            "apiBindAllInterfaces" -> {
+                val value = booleanValue(key)
+                if (value == null) ignored += key else applyIfChanged(key, updated.copy(apiBindAllInterfaces = value))
+            }
+            "apiToken" -> {
+                val value = stringValue(key) ?: ""
+                applyIfChanged(key, updated.copy(apiToken = value))
+            }
             else -> ignored += key
         }
     }
@@ -565,6 +592,7 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
         ignoredKeys = ignored.toList(),
         requiresCaptureRestart = applied.any { it in CAPTURE_RESTART_PATCH_KEYS },
         requiresReconnect = applied.any { it in OPENCLAW_RECONNECT_PATCH_KEYS },
-        requiresTtsRefresh = applied.any { it in TTS_REFRESH_PATCH_KEYS }
+        requiresTtsRefresh = applied.any { it in TTS_REFRESH_PATCH_KEYS },
+        requiresApiRestart = applied.any { it in API_RESTART_PATCH_KEYS }
     )
 }

@@ -78,6 +78,9 @@ fun ConfigGeneralSectionPage(
             SpeakerVoiceConfigSection()
         }
         item {
+            ApiConfigSection()
+        }
+        item {
             ConfigSection(title = "Backup JSON") {
                 Text(
                     text = "Exporte ou restaure todas as configuracoes do app em JSON para backup e padronizacao.",

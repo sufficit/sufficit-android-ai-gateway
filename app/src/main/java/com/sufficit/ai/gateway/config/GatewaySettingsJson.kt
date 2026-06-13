@@ -90,6 +90,12 @@ fun GatewaySettings.toJson(): JSONObject {
         put("card", JSONObject().apply {
             put("clearTimeoutSecs", transcriptClearTimeoutSecs)
         })
+        put("api", JSONObject().apply {
+            put("enabled", apiEnabled)
+            put("port", apiPort)
+            put("bindAllInterfaces", apiBindAllInterfaces)
+            put("token", apiToken)
+        })
         val hasDebug = debugSpeechHoldMs != null || debugMaxSpeechSegmentMs != null ||
             debugMinTranscriptionMs != null || debugPhraseBreakSilenceMs != null
         if (hasDebug) {
