@@ -20,7 +20,7 @@
       "remoteModel": "large-v3-turbo",
       "whisperUrl": "https://your-whisper-host.example.com/v1/audio/transcriptions",
       "whisperToken": "",
-      "localModel": "/data/user/0/com.sufficit.openclaw.gateway/files/models/sherpa-whisper-tiny",
+      "localModel": "/data/user/0/com.sufficit.ai.gateway/files/models/sherpa-whisper-tiny",
       "localExecution": "nnapi",
       "terms": "",
       "dictionary": "",

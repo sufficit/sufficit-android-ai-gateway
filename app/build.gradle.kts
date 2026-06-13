@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.sufficit.openclaw.gateway"
+    namespace = "com.sufficit.ai.gateway"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sufficit.openclaw.gateway"
+        applicationId = "com.sufficit.ai.gateway"
         minSdk = 28
         targetSdk = 35
         versionCode = 1
