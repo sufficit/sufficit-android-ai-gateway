@@ -63,7 +63,7 @@ data class GatewayUiState(
 )
 
 /** Papel de uma mensagem no historico de conversa do dashboard. */
-enum class ChatRole { USER, ASSISTANT }
+enum class ChatRole { USER, ASSISTANT, SYSTEM }
 
 /** Mensagem do historico de conversa (estilo WhatsApp/Telegram). */
 data class ChatMessage(

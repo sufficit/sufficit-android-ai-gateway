@@ -130,12 +130,16 @@ fun ChatMessagesList(
             key = { index -> messages[messages.size - 1 - index].id }
         ) { index ->
             val message = messages[messages.size - 1 - index]
-            ChatBubble(
-                text = message.text,
-                role = message.role,
-                timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs)),
-                details = message.details
-            )
+            if (message.role == ChatRole.SYSTEM) {
+                SystemMarker(text = message.text)
+            } else {
+                ChatBubble(
+                    text = message.text,
+                    role = message.role,
+                    timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs)),
+                    details = message.details
+                )
+            }
         }
         if (messages.isEmpty() && partialTranscript.isBlank()) {
             item(key = "empty") {
@@ -150,6 +154,39 @@ fun ChatMessagesList(
                 )
             }
         }
+    }
+}
+
+// Marca de sistema discreta (ex.: palavra de ativacao reconhecida): linha
+// horizontal fina com texto bem menor que o normal, centralizado. Nao e
+// bolha de conversa — apenas sinaliza um evento do sistema.
+@Composable
+private fun SystemMarker(text: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(BubbleTime.copy(alpha = 0.25f))
+        )
+        Text(
+            text = text,
+            color = BubbleTime,
+            style = MaterialTheme.typography.labelSmall,
+            fontStyle = FontStyle.Italic
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(BubbleTime.copy(alpha = 0.25f))
+        )
     }
 }
 

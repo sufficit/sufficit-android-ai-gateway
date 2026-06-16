@@ -179,14 +179,60 @@ internal object TranscriptTextPipeline {
             .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
             .split(Regex("\\s+"))
             .filter { it.isNotBlank() }
-        if (words.size < 4) {
+        if (words.size < 2) {
             return false
         }
+        // Piso baixo: 2+ palavras todas iguais ("xuxu xuxu") ja e loop tipico
+        // de wake word alucinada em ruido. Antes exigia 4 palavras e deixava
+        // passar o par.
         val distinct = words.distinct().size
+        if (words.size in 2..3) {
+            return distinct == 1
+        }
         if (distinct <= 2) {
             return true
         }
         return words.size >= 8 && distinct.toDouble() / words.size < 0.2
+    }
+
+    /**
+     * True quando a transcricao e composta APENAS por palavra(s) de ativacao
+     * (wake terms), ex.: "xuxu", "xuxu xuxu", "openclaw". Ela ja cumpriu o
+     * papel de acordar a escuta: nao deve virar bolha de conversa nem ir para
+     * o OpenClaw. O chamador deve registrar uma marca de sistema discreta.
+     * Retorna o termo canonico reconhecido (primeiro token) ou null.
+     */
+    fun wakeTermOnlyTranscript(text: String, settings: GatewaySettings): String? {
+        val wakeTerms = settings.voiceChannelWakeTerms
+            .lineSequence()
+            .map { normalizeTokenForLexicalCheck(it.replace(Regex("\\s+"), " ").trim()) }
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (wakeTerms.isEmpty()) {
+            return null
+        }
+        val normalizedFull = normalizeTokenForLexicalCheck(
+            text.replace(Regex("\\s+"), " ").trim()
+        )
+        if (normalizedFull.isBlank()) {
+            return null
+        }
+        // Termo multi-palavra ("open claw") casa direto na frase inteira.
+        if (normalizedFull in wakeTerms) {
+            return normalizedFull
+        }
+        val tokens = text.lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .split(Regex("\\s+"))
+            .map { normalizeTokenForLexicalCheck(it) }
+            .filter { it.isNotBlank() }
+        if (tokens.isEmpty() || tokens.size > 3) {
+            return null
+        }
+        if (tokens.all { it in wakeTerms }) {
+            return tokens.first()
+        }
+        return null
     }
 
     private fun applySafePortugueseColloquialNormalization(

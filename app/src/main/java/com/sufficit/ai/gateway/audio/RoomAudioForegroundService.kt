@@ -1537,6 +1537,27 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 } else {
                     correctedTextRaw
                 }
+                // Transcricao que e SO palavra de ativacao ("xuxu", "xuxu xuxu",
+                // "openclaw"): ja cumpriu o papel de acordar a escuta. Nao vira
+                // bolha de conversa nem vai para o OpenClaw — registra apenas
+                // uma marca de sistema discreta no chat.
+                val wakeTermOnly = if (correctedText.isNotBlank()) {
+                    TranscriptTextPipeline.wakeTermOnlyTranscript(correctedText, settings)
+                } else {
+                    null
+                }
+                if (wakeTermOnly != null) {
+                    updateQueueCount()
+                    Log.i(TAG, "Transcricao e apenas wake term '$wakeTermOnly'; nao despachada (marca de sistema).")
+                    GatewayRuntime.appendChatMessage(
+                        ChatRole.SYSTEM,
+                        "palavra de ativacao reconhecida: \u201C$wakeTermOnly\u201D"
+                    )
+                    GatewayRuntime.update {
+                        it.copy(statusText = "Palavra de ativacao reconhecida: $wakeTermOnly.")
+                    }
+                    return@QueuedTranscriptionTask
+                }
                 val neutralTranscriptMarker = TranscriptTextPipeline.isNeutralMarkerTranscript(correctedText)
                 val ambientTranscriptLikely = TranscriptTextPipeline.shouldIgnoreAmbientTranscript(correctedText)
 
