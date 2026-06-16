@@ -260,7 +260,10 @@ fun buildSettings(
         apiEnabled = runtimeCurrent?.apiEnabled ?: GatewaySettingsStore.DEFAULT_API_ENABLED,
         apiPort = runtimeCurrent?.apiPort ?: GatewaySettingsStore.DEFAULT_API_PORT,
         apiBindAllInterfaces = runtimeCurrent?.apiBindAllInterfaces ?: GatewaySettingsStore.DEFAULT_API_BIND_ALL_INTERFACES,
-        apiToken = runtimeCurrent?.apiToken ?: GatewaySettingsStore.DEFAULT_API_TOKEN
+        apiToken = runtimeCurrent?.apiToken ?: GatewaySettingsStore.DEFAULT_API_TOKEN,
+        // userId nao e gerenciado pelo snapshot da UI principal (secao
+        // propria); preserva o persistido.
+        openClawUserId = runtimeCurrent?.openClawUserId ?: GatewaySettingsStore.DEFAULT_OPENCLAW_USER_ID
     )
 }
 

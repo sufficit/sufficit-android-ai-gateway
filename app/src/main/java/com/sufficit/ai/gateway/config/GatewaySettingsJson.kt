@@ -22,6 +22,7 @@ fun GatewaySettings.toJson(): JSONObject {
             put("gatewayToken", openClawGatewayToken)
             put("deviceToken", openClawDeviceToken)
             put("sessionKey", openClawSessionKey)
+            put("userId", openClawUserId)
             put("localEndpointUrl", localEndpointUrl)
         })
         put("transcription", JSONObject().apply {

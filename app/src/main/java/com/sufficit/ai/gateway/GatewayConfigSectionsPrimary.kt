@@ -78,6 +78,9 @@ fun ConfigGeneralSectionPage(
             SpeakerVoiceConfigSection()
         }
         item {
+            IdentityConfigSection()
+        }
+        item {
             ApiConfigSection()
         }
         item {

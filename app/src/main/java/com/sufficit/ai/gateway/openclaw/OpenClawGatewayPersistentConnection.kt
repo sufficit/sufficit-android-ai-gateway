@@ -199,6 +199,10 @@ class OpenClawGatewayPersistentConnection(
             .put("deviceId", helper.describeAndroidDevice())
             .put("token", config.deviceToken.trim())
             .put("sessionKey", config.sessionKey.trim())
+            .apply {
+                config.userId.trim().takeIf { it.isNotBlank() }?.let { put("userId", it) }
+                config.installationId.trim().takeIf { it.isNotBlank() }?.let { put("installationId", it) }
+            }
     }
 
     private fun buildFinalTranscriptPayload(
@@ -218,6 +222,8 @@ class OpenClawGatewayPersistentConnection(
             metadata.put("sessionKey", config.sessionKey.trim())
         }
         metadata.put("deviceId", helper.describeAndroidDevice())
+        config.userId.trim().takeIf { it.isNotBlank() }?.let { metadata.put("userId", it) }
+        config.installationId.trim().takeIf { it.isNotBlank() }?.let { metadata.put("installationId", it) }
         return JSONObject()
             .put("type", "transcript.final")
             .put("segmentId", segmentId)

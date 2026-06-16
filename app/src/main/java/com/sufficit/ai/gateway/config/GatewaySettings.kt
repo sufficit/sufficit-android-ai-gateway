@@ -64,6 +64,10 @@ data class GatewaySettings(
     val openClawGatewayToken: String = GatewaySettingsStore.DEFAULT_OPENCLAW_GATEWAY_TOKEN,
     val openClawDeviceToken: String = GatewaySettingsStore.DEFAULT_OPENCLAW_DEVICE_TOKEN,
     val openClawSessionKey: String = GatewaySettingsStore.DEFAULT_OPENCLAW_SESSION_KEY,
+    // userId sufficit-ai (identidade da PESSOA). Quando preenchido, o servidor
+    // resolve o workspace/perfil por ele — independente do aparelho. Vazio =
+    // servidor cai no vinculo por device (binding) / agente default.
+    val openClawUserId: String = GatewaySettingsStore.DEFAULT_OPENCLAW_USER_ID,
     val whisperUrl: String = GatewaySettingsStore.DEFAULT_WHISPER_URL,
     val remoteModel: String = GatewaySettingsStore.DEFAULT_REMOTE_MODEL,
     val whisperAuthToken: String = "",
@@ -619,6 +623,8 @@ class GatewaySettingsStore(private val context: Context) {
             get() = GatewayConfigCatalog.currentSeed().openClawDeviceToken
         val DEFAULT_OPENCLAW_SESSION_KEY: String
             get() = GatewayConfigCatalog.currentSeed().openClawSessionKey
+        // userId fixo (nao via currentSeed — evita recursao no bootstrap).
+        const val DEFAULT_OPENCLAW_USER_ID = ""
         val DEFAULT_WHISPER_URL: String
             get() = GatewayConfigCatalog.currentSeed().whisperUrl
         val DEFAULT_REMOTE_MODEL: String

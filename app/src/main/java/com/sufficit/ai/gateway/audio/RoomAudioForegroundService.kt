@@ -293,6 +293,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 restartApiServer(loadCurrentSettings())
                 return START_STICKY
             }
+            // Identidade (userId) mudou na UI: reconecta o websocket para
+            // reenviar o hello com o userId/installationId atualizados.
+            ACTION_RELOAD_CONFIG -> {
+                val s = loadCurrentSettings()
+                refreshOpenClawConnection(s)
+                restartApiServer(s)
+                return START_STICKY
+            }
             ACTION_STOP -> {
                 // Com palavra de ativacao configurada, "parar" suspende so a
                 // transcricao: a captura segue em espera escutando pela palavra.
@@ -767,6 +775,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         noiseFloorRms = noiseFloorRms,
                         speechLikeFrame = speechLikeFrameRaw && !shouldCompensateAmbientNoise,
                         speechActive = speechActive && !shouldCompensateAmbientNoise,
+                        inputPeakNormalized = rawPeakNormalized,
                         settings = settings
                     )
                 } else {
@@ -2696,10 +2705,29 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         noiseFloorRms: Double,
         speechLikeFrame: Boolean,
         speechActive: Boolean,
+        inputPeakNormalized: Double,
         settings: GatewaySettings
     ): Double {
+        val minGain = settings.ambientGainMinGain
+        val maxGain = peakGain.coerceAtLeast(minGain)
+
+        // Teto de ganho que mantem o PICO de entrada no alvo (headroom abaixo
+        // do joelho do soft-clip em 0.85). Acima deste pico o ganho cai abaixo
+        // de 1.0 — e o que impede musica/fala alta de saturar e estourar o
+        // espectro. Sinal quase-silencioso nao tem teto util: usa o ganho
+        // cheio para captar fala distante.
+        val ceilToTarget = if (inputPeakNormalized > MIN_PEAK_FOR_AGC) {
+            (TARGET_PEAK_NORMALIZED / inputPeakNormalized).coerceIn(minGain, maxGain)
+        } else {
+            maxGain
+        }
+
         if (speechLikeFrame || speechActive) {
-            return peakGain
+            // AGC: normaliza a fala ao alvo. Antes retornava peakGain cego — o
+            // que fazia musica (transientes que parecem fala) ir a 2.4x e
+            // saturar. Agora amplifica fala fraca ate o alvo e ABAIXA o ganho
+            // quando o sinal ja chega forte.
+            return ceilToTarget
         }
 
         val backgroundGain = when {
@@ -2709,7 +2737,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             else -> peakGain * 0.42
         }
 
-        return backgroundGain.coerceIn(settings.ambientGainMinGain, peakGain.coerceAtLeast(settings.ambientGainMinGain))
+        // Fundo: reducao por ruido E pelo teto de pico (o que for menor).
+        return backgroundGain
+            .coerceIn(minGain, maxGain)
+            .coerceAtMost(ceilToTarget)
     }
 
     private fun segmentLooksLikeSpeech(
@@ -4063,6 +4094,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             gatewayToken = settings.openClawGatewayToken,
             deviceToken = settings.openClawDeviceToken,
             sessionKey = settings.openClawSessionKey,
+            userId = settings.openClawUserId,
+            installationId = com.sufficit.ai.gateway.config.InstallationId.get(this),
             backend = state?.transcriptionBackendLabel,
             model = state?.transcriptionModelLabel,
             metadata = if (state != null && voiceDecision != null) {
@@ -4370,6 +4403,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         private const val ACTION_INTERRUPT_ASSISTANT = "com.sufficit.ai.gateway.action.INTERRUPT_ASSISTANT"
         private const val ACTION_STOP = "com.sufficit.ai.gateway.action.STOP"
         private const val ACTION_RELOAD_API = "com.sufficit.ai.gateway.action.RELOAD_API"
+        private const val ACTION_RELOAD_CONFIG = "com.sufficit.ai.gateway.action.RELOAD_CONFIG"
         private const val ASSISTANT_SPEECH_GRACE_MS = 1_500L
         private const val OPENCLAW_UNCERTAIN_PREFIX = "[?]"
         private const val OPENCLAW_REASONING_HOLD_MS = 2200L
@@ -4416,6 +4450,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // pedaco de ambiente que vem junto.
         private const val PRE_ROLL_MS = 1_200L
         private const val PRE_ROLL_MAX_BYTES = (SAMPLE_RATE_HZ * 2L * PRE_ROLL_MS / 1000L).toInt()
+
+        // AGC: alvo de pico normalizado do sinal pos-ganho. 0.70 deixa
+        // headroom abaixo do joelho do soft-clip (0.85) — fala/musica nao
+        // satura nem gruda o espectro no teto. Abaixo de MIN_PEAK_FOR_AGC o
+        // sinal e silencio/quase: nao limita (usa ganho cheio p/ fala distante).
+        private const val TARGET_PEAK_NORMALIZED = 0.70
+        private const val MIN_PEAK_FOR_AGC = 0.02
 
         // Atividade labial: quadro do FaceMesh so vale como amostra do
         // segmento se for recente (camera viva publicando).
@@ -4533,6 +4574,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         fun reloadApi(context: Context) {
             val intent = Intent(context, RoomAudioForegroundService::class.java).apply {
                 action = ACTION_RELOAD_API
+            }
+            runCatching { context.startService(intent) }
+        }
+
+        /** Reconecta o OpenClaw apos mudanca de identidade (userId) na UI. */
+        fun reloadConfig(context: Context) {
+            val intent = Intent(context, RoomAudioForegroundService::class.java).apply {
+                action = ACTION_RELOAD_CONFIG
             }
             runCatching { context.startService(intent) }
         }

@@ -103,6 +103,7 @@ fun flattenSectionedJson(root: JSONObject): JSONObject {
         copyKey(s, "gatewayToken", "openClawGatewayToken")
         copyKey(s, "deviceToken", "openClawDeviceToken")
         copyKey(s, "sessionKey", "openClawSessionKey")
+        copyKey(s, "userId", "openClawUserId")
         copyKey(s, "localEndpointUrl")
     }
     root.optJSONObject("transcription")?.let { s ->
@@ -313,6 +314,11 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
             "openClawSessionKey" -> {
                 val value = stringValue(key)
                 if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(openClawSessionKey = value))
+            }
+            "openClawUserId" -> {
+                // Aceita vazio (limpar o vinculo) — nao usa isBlank guard.
+                val value = stringValue(key) ?: ""
+                applyIfChanged(key, updated.copy(openClawUserId = value))
             }
             "whisperUrl" -> {
                 val value = stringValue(key)

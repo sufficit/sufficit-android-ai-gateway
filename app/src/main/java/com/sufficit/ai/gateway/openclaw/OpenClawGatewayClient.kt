@@ -20,6 +20,11 @@ data class OpenClawGatewayConfig(
     val gatewayToken: String,
     val deviceToken: String,
     val sessionKey: String,
+    // Identidade da PESSOA (userId sufficit-ai) e desta INSTALACAO. O servidor
+    // resolve o workspace/perfil pelo userId quando presente; o installationId
+    // identifica o aparelho de forma estavel (nao depende do ANDROID_ID).
+    val userId: String = "",
+    val installationId: String = "",
     val backend: String? = null,
     val model: String? = null,
     val metadata: JSONObject? = null
