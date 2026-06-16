@@ -55,7 +55,11 @@ data class GatewayUiState(
     val ambientNoiseScore: Double? = null,
     val microphoneGainAdjustedUntilEpochMs: Long = 0L,
     val microphoneGainAdjustedMessage: String? = null,
-    val screenAttentionUntilEpochMs: Long = 0L
+    val screenAttentionUntilEpochMs: Long = 0L,
+    // Agente processando um pedido: bolha provisoria no chat enquanto aguarda
+    // a resposta. Label = o que esta sendo processado (o pedido do usuario).
+    val assistantProcessing: Boolean = false,
+    val assistantProcessingLabel: String = ""
 )
 
 /** Papel de uma mensagem no historico de conversa do dashboard. */

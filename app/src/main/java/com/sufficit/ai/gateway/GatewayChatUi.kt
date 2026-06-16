@@ -18,6 +18,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateValue
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -109,6 +116,13 @@ fun ChatMessagesList(
                     timeLabel = "transcrevendo...",
                     provisional = true
                 )
+            }
+        }
+        // Balao do assistente "processando": aparece enquanto o agente trabalha
+        // no pedido, com o que esta sendo processado.
+        if (state.assistantProcessing) {
+            item(key = "processing") {
+                ProcessingBubble(label = state.assistantProcessingLabel)
             }
         }
         items(
@@ -213,6 +227,51 @@ private fun ChatBubble(
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.End)
             )
+        }
+    }
+}
+
+/**
+ * Bolha provisoria do assistente enquanto o agente processa o pedido.
+ * Pontos animados + o que esta sendo processado (label).
+ */
+@Composable
+private fun ProcessingBubble(label: String) {
+    val transition = rememberInfiniteTransition(label = "processing")
+    val dots by transition.animateValue(
+        initialValue = 0,
+        targetValue = 4,
+        typeConverter = Int.VectorConverter,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "dots"
+    )
+    val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 16.dp)
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .background(AssistantBubble, shape)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Processando" + ".".repeat(dots.coerceIn(0, 3)),
+                color = BubbleText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = FontStyle.Italic
+            )
+            if (label.isNotBlank()) {
+                Text(
+                    text = label,
+                    color = BubbleTime,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
     }
 }

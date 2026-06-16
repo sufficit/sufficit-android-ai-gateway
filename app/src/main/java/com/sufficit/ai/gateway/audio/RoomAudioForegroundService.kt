@@ -179,6 +179,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val pendingOpenClawDispatchGeneration = AtomicLong(0L)
     @Volatile private var activeTranscriptionStartedAtEpochMs = 0L
     @Volatile private var activeOpenClawDispatchStartedAtEpochMs = 0L
+
+    // "Agente processando": de quando o pedido e enviado ao OpenClaw ate o
+    // reply chegar (handleOpenClawReply). Timestamp para expirar caso o reply
+    // nunca volte (websocket caido), evitando o balao preso.
+    @Volatile private var assistantProcessingSinceMs = 0L
     @Volatile private var lastQueueReconcileAtEpochMs = 0L
     @Volatile private var cameraGestureGateOpen = false
 
@@ -698,6 +703,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (now - lastQueueReconcileAtEpochMs >= TRANSCRIPTION_QUEUE_RECONCILE_INTERVAL_MS) {
                     lastQueueReconcileAtEpochMs = now
                     updateQueueCount()
+                }
+                // Expira o balao de "processando" se o reply nunca voltar
+                // (ex.: websocket caiu) — evita o balao preso.
+                if (assistantProcessingSinceMs > 0L && now - assistantProcessingSinceMs > ASSISTANT_PROCESSING_TIMEOUT_MS) {
+                    setAssistantProcessing(false)
                 }
                 settings = normalizeRuntimeSettings(loadCurrentSettings())
                 updateCameraGestureGateStatus(settings)
@@ -3516,6 +3526,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
     }
 
+    private fun setAssistantProcessing(active: Boolean, label: String = "") {
+        assistantProcessingSinceMs = if (active) System.currentTimeMillis() else 0L
+        GatewayRuntime.update {
+            it.copy(
+                assistantProcessing = active,
+                assistantProcessingLabel = if (active) label.trim() else ""
+            )
+        }
+    }
+
     private fun dispatchTranscriptToOpenClaw(
         phrase: String,
         state: GatewayUiState
@@ -3586,8 +3606,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         openClawStatus = "OpenClaw enviou frase final${segmentId?.let { " ($it)" }.orEmpty()}."
                     )
                 }
+                // Enviado: agente processando ate o reply chegar
+                // (handleOpenClawReply limpa). Label = o pedido.
+                setAssistantProcessing(true, phrase)
             } catch (ex: Exception) {
                 Log.e(TAG, "Falha ao enviar frase para OpenClaw", ex)
+                setAssistantProcessing(false)
                 GatewayRuntime.update {
                     it.copy(
                         openClawStatus = "Falha OpenClaw: ${ex.message ?: ex.javaClass.simpleName}",
@@ -3751,6 +3775,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun handleOpenClawReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply) {
+        // Resposta chegou: encerra o balao de "processando".
+        setAssistantProcessing(false)
         // Falha do agente no servidor: detalhe cru vem no campo "error" do
         // envelope. Vai para log e status — nunca vira bolha de chat e o TTS
         // nunca le o texto cru; o usuario ouve um aviso curto e amigavel.
@@ -4457,6 +4483,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // pedaco de ambiente que vem junto.
         private const val PRE_ROLL_MS = 1_200L
         private const val PRE_ROLL_MAX_BYTES = (SAMPLE_RATE_HZ * 2L * PRE_ROLL_MS / 1000L).toInt()
+
+        // Timeout do balao "processando" sem reply (websocket caido etc.).
+        private const val ASSISTANT_PROCESSING_TIMEOUT_MS = 90_000L
 
         // AGC: alvo de pico normalizado do sinal pos-ganho. 0.70 deixa
         // headroom abaixo do joelho do soft-clip (0.85) — fala/musica nao
