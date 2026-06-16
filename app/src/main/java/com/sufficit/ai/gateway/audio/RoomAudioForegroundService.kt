@@ -3667,6 +3667,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     put("speakerVerifiedScore", speaker.lastScore)
                 }
             }
+            // Canal de voz REALMENTE ativo: a resposta sera falada (TTS
+            // habilitado e pronto, fora de standby). Sinaliza a IA do outro
+            // lado a responder de forma falavel e usar o campo details para
+            // conteudo nao-pronunciavel.
+            put("voiceModeActive", settings.assistantVoiceEnabled && textToSpeechReady && !standbyMode)
             // Atividade labial agregada da ultima fala (camera frontal):
             // o pre-agente cruza com speakerVerifiedScore — voz do dono COM
             // labios mexendo = dono presente falando; voz do dono SEM labios
@@ -3822,8 +3827,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             )
         }
         // Historico de conversa: resposta do assistente vira bolha no chat.
+        // O details (conteudo visual-apenas) vai junto como painel expansivel;
+        // nunca entra no texto falado (spokenReply).
         if (!reply.isSystemInfo && !requiresAttention && displayReply.isNotBlank()) {
-            GatewayRuntime.appendChatMessage(ChatRole.ASSISTANT, displayReply)
+            GatewayRuntime.appendChatMessage(ChatRole.ASSISTANT, displayReply, reply.detailsText)
         }
         // API injectConversation(speak=false) suprime a fala desta resposta.
         val speechSuppressedByApi = suppressNextReplySpeech

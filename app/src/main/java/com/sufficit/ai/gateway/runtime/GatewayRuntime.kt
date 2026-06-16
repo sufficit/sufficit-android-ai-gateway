@@ -66,7 +66,12 @@ data class ChatMessage(
     val id: Long,
     val role: ChatRole,
     val text: String,
-    val atEpochMs: Long
+    val atEpochMs: Long,
+    /**
+     * Conteudo visual-apenas da resposta (enderecos, links, explicacoes):
+     * exibido como painel expansivel na bolha, NUNCA falado. Null = sem painel.
+     */
+    val details: String? = null
 )
 
 /**
@@ -194,14 +199,15 @@ object GatewayRuntime {
         chatFlow.value = emptyList()
     }
 
-    fun appendChatMessage(role: ChatRole, text: String) {
+    fun appendChatMessage(role: ChatRole, text: String, details: String? = null) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return
         val message = ChatMessage(
             id = chatMessageIdSeq.incrementAndGet(),
             role = role,
             text = trimmed,
-            atEpochMs = System.currentTimeMillis()
+            atEpochMs = System.currentTimeMillis(),
+            details = details?.trim()?.takeIf { it.isNotBlank() }
         )
         chatFlow.value = (chatFlow.value + message).takeLast(CHAT_HISTORY_LIMIT)
     }

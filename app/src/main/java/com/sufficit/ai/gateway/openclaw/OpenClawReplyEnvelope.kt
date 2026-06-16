@@ -18,7 +18,13 @@ data class OpenClawReplyEnvelope(
      * Falha do agente no servidor (campo "error" do envelope). Detalhe cru
      * para log/status — NUNCA vira bolha de chat nem é lido pelo TTS.
      */
-    val errorText: String? = null
+    val errorText: String? = null,
+    /**
+     * Conteúdo visual-apenas (campo "details"): endereços, links, código,
+     * explicações longas. Mostrado no chat como painel expansível; NUNCA é
+     * falado pelo TTS.
+     */
+    val detailsText: String? = null
 )
 
 internal object OpenClawReplyEnvelopeParser {
@@ -79,6 +85,9 @@ internal object OpenClawReplyEnvelopeParser {
             val errorText = parsedJson.optString("error").trim()
                 .ifBlank { parsedJson.optString("errorText").trim() }
                 .ifBlank { null }
+            val detailsText = parsedJson.optString("details").trim()
+                .ifBlank { parsedJson.optString("visualNote").trim() }
+                .ifBlank { null }
             val rawEnvelopeText = when {
                 source.equals("android-pre-agent", ignoreCase = true) -> normalizedRaw
                 replyText.isNotBlank() -> normalizedRaw
@@ -96,7 +105,8 @@ internal object OpenClawReplyEnvelopeParser {
                 confidence = confidence,
                 overlap = overlap,
                 settingsPatch = settingsPatch,
-                errorText = errorText
+                errorText = errorText,
+                detailsText = detailsText
             )
         }
 

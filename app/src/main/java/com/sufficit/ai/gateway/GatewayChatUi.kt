@@ -17,7 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,7 +119,8 @@ fun ChatMessagesList(
             ChatBubble(
                 text = message.text,
                 role = message.role,
-                timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
+                timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs)),
+                details = message.details
             )
         }
         if (messages.isEmpty() && partialTranscript.isBlank()) {
@@ -139,7 +144,8 @@ private fun ChatBubble(
     text: String,
     role: ChatRole,
     timeLabel: String,
-    provisional: Boolean = false
+    provisional: Boolean = false,
+    details: String? = null
 ) {
     val isUser = role == ChatRole.USER
     val shape = RoundedCornerShape(
@@ -167,6 +173,40 @@ private fun ChatBubble(
                 style = MaterialTheme.typography.bodyMedium,
                 fontStyle = if (provisional) FontStyle.Italic else FontStyle.Normal
             )
+            // Conteudo visual-apenas (details): painel expansivel — o que foi
+            // dito em voz fica curto; enderecos/links/explicacoes ficam aqui,
+            // sem terem sido falados.
+            if (!details.isNullOrBlank()) {
+                var expanded by rememberSaveable(text, details) { mutableStateOf(false) }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clickable { expanded = !expanded }
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Recolher detalhes" else "Ver detalhes",
+                        tint = BubbleTime
+                    )
+                    Text(
+                        text = if (expanded) "Ocultar detalhes" else "Ver detalhes",
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                AnimatedVisibility(visible = expanded) {
+                    Text(
+                        text = details,
+                        color = BubbleText.copy(alpha = 0.92f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .background(BubbleTime.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                }
+            }
             Text(
                 text = timeLabel,
                 color = BubbleTime,

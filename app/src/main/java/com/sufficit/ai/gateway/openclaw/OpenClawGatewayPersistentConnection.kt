@@ -263,7 +263,8 @@ class OpenClawGatewayPersistentConnection(
             confidence = envelope.confidence,
             overlap = envelope.overlap,
             settingsPatch = envelope.settingsPatch,
-            errorText = envelope.errorText
+            errorText = envelope.errorText,
+            detailsText = envelope.detailsText
         )
     }
 

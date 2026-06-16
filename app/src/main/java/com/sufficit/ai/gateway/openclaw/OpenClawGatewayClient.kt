@@ -45,7 +45,9 @@ data class OpenClawGatewayReply(
     val overlap: Boolean,
     val settingsPatch: JSONObject?,
     /** Falha do agente (campo "error" do envelope) — só log/status, nunca chat/TTS. */
-    val errorText: String? = null
+    val errorText: String? = null,
+    /** Conteúdo visual-apenas (campo "details") — painel expansível, nunca falado. */
+    val detailsText: String? = null
 )
 
 class OpenClawGatewayClient {
@@ -281,7 +283,8 @@ class OpenClawGatewayClient {
             confidence = envelope.confidence,
             overlap = envelope.overlap,
             settingsPatch = envelope.settingsPatch,
-            errorText = envelope.errorText
+            errorText = envelope.errorText,
+            detailsText = envelope.detailsText
         )
     }
 
