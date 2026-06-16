@@ -84,6 +84,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private var captureExecutor: ExecutorService? = null
     private var transcriptionExecutor: ThreadPoolExecutor? = null
     private var audioRecord: AudioRecord? = null
+
+    // PARTIAL_WAKE_LOCK mantido durante TODA a captura: sem ele a CPU entra em
+    // sono profundo (doze) com a tela apagada e o loop de audio / wake word
+    // congela — o aparelho deixa de responder a palavra de ativacao. A tela
+    // continua podendo apagar (so a CPU fica acordada).
+    private var captureWakeLock: PowerManager.WakeLock? = null
     private var acousticEchoCanceler: AcousticEchoCanceler? = null
     private var noiseSuppressor: NoiseSuppressor? = null
     private var lastNotificationText: String = "Escuta de sala iniciando."
@@ -346,6 +352,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     override fun onDestroy() {
         stopApiServer()
+        releaseCaptureWakeLock()
         shutdownCapture()
         releaseLocalWhisperEngine()
         releaseLocalSherpaOnnxEngine()
@@ -591,6 +598,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun runCaptureLoop(recorder: AudioRecord, bufferSize: Int) {
+        acquireCaptureWakeLock()
         val buffer = ShortArray(bufferSize / 2)
         val loadedSettings = settingsStore?.load() ?: GatewaySettingsStore(this).load()
         var settings = normalizeRuntimeSettings(loadedSettings)
@@ -1293,8 +1301,31 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 audioRecord = null
             }
             captureRunning.set(false)
+            releaseCaptureWakeLock()
             GatewayRuntime.setListening(active = false, statusText = "Servico parado.")
         }
+    }
+
+    private fun acquireCaptureWakeLock() {
+        if (captureWakeLock?.isHeld == true) return
+        runCatching {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            captureWakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$TAG:capture"
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Log.i(TAG, "PARTIAL_WAKE_LOCK de captura adquirido (CPU acordada com tela apagada).")
+        }.onFailure { Log.w(TAG, "Falha ao adquirir wake lock de captura", it) }
+    }
+
+    private fun releaseCaptureWakeLock() {
+        runCatching {
+            captureWakeLock?.let { if (it.isHeld) it.release() }
+        }
+        captureWakeLock = null
     }
 
     private fun runLocalSelfTestIfNeeded(settings: GatewaySettings) {
