@@ -1,8 +1,33 @@
 package com.sufficit.ai.gateway
 
+import android.os.Handler
+import android.os.Looper
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.vision.CameraGestureEvent
 import com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer
+
+// Debounce do gesto de mao aberta (interromper fala): para FECHAR o punho
+// ("parar de ouvir") a mao passa ABERTA na transicao, o que disparava a
+// interrupcao da fala sem querer. A interrupcao agora e agendada com um
+// pequeno atraso; se um punho chegar nesse intervalo (a mao estava indo para
+// o punho), e cancelada. Mao aberta mantida interrompe normalmente.
+private object OpenHandInterruptDebounce {
+    val handler = Handler(Looper.getMainLooper())
+    @Volatile var pending: Runnable? = null
+    const val DELAY_MS = 350L
+
+    fun schedule(action: () -> Unit) {
+        cancel()
+        val r = Runnable { pending = null; action() }
+        pending = r
+        handler.postDelayed(r, DELAY_MS)
+    }
+
+    fun cancel() {
+        pending?.let { handler.removeCallbacks(it) }
+        pending = null
+    }
+}
 
 fun handleDisabledCameraGestureState(
  statusReason: String,
@@ -183,10 +208,18 @@ fun startCameraGestureCapture(
  )
  }
  is CameraGestureEvent.OpenHandCalm -> {
+ // Interrupcao da fala COM atraso: cancelada se um punho vier logo
+ // depois (a mao estava so a caminho do punho). Mao aberta mantida
+ // executa apos o atraso.
+ OpenHandInterruptDebounce.schedule {
  GatewayRuntime.setCameraGestureStatus("Mao aberta: interrompendo fala do assistente.")
  interruptAssistant()
  }
+ }
  is CameraGestureEvent.FistClosed -> {
+ // O punho cancela uma interrupcao de fala pendente: fechar a mao
+ // ("parar de ouvir") nao deve mexer na fala do assistente.
+ OpenHandInterruptDebounce.cancel()
  GatewayRuntime.setCameraGestureStatus("Punho fechado: enviando fala para processamento.")
  // Punho = "terminei, ENVIE": intencao explicita de falar com o
  // assistente — marca enderecamento direto para o pre-agente nao
@@ -197,6 +230,7 @@ fun startCameraGestureCapture(
  // Punho mantido por 5s: parar a escuta (standby com palavra de
  // ativacao configurada; parada completa caso contrario).
  is CameraGestureEvent.FistHeldStop -> {
+ OpenHandInterruptDebounce.cancel()
  GatewayRuntime.setCameraGestureStatus("Punho mantido: parando a escuta.")
  stopListening()
  }
