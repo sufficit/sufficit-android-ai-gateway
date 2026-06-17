@@ -60,4 +60,13 @@ interface GatewayApiActions {
 
     /** Limpa o historico de conversa exibido. */
     fun clearChat()
+
+    /**
+     * Captura a tela do app (com efeito visual de flash + som). Retorna os
+     * bytes PNG, ou null se nao houver tela capturavel (app em segundo plano).
+     */
+    fun screenshot(label: String): ByteArray?
+
+    /** Dispara o efeito visual (flash) + som sem capturar nada. */
+    fun playEffect(label: String)
 }

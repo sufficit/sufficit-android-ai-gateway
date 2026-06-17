@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        current = java.lang.ref.WeakReference(this)
 
         setContent {
             SufficitOpenClawGatewayTheme {
@@ -68,6 +69,54 @@ class MainActivity : ComponentActivity() {
                     GatewayScreen()
                 }
             }
+        }
+    }
+
+    override fun onDestroy() {
+        if (current?.get() === this) current = null
+        super.onDestroy()
+    }
+
+    companion object {
+        // Referencia fraca para a API capturar a janela do app (screenshot)
+        // sem MediaProjection. Funciona com o app em primeiro plano.
+        @Volatile
+        private var current: java.lang.ref.WeakReference<MainActivity>? = null
+
+        /**
+         * Captura a janela do app em PNG e retorna o arquivo, ou null se a
+         * Activity nao estiver viva/visivel. Sincrono (espera o PixelCopy).
+         */
+        fun captureWindowToFile(): java.io.File? {
+            val activity = current?.get() ?: return null
+            val view = activity.window?.decorView ?: return null
+            // Desenha a hierarquia de views num bitmap no MAIN thread. Captura a
+            // UI Compose (chat, status); SurfaceView (camera) sai em branco, o
+            // que e aceitavel para um print da interface.
+            val result = java.util.concurrent.atomic.AtomicReference<android.graphics.Bitmap?>()
+            val latch = java.util.concurrent.CountDownLatch(1)
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                runCatching {
+                    if (view.width > 0 && view.height > 0) {
+                        val bmp = android.graphics.Bitmap.createBitmap(
+                            view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888
+                        )
+                        view.draw(android.graphics.Canvas(bmp))
+                        result.set(bmp)
+                    }
+                }.onFailure { android.util.Log.w("MainActivity", "screenshot: draw falhou", it) }
+                latch.countDown()
+            }
+            if (!latch.await(2, java.util.concurrent.TimeUnit.SECONDS)) return null
+            val bitmap = result.get() ?: return null
+            return runCatching {
+                val dir = java.io.File(activity.cacheDir, "screenshots").apply { mkdirs() }
+                val file = java.io.File(dir, "screen-${System.currentTimeMillis()}.png")
+                java.io.FileOutputStream(file).use {
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it)
+                }
+                file
+            }.getOrNull()
         }
     }
 }
@@ -579,6 +628,9 @@ private fun GatewayScreen() {
             modifier = androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
         )
     }
+    // Efeito de flash/captura (screenshot por API): clarao + etiqueta, sobre
+    // todas as paginas. Disparado pelo servico via GatewayRuntime.
+    ScreenEffectOverlay(modifier = Modifier.fillMaxSize())
     }
 }
 

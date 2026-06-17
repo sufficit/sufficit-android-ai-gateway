@@ -130,6 +130,16 @@ object GatewayRuntime {
         handTrackingFlow.value = frame
     }
 
+    // Efeito visual de "flash" (ex.: ao tirar um screenshot por API): a UI
+    // observa o timestamp e dispara um clarao branco que esvanece. O som e
+    // tocado pelo servico (tem AudioManager). Label opcional aparece junto.
+    data class ScreenEffect(val atEpochMs: Long, val label: String)
+    private val screenEffectFlow = MutableStateFlow<ScreenEffect?>(null)
+    fun screenEffect(): StateFlow<ScreenEffect?> = screenEffectFlow.asStateFlow()
+    fun triggerScreenEffect(label: String = "") {
+        screenEffectFlow.value = ScreenEffect(System.currentTimeMillis(), label.trim())
+    }
+
     // Gesto de comando ativo no momento (id de GestureCommandIds + instante).
     // Alimentado pelo reconhecedor a cada quadro estavel; consumido por:
     //  - RoomAudioForegroundService: "indicador mantido" segura a gravacao

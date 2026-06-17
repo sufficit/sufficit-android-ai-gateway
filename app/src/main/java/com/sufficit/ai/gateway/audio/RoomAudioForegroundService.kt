@@ -4168,6 +4168,28 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         GatewayRuntime.clearChat()
     }
 
+    override fun screenshot(label: String): ByteArray? {
+        // Captura PRIMEIRO (tela limpa), depois o efeito visual/sonoro de
+        // feedback — o flash nao sai no PNG.
+        val file = com.sufficit.ai.gateway.MainActivity.captureWindowToFile()
+        playEffect(label)
+        return file?.let { runCatching { it.readBytes() }.getOrNull() }
+    }
+
+    override fun playEffect(label: String) {
+        GatewayRuntime.triggerScreenEffect(label)
+        // Som curto de "obturador" via ToneGenerator (sem asset).
+        runCatching {
+            val tone = android.media.ToneGenerator(
+                android.media.AudioManager.STREAM_NOTIFICATION, 90
+            )
+            tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 150)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching { tone.release() }
+            }, 300)
+        }
+    }
+
     private fun buildOpenClawConfig(
         settings: GatewaySettings,
         state: GatewayUiState? = null,

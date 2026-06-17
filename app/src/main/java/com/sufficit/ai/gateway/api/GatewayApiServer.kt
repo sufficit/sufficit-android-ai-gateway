@@ -67,6 +67,8 @@ class GatewayApiServer(
             method == Method.POST && uri == "/api/say" -> say(session)
             method == Method.POST && uri == "/api/conversation" -> conversation(session)
             method == Method.POST && uri == "/api/gesture" -> gesture(session)
+            (method == Method.GET || method == Method.POST) && uri == "/api/screenshot" -> screenshot(session)
+            method == Method.POST && uri == "/api/effect" -> effect(session)
             else -> json(Response.Status.NOT_FOUND, errorBody("not_found", "$method $uri"))
         }
     }
@@ -106,6 +108,26 @@ class GatewayApiServer(
         // Despacho assincrono: a resposta do agente aparece em GET /api/chat
         // e nos campos lastAssistantReply de GET /api/status.
         return json(Response.Status.ACCEPTED, JSONObject().put("accepted", true).put("speak", speak))
+    }
+
+    private fun screenshot(session: IHTTPSession): Response {
+        val label = session.parameters["label"]?.firstOrNull()?.trim()
+            ?: runCatching { readJsonBody(session)?.optString("label")?.trim() }.getOrNull()
+            ?: ""
+        val png = actions.screenshot(label)
+            ?: return json(Response.Status.NOT_FOUND, errorBody("no_screen", "app em segundo plano; abra a tela do app"))
+        val response = newFixedLengthResponse(
+            Response.Status.OK, "image/png", png.inputStream(), png.size.toLong()
+        )
+        response.addHeader("Access-Control-Allow-Origin", "*")
+        response.addHeader("Content-Disposition", "inline; filename=screenshot.png")
+        return response
+    }
+
+    private fun effect(session: IHTTPSession): Response {
+        val label = readJsonBody(session)?.optString("label")?.trim() ?: ""
+        actions.playEffect(label)
+        return ok()
     }
 
     private fun gesture(session: IHTTPSession): Response {
