@@ -318,8 +318,18 @@ class MediaPipeCameraGestureRecognizer(
                     onDone(false)
                     return@addListener
                 }
+                // Orientacao: sem targetRotation a foto sai "de lado". Usa a
+                // rotacao atual do display do aparelho para gravar a orientacao
+                // correta (EXIF) na captura.
+                val displayRotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    activity.display?.rotation ?: android.view.Surface.ROTATION_0
+                } else {
+                    @Suppress("DEPRECATION")
+                    activity.windowManager.defaultDisplay.rotation
+                }
                 val capture = ImageCapture.Builder()
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setTargetRotation(displayRotation)
                     .build()
                 val selector = if (useBackCamera) {
                     CameraSelector.DEFAULT_BACK_CAMERA
