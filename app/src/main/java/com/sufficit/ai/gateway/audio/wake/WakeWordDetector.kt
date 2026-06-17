@@ -38,6 +38,7 @@ class WakeWordDetector(
     private var ringSize = 0
 
     private var lastMatchAtMs = 0L
+    private var matchStreak = 0
 
     val hasTemplates: Boolean
         get() = templates.isNotEmpty()
@@ -55,6 +56,7 @@ class WakeWordDetector(
         ringStart = 0
         ringSize = 0
         pendingCount = 0
+        matchStreak = 0
     }
 
     /**
@@ -69,23 +71,51 @@ class WakeWordDetector(
         processPendingFrames()
 
         if (ringSize < minOf(maxTemplateLength, MIN_MATCH_FRAMES)) {
+            matchStreak = 0
             return WakeWordFeedResult(distance = null, matched = false)
         }
-        if (!recentEnergyActive()) {
+        // Span energetico CONTIGUO: a palavra falada dura ~o tamanho do
+        // template; ruidos (toque, clique, batida, estalo) sao transientes
+        // curtos. Exigir um trecho energetico continuo minimo elimina esses
+        // falsos positivos ("qualquer ruido virava wake word").
+        val requiredSpan = max(MIN_MATCH_FRAMES, (maxTemplateLength * MIN_SPAN_FRACTION).toInt())
+        if (longestEnergeticSpan() < requiredSpan) {
+            matchStreak = 0
             return WakeWordFeedResult(distance = null, matched = false)
         }
 
         val distance = bestDistance()
-        val matched = distance != null &&
-            distance < threshold &&
+        val below = distance != null && distance < threshold
+        // Confirmacao por streak: a palavra real fica no anel por varias
+        // janelas consecutivas; um pico de ruido raramente repete.
+        matchStreak = if (below) matchStreak + 1 else 0
+        val matched = matchStreak >= MATCH_CONFIRM_STREAK &&
             nowMs - lastMatchAtMs >= REFRACTORY_MS
         if (matched) {
             lastMatchAtMs = nowMs
+            matchStreak = 0
             // Evita rematch imediato com a mesma fala ainda no anel.
             ringSize = 0
             ringStart = 0
         }
         return WakeWordFeedResult(distance = distance, matched = matched)
+    }
+
+    /** Maior sequencia CONTIGUA de frames energeticos na janela recente. */
+    private fun longestEnergeticSpan(): Int {
+        val lookBack = min(ringSize, maxTemplateLength + ENERGY_LOOKBACK_SLACK)
+        var best = 0
+        var run = 0
+        for (i in 0 until lookBack) {
+            val index = (ringStart + ringSize - lookBack + i + ringCapacity) % ringCapacity
+            if (ringEnergy[index] >= MIN_SPEECH_FRAME_RMS) {
+                run += 1
+                if (run > best) best = run
+            } else {
+                run = 0
+            }
+        }
+        return best
     }
 
     private fun appendSamples(buffer: ShortArray, count: Int) {
@@ -120,17 +150,6 @@ class WakeWordDetector(
         } else {
             ringStart = (ringStart + 1) % ringCapacity
         }
-    }
-
-    private fun recentEnergyActive(): Boolean {
-        val lookBack = min(ringSize, maxTemplateLength + ENERGY_LOOKBACK_SLACK)
-        for (i in 0 until lookBack) {
-            val index = (ringStart + ringSize - 1 - i + ringCapacity) % ringCapacity
-            if (ringEnergy[index] >= MIN_SPEECH_FRAME_RMS) {
-                return true
-            }
-        }
-        return false
     }
 
     private fun bestDistance(): Double? {
@@ -271,5 +290,9 @@ class WakeWordDetector(
         private const val SUGGESTED_THRESHOLD_FACTOR = 1.6
         private const val ENERGY_LOOKBACK_SLACK = 30
         private const val QUERY_WINDOW_SLACK = 30
+        // Fracao do tamanho do template que o trecho energetico contiguo precisa
+        // ter (anti ruido transiente). Confirmacao por janelas consecutivas.
+        private const val MIN_SPAN_FRACTION = 0.6f
+        private const val MATCH_CONFIRM_STREAK = 2
     }
 }
