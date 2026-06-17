@@ -47,7 +47,9 @@ data class OpenClawGatewayReply(
     /** Falha do agente (campo "error" do envelope) — só log/status, nunca chat/TTS. */
     val errorText: String? = null,
     /** Conteúdo visual-apenas (campo "details") — painel expansível, nunca falado. */
-    val detailsText: String? = null
+    val detailsText: String? = null,
+    /** Comandos de ferramenta escolhidos pelo agente (campo "actions"), executados no aparelho. */
+    val actions: List<JSONObject> = emptyList()
 )
 
 class OpenClawGatewayClient {
@@ -284,7 +286,8 @@ class OpenClawGatewayClient {
             overlap = envelope.overlap,
             settingsPatch = envelope.settingsPatch,
             errorText = envelope.errorText,
-            detailsText = envelope.detailsText
+            detailsText = envelope.detailsText,
+            actions = envelope.actions
         )
     }
 

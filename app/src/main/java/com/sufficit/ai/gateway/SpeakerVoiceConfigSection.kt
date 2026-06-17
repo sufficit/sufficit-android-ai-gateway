@@ -154,8 +154,15 @@ fun SpeakerVoiceConfigSection() {
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Button(
-                onClick = { GatewayRuntime.requestSpeakerEnrollment(ENROLL_SAMPLES) },
-                enabled = state.modelReady && runtime.listening && state.enrollRemaining == 0,
+                onClick = {
+                    // Precisa do microfone ativo para captar as falas do cadastro:
+                    // inicia a escuta se preciso (permissao de audio ja concedida).
+                    if (!runtime.listening) {
+                        com.sufficit.ai.gateway.audio.RoomAudioForegroundService.start(context)
+                    }
+                    GatewayRuntime.requestSpeakerEnrollment(ENROLL_SAMPLES)
+                },
+                enabled = state.modelReady && state.enrollRemaining == 0,
                 modifier = Modifier.weight(1f)
             ) {
                 Text(

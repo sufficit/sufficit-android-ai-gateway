@@ -69,4 +69,13 @@ interface GatewayApiActions {
 
     /** Dispara o efeito visual (flash) + som sem capturar nada. */
     fun playEffect(label: String)
+
+    /**
+     * Tira uma FOTO com a camera do aparelho (frontal por padrao, ou traseira)
+     * e a publica no chat como se o agente a tivesse enviado: thumbnail
+     * clicavel que abre a imagem real. Fire-and-forget — o resultado aparece
+     * nos flows de chat. Requer a Activity em primeiro plano (o agente deve
+     * acordar a tela antes, ou usar a tool wake).
+     */
+    fun takePhoto(useBackCamera: Boolean, label: String)
 }

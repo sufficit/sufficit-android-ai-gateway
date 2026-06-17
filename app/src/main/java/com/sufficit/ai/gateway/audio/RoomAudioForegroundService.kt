@@ -204,6 +204,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         super.onCreate()
         OpenClawGatewayClient.appContext = applicationContext
         settingsStore = GatewaySettingsStore(this)
+        // Historico de conversa persistido: carrega o salvo e passa a gravar a
+        // cada mensagem (sobrevive a reinicio do app e a `install -r`).
+        val chatStore = com.sufficit.ai.gateway.history.ChatHistoryStore(this)
+        GatewayRuntime.attachChatPersistence(chatStore.load()) { messages ->
+            chatStore.save(messages)
+        }
         startApiServerIfEnabled(loadCurrentSettings())
         transcriptionExecutor = object : ThreadPoolExecutor(
             1,
@@ -1504,7 +1510,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
                     )
                 }
-                requestScreenAttention(settings)
+                requestScreenAttentionUiOnly(settings)
                 refreshNotification(
                     when (settings.transcriptionMode) {
                         TranscriptionMode.REMOTE -> "Enviando trecho para transcricao..."
@@ -1738,7 +1744,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     // Pedido velho: descarta sem agir.
                     commitAfterTranscriptionRequestedAt.set(0L)
                 }
-                requestScreenAttention(settings)
+                requestScreenAttentionUiOnly(settings)
                 refreshNotification("Transcricao recebida.")
             } catch (ex: Exception) {
                 if (ex is CancellationException || ex is InterruptedException || stopRequested.get()) {
@@ -2640,7 +2646,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             cameraGestureGateOpen = true
             GatewayRuntime.setCameraGestureGateOpen(true)
             GatewayRuntime.setCameraGestureStatus("Palavra de ativacao detectada. Abrindo microfone.")
-            requestScreenAttention(settings)
+            if (screenOff) {
+                // Summon explicito com a tela apagada: acende sempre, mesmo em
+                // ScreenMode.ALWAYS_OFF (que requestScreenAttention ignoraria).
+                val holdMs = (settings.screenHoldSeconds.coerceAtLeast(5)) * 1000L
+                GatewayRuntime.requestScreenAttention(holdMs)
+                wakeDevice(holdMs)
+            } else {
+                requestScreenAttention(settings)
+            }
         }
     }
 
@@ -2674,6 +2688,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         wakeDevice(ASSISTANT_SPEECH_SCREEN_HOLD_MS)
     }
 
+    /**
+     * Atencao de tela SEM acender o display fisico: so atualiza o flow de UI
+     * (mantem a tela acesa enquanto o app esta em primeiro plano). Usado em
+     * eventos de baixa prioridade — transcricao em curso/recebida — para que
+     * ruido ambiente NAO fique acendendo a tela do aparelho a toa.
+     */
+    private fun requestScreenAttentionUiOnly(settings: GatewaySettings) {
+        if (settings.screenMode == com.sufficit.ai.gateway.config.ScreenMode.ALWAYS_OFF) return
+        GatewayRuntime.requestScreenAttention(settings.screenHoldSeconds * 1000L)
+    }
+
     private fun requestScreenAttention(settings: GatewaySettings) {
         when (settings.screenMode) {
             com.sufficit.ai.gateway.config.ScreenMode.ALWAYS_OFF -> return
@@ -2692,11 +2717,91 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     private fun wakeDevice(holdMs: Long) {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+
+        // So acende/traz a tela quando ela esta REALMENTE apagada. Com a tela
+        // ja ligada nao ha nada a acordar — postar a notificacao full-screen e
+        // trazer a Activity ao topo a cada atencao do assistente gerava spam de
+        // push (sonoro) e roubava o foco do app.
+        if (!powerManager.isInteractive) {
+            // Caminho confiavel a partir de um servico em segundo plano: uma
+            // notificacao com FULL-SCREEN INTENT. O proprio sistema lanca a
+            // Activity (acende a tela, mostra sobre o bloqueio), contornando as
+            // restricoes de Background Activity Launch do Android 12+. A
+            // MainActivity tem setTurnScreenOn/setShowWhenLocked. Canal SILENCIOSO.
+            wakeScreenViaFullScreenIntent()
+            // Tentativa direta tambem (best-effort quando isento de BAL).
+            com.sufficit.ai.gateway.MainActivity.requestWakeScreen(this)
+        }
+
+        // Wake lock parcial curto so para garantir CPU enquanto a Activity sobe
+        // e o pipeline de captura/TTS reage (nao acende a tela por si).
         val wakeLock = powerManager.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            PowerManager.PARTIAL_WAKE_LOCK,
             "$packageName:screen-attention"
         )
-        wakeLock.acquire(holdMs.coerceAtLeast(1_000L))
+        wakeLock.acquire(holdMs.coerceIn(1_000L, 10_000L))
+    }
+
+    /**
+     * Posta uma notificacao com full-screen intent para a MainActivity num
+     * canal de IMPORTANCE_HIGH. Com a tela apagada/bloqueada, o sistema lanca a
+     * Activity em tela cheia (acende a tela). Cancelada logo apos para nao
+     * deixar uma notificacao persistente — o efeito de acender ja ocorreu.
+     */
+    private fun wakeScreenViaFullScreenIntent() {
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Canal antigo era IMPORTANCE_HIGH COM som -> push sonoro a cada
+            // acordar. Remove e recria SILENCIOSO (o som de canal nao pode ser
+            // alterado em um canal ja existente, por isso o id v2). A
+            // importancia segue HIGH para o full-screen intent poder acender a
+            // tela, mas sem som nem vibracao.
+            runCatching { manager.deleteNotificationChannel("room-audio-gateway-wake") }
+            val channel = NotificationChannel(
+                WAKE_CHANNEL_ID,
+                "OpenClaw acordar tela",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Acende a tela quando o aparelho esta apagado e o assistente e chamado."
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            manager.createNotificationChannel(channel)
+        }
+
+        val fullScreenIntent = PendingIntent.getActivity(
+            this,
+            3,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                putExtra(MainActivity.EXTRA_WAKE_SCREEN, true)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, WAKE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle("OpenClaw")
+            .setContentText("Palavra de ativacao detectada")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .setFullScreenIntent(fullScreenIntent, true)
+            .build()
+
+        manager.notify(WAKE_NOTIFICATION_ID, notification)
+        // Remove a notificacao logo em seguida: o full-screen intent ja acendeu
+        // a tela; nao queremos um banner persistente alem do servico.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            runCatching { manager.cancel(WAKE_NOTIFICATION_ID) }
+        }, 3_000L)
     }
 
     private fun calculateRms(buffer: ShortArray, readCount: Int): Double {
@@ -3438,6 +3543,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             return
         }
 
+        // Tela de configuracao aberta: o agente nao deve se intrometer (ex.:
+        // durante o cadastro de voz). Nao despacha nem cria bolha de usuario.
+        if (GatewayRuntime.configScreenActive().value) {
+            Log.i(TAG, "Despacho ao OpenClaw suprimido: tela de configuracao ativa.")
+            return
+        }
+
         // Bolha do usuario no chat POR FRASE finalizada, aqui na entrada do
         // agendador — nao no despacho: o despacho acumula varias frases na
         // janela de envio e juntava tudo num unico balao com atraso.
@@ -3592,6 +3704,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         phrase: String,
         state: GatewayUiState
     ) {
+        // Despacho ja agendado mas tela de configuracao abriu nesse meio tempo:
+        // cancela para o agente nao se intrometer.
+        if (GatewayRuntime.configScreenActive().value) {
+            Log.i(TAG, "Despacho em voo cancelado: tela de configuracao ativa.")
+            return
+        }
         val store = settingsStore ?: GatewaySettingsStore(this)
         val settings = runCatching { store.load() }.getOrElse {
             Log.w(TAG, "Falha ao carregar configuracao do OpenClaw", it)
@@ -3761,11 +3879,42 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             SpeakerContinuityHistoryLogger.buildMetadataSummary(this@RoomAudioForegroundService)?.let {
                 put("speakerContinuityHistory", it)
             }
+            // Catalogo de ferramentas que o agente pode acionar no aparelho:
+            // ele escolhe emitindo {"tool":"<name>",...} no array "actions" da
+            // resposta. Executadas pela conexao de saida — sem rede de entrada.
+            put("availableTools", buildAgentToolCatalog())
             voiceDecision.matchedWakeTerm?.let { put("matchedWakeTerm", it) }
             voiceDecision.secondsSinceDirectAddress?.let { put("secondsSinceDirectAddress", it) }
             if (interruptedReplyContext.isNotBlank()) {
                 put("interruptedAssistantReplyPreview", interruptedReplyContext)
             }
+        }
+    }
+
+    /**
+     * Lista as ferramentas que o agente pode acionar emitindo "actions" na
+     * resposta. Enviada em todo metadata para o agente saber o que existe.
+     */
+    private fun buildAgentToolCatalog(): org.json.JSONArray {
+        fun tool(name: String, desc: String, args: JSONObject? = null) = JSONObject().apply {
+            put("tool", name)
+            put("description", desc)
+            if (args != null) put("args", args)
+        }
+        return org.json.JSONArray().apply {
+            put(tool("photo", "Tira uma foto com a camera e mostra no chat como sua. Acorde a tela antes (tool wake).",
+                JSONObject().put("camera", "front|back (padrao front)").put("label", "legenda opcional")))
+            put(tool("screenshot", "Captura a tela do app e mostra no chat.",
+                JSONObject().put("label", "legenda opcional")))
+            put(tool("wake", "Acorda/acende a tela e retoma a escuta."))
+            put(tool("effect", "Dispara um flash visual + som de aviso.",
+                JSONObject().put("label", "texto do aviso")))
+            put(tool("say", "Fala um texto pelo TTS.", JSONObject().put("text", "o que falar")))
+            put(tool("listen", "Inicia/retoma a escuta do microfone."))
+            put(tool("standby", "Coloca em espera (so palavra de ativacao reabre)."))
+            put(tool("interrupt", "Interrompe a fala do assistente em andamento."))
+            put(tool("config", "Edita configuracoes do app.", JSONObject().put("patch", "{chave:valor}")))
+            put(tool("clearChat", "Limpa o historico de conversa exibido."))
         }
     }
 
@@ -3923,10 +4072,92 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 "Reply OpenClaw sem fala automatica. attention=$requiresAttention systemInfo=${reply.isSystemInfo} apiSuppressed=$speechSuppressedByApi tags=${reply.tags.joinToString(",")}"
             )
         }
+        // Ferramentas escolhidas pelo agente (campo "actions"): executadas no
+        // aparelho pela conexao de saida — sem rede de entrada. Apos a fala
+        // para nao competir com o TTS.
+        executeAgentActions(reply.actions)
         Log.i(
             TAG,
-            "OpenClaw reply recebida: ${reply.rawReplyText.take(180)} | patch=${patchSummary ?: "nenhum"}"
+            "OpenClaw reply recebida: ${reply.rawReplyText.take(180)} | patch=${patchSummary ?: "nenhum"} | actions=${reply.actions.size}"
         )
+    }
+
+    /**
+     * Executa os comandos de ferramenta do agente. Ponto unico — a mesma
+     * superficie GatewayApiActions usada pela UI/gestos/HTTP. O agente escolhe
+     * a tool emitindo {"tool":"<nome>", ...args} no campo "actions" do envelope.
+     */
+    private fun executeAgentActions(actions: List<JSONObject>) {
+        if (actions.isEmpty()) return
+        for (action in actions) {
+            val tool = action.optString("tool").trim()
+                .ifBlank { action.optString("name").trim() }
+                .ifBlank { action.optString("type").trim() }
+            if (tool.isBlank()) continue
+            val label = action.optString("label").trim()
+            runCatching {
+                when (tool.lowercase()) {
+                    "screenshot", "print" -> {
+                        // Captura e publica no chat como imagem do agente.
+                        val bytes = screenshot(label.ifBlank { "Captura de tela" })
+                        if (bytes != null) {
+                            val file = java.io.File(
+                                getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES) ?: filesDir,
+                                "agent-screenshot-${System.currentTimeMillis()}.png"
+                            )
+                            runCatching { file.writeBytes(bytes) }
+                                .onSuccess {
+                                    GatewayRuntime.appendChatImage(
+                                        ChatRole.ASSISTANT,
+                                        label.ifBlank { "Captura de tela" },
+                                        file.absolutePath
+                                    )
+                                }
+                        } else {
+                            GatewayRuntime.appendChatMessage(
+                                ChatRole.SYSTEM,
+                                "Nao consegui capturar a tela (app em segundo plano)."
+                            )
+                        }
+                    }
+                    "photo", "camera", "takephoto", "take_photo" -> {
+                        // camera: "front" (padrao) | "back"/"rear"/"traseira".
+                        val cam = action.optString("camera").trim()
+                            .ifBlank { action.optString("lens").trim() }
+                            .lowercase()
+                        val useBack = cam == "back" || cam == "rear" || cam == "traseira" ||
+                            action.optBoolean("back", false)
+                        takePhoto(useBack, label)
+                    }
+                    "wake" -> wake()
+                    "effect", "flash" -> playEffect(label.ifBlank { "Aviso" })
+                    "say", "speak" -> {
+                        val text = action.optString("text").trim().ifBlank { label }
+                        if (text.isNotBlank()) say(text)
+                    }
+                    "listen", "startlistening", "start_listening" -> startListening()
+                    "stoplistening", "stop_listening" -> stopListening()
+                    "standby" -> standby()
+                    "interrupt" -> interruptAssistant()
+                    "finalize", "finalizesegment" -> finalizeSegment()
+                    "clearchat", "clear_chat" -> clearChat()
+                    "gesture" -> {
+                        val g = action.optString("gestureId").trim()
+                            .ifBlank { action.optString("gesture").trim() }
+                        if (g.isNotBlank()) triggerGesture(g)
+                    }
+                    "config", "editconfig", "edit_config", "settings" -> {
+                        val patch = action.optJSONObject("patch")
+                            ?: action.optJSONObject("settings")
+                            ?: action
+                        applyConfigPatch(patch)
+                    }
+                    else -> Log.w(TAG, "Tool de agente desconhecida ignorada: $tool")
+                }
+            }.onFailure { ex ->
+                Log.w(TAG, "Falha ao executar tool de agente '$tool'", ex)
+            }
+        }
     }
 
     private fun buildBlockingAnnouncementMessage(
@@ -4176,6 +4407,87 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         return file?.let { runCatching { it.readBytes() }.getOrNull() }
     }
 
+    override fun takePhoto(useBackCamera: Boolean, label: String) {
+        val recognizer = com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer.active?.get()
+        val lensLabel = if (useBackCamera) "camera traseira" else "camera frontal"
+        val caption = label.trim().ifBlank { "Foto ($lensLabel)" }
+        if (recognizer == null) {
+            // Camera nao esta ativa (gestos desligados ou app em segundo plano):
+            // tenta acordar a tela e avisa no chat. O agente pode chamar a tool
+            // wake e tentar de novo.
+            wakeDevice(loadCurrentSettings().screenHoldSeconds * 1000L)
+            GatewayRuntime.appendChatMessage(
+                ChatRole.SYSTEM,
+                "Nao consegui tirar a foto: a camera nao esta ativa. Acorde a tela e tente de novo."
+            )
+            return
+        }
+        val output = java.io.File(
+            getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+                ?: filesDir,
+            "agent-photo-${System.currentTimeMillis()}.jpg"
+        )
+        recognizer.capturePhoto(useBackCamera, output) { ok ->
+            if (ok) {
+                playEffect(caption)
+                // Assa a rotacao nos PIXELS (gira o JPEG e zera o EXIF). EXIF
+                // sozinho nao basta: visualizadores e a VISAO do agente costumam
+                // ignorar a tag, e a foto sai "deitada". Em background.
+                Thread {
+                    runCatching { bakePhotoOrientation(output) }
+                    GatewayRuntime.appendChatImage(ChatRole.ASSISTANT, caption, output.absolutePath)
+                }.start()
+            } else {
+                GatewayRuntime.appendChatMessage(
+                    ChatRole.SYSTEM,
+                    "Falha ao tirar a foto com a $lensLabel."
+                )
+            }
+        }
+    }
+
+    /**
+     * Reescreve o JPEG com os pixels JA rotacionados conforme a orientacao EXIF
+     * e zera a tag (orientation=normal). Garante a foto em pe em qualquer
+     * visualizador e na visao do agente, que ignoram EXIF.
+     */
+    private fun bakePhotoOrientation(file: java.io.File) {
+        val path = file.absolutePath
+        val exif = android.media.ExifInterface(path)
+        val orientation = exif.getAttributeInt(
+            android.media.ExifInterface.TAG_ORIENTATION,
+            android.media.ExifInterface.ORIENTATION_NORMAL
+        )
+        val matrix = android.graphics.Matrix()
+        when (orientation) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            android.media.ExifInterface.ORIENTATION_TRANSPOSE -> { matrix.postRotate(90f); matrix.postScale(-1f, 1f) }
+            android.media.ExifInterface.ORIENTATION_TRANSVERSE -> { matrix.postRotate(270f); matrix.postScale(-1f, 1f) }
+            else -> return // ORIENTATION_NORMAL/undefined: nada a fazer
+        }
+        val src = android.graphics.BitmapFactory.decodeFile(path) ?: return
+        val rotated = android.graphics.Bitmap.createBitmap(
+            src, 0, 0, src.width, src.height, matrix, true
+        )
+        java.io.FileOutputStream(file).use { out ->
+            rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+        }
+        if (rotated !== src) src.recycle()
+        // Tag zerada: pixels ja estao corretos.
+        runCatching {
+            val e2 = android.media.ExifInterface(path)
+            e2.setAttribute(
+                android.media.ExifInterface.TAG_ORIENTATION,
+                android.media.ExifInterface.ORIENTATION_NORMAL.toString()
+            )
+            e2.saveAttributes()
+        }
+    }
+
     override fun playEffect(label: String) {
         GatewayRuntime.triggerScreenEffect(label)
         // Som curto de "obturador" via ToneGenerator (sem asset).
@@ -4219,6 +4531,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun speakAssistantReply(replyText: String) {
+        // Tela de configuracao aberta: agente em silencio (ex.: cadastro de voz).
+        if (GatewayRuntime.configScreenActive().value) {
+            Log.i(TAG, "Fala do assistente suprimida: tela de configuracao ativa.")
+            return
+        }
         val normalized = sanitizeReplyForSpeech(replyText)
         if (normalized.isBlank()) {
             Log.i(TAG, "Resposta do OpenClaw suprimida na voz por conter conteudo pouco falavel ou tecnico demais.")
@@ -4496,7 +4813,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
         private const val TAG = "RoomAudioGateway"
         private const val CHANNEL_ID = "room-audio-gateway-v2"
+        private const val WAKE_CHANNEL_ID = "room-audio-gateway-wake-v2"
         private const val NOTIFICATION_ID = 1001
+        private const val WAKE_NOTIFICATION_ID = 1002
         private const val ACTION_FINALIZE_SEGMENT = "com.sufficit.ai.gateway.action.FINALIZE_SEGMENT"
         private const val ACTION_SEND_TEXT = "com.sufficit.ai.gateway.action.SEND_TEXT"
         private const val ACTION_MARK_DIRECT_ADDRESS = "com.sufficit.ai.gateway.action.MARK_DIRECT_ADDRESS"

@@ -14,7 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.animation.AnimatedVisibility
@@ -40,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +76,11 @@ private val UserBubble = Color(0xFF1F4D3D)
 private val AssistantBubble = Color(0xFF18293E)
 private val BubbleText = Color(0xFFF1F6FB)
 private val BubbleTime = Color(0xFF93A7BA)
+// Midia capturada pelo agente/sistema (foto, screenshot): visual proprio,
+// distinto das bolhas de conversa — emoldurado, centralizado, com acento.
+private val MediaFrame = Color(0xFF101C2B)
+private val MediaBorder = Color(0xFF2C6E7F)
+private val MediaAccent = Color(0xFF55C2D8)
 private val InputSurface = Color(0xFF101E2E)
 
 private val ChatTimeFormatter: DateTimeFormatter =
@@ -130,7 +141,14 @@ fun ChatMessagesList(
             key = { index -> messages[messages.size - 1 - index].id }
         ) { index ->
             val message = messages[messages.size - 1 - index]
-            if (message.role == ChatRole.SYSTEM) {
+            if (!message.imagePath.isNullOrBlank()) {
+                // Foto/screenshot capturada pelo agente: card proprio, nao bolha.
+                AgentMediaCard(
+                    imagePath = message.imagePath!!,
+                    caption = message.text,
+                    timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
+                )
+            } else if (message.role == ChatRole.SYSTEM) {
                 SystemMarker(text = message.text)
             } else {
                 ChatBubble(
@@ -218,12 +236,14 @@ private fun ChatBubble(
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = text,
-                color = if (provisional) BubbleText.copy(alpha = 0.75f) else BubbleText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontStyle = if (provisional) FontStyle.Italic else FontStyle.Normal
-            )
+            if (text.isNotBlank()) {
+                Text(
+                    text = text,
+                    color = if (provisional) BubbleText.copy(alpha = 0.75f) else BubbleText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = if (provisional) FontStyle.Italic else FontStyle.Normal
+                )
+            }
             // Conteudo visual-apenas (details): painel expansivel — o que foi
             // dito em voz fica curto; enderecos/links/explicacoes ficam aqui,
             // sem terem sido falados.
@@ -265,6 +285,206 @@ private fun ChatBubble(
                 modifier = Modifier.align(Alignment.End)
             )
         }
+    }
+}
+
+/**
+ * Card de MIDIA capturada pelo agente/sistema (foto da camera ou screenshot).
+ * Visual proprio — emoldurado, CENTRALIZADO, com etiqueta de origem e acento —
+ * para nao se confundir com as bolhas de conversa do usuario/assistente. O
+ * toque abre a imagem REAL no visualizador do sistema (FileProvider).
+ */
+@Composable
+private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lower = imagePath.lowercase()
+    val isImage = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp").any { lower.endsWith(it) }
+    val isScreenshot = lower.endsWith(".png")
+    val fileExists = remember(imagePath) { java.io.File(imagePath).exists() }
+    val kindLabel = when {
+        !isImage -> "DOCUMENTO"
+        isScreenshot -> "CAPTURA DE TELA"
+        else -> "FOTO DA CAMERA"
+    }
+    val mime = when {
+        isScreenshot -> "image/png"
+        isImage -> "image/jpeg"
+        lower.endsWith(".pdf") -> "application/pdf"
+        else -> "*/*"
+    }
+    val bitmap = remember(imagePath, fileExists) {
+        if (!fileExists || !isImage) null
+        else runCatching {
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+            val decoded = android.graphics.BitmapFactory.decodeFile(imagePath, opts)
+                ?: return@runCatching null
+            // Pixels ja sao gravados na orientacao correta (assada no servico);
+            // ainda assim honra EXIF caso algum arquivo antigo traga a tag.
+            val orientation = android.media.ExifInterface(imagePath).getAttributeInt(
+                android.media.ExifInterface.TAG_ORIENTATION,
+                android.media.ExifInterface.ORIENTATION_NORMAL
+            )
+            val degrees = when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                else -> 0f
+            }
+            if (degrees == 0f) decoded else {
+                val m = android.graphics.Matrix().apply { postRotate(degrees) }
+                android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+            }
+        }.getOrNull()
+    }
+    // Indisponivel: arquivo sumiu, ou e imagem que nao decodificou.
+    val unavailable = !fileExists || (isImage && bitmap == null)
+    val openModifier = if (unavailable) Modifier else Modifier.clickable {
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", java.io.File(imagePath)
+            )
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mime)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }
+    }
+    // Centralizado: nem esquerda (usuario) nem direita (assistente).
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MediaFrame)
+                .border(1.dp, MediaBorder, RoundedCornerShape(14.dp))
+                .then(openModifier)
+                .padding(8.dp)
+        ) {
+            // Cabecalho: etiqueta de origem (acento) + horario.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp, start = 2.dp, end = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MediaAccent.copy(alpha = 0.18f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = kindLabel,
+                        color = MediaAccent,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                    )
+                }
+                Box(modifier = Modifier.weight(1f))
+                Text(text = timeLabel, color = BubbleTime, style = MaterialTheme.typography.labelSmall)
+            }
+            // Conteudo: imagem, tile de documento, ou placeholder de indisponivel.
+            when {
+                unavailable -> MediaUnavailablePlaceholder(isImage)
+                isImage && bitmap != null -> Box(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.foundation.Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "$kindLabel (toque para abrir)",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
+                    )
+                }
+                else -> DocumentTile(fileName = java.io.File(imagePath).name)
+            }
+            // Legenda opcional (quando difere da etiqueta de origem).
+            if (caption.isNotBlank() && !caption.equals(kindLabel, ignoreCase = true)) {
+                Text(
+                    text = caption,
+                    color = BubbleText.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp)
+                )
+            }
+            Text(
+                text = if (unavailable) "Arquivo nao esta mais disponivel" else "Toque para abrir",
+                color = BubbleTime,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Placeholder de midia indisponivel (arquivo removido). Vale para imagem e
+ * documentos — bloco emoldurado tracejado com icone neutro e rotulo.
+ */
+@Composable
+private fun MediaUnavailablePlaceholder(wasImage: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MediaBorder.copy(alpha = 0.10f))
+            .border(1.dp, MediaBorder.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Add,
+            contentDescription = null,
+            tint = BubbleTime,
+            modifier = Modifier
+                .rotate(45f) // "X" improvisado a partir do icone de + do conjunto core
+                .size(20.dp)
+        )
+        Text(
+            text = if (wasImage) "Imagem indisponivel" else "Midia indisponivel",
+            color = BubbleText.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(start = 10.dp)
+        )
+    }
+}
+
+/**
+ * Tile de documento (arquivo nao-imagem disponivel): mostra o nome do arquivo;
+ * o toque no card abre no app externo apropriado.
+ */
+@Composable
+private fun DocumentTile(fileName: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MediaBorder.copy(alpha = 0.12f))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(MediaAccent.copy(alpha = 0.20f))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = fileName.substringAfterLast('.', "").uppercase().ifBlank { "DOC" }.take(4),
+                color = MediaAccent,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+            )
+        }
+        Text(
+            text = fileName,
+            color = BubbleText.copy(alpha = 0.9f),
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            modifier = Modifier.padding(start = 10.dp)
+        )
     }
 }
 

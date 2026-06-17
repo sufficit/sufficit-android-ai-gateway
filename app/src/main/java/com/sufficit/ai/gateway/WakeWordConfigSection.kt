@@ -94,8 +94,15 @@ fun WakeWordConfigSection() {
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Button(
-                onClick = { GatewayRuntime.requestWakeWordRecording() },
-                enabled = runtime.listening && !wake.recording,
+                onClick = {
+                    // Precisa do microfone ativo: inicia a escuta se preciso
+                    // (permissao de audio ja concedida) e pede a gravacao.
+                    if (!runtime.listening) {
+                        com.sufficit.ai.gateway.audio.RoomAudioForegroundService.start(context)
+                    }
+                    GatewayRuntime.requestWakeWordRecording()
+                },
+                enabled = !wake.recording,
                 modifier = Modifier.weight(1f)
             ) {
                 Text(if (wake.recording) "Gravando..." else "Gravar amostra")
@@ -113,7 +120,7 @@ fun WakeWordConfigSection() {
         }
         if (!runtime.listening) {
             Text(
-                text = "Inicie a escuta no dashboard para gravar amostras.",
+                text = "Ao gravar, a escuta do microfone inicia automaticamente.",
                 style = MaterialTheme.typography.bodySmall
             )
         }

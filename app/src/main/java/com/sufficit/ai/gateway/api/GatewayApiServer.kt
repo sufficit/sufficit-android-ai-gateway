@@ -69,6 +69,7 @@ class GatewayApiServer(
             method == Method.POST && uri == "/api/gesture" -> gesture(session)
             (method == Method.GET || method == Method.POST) && uri == "/api/screenshot" -> screenshot(session)
             method == Method.POST && uri == "/api/effect" -> effect(session)
+            method == Method.POST && uri == "/api/photo" -> photo(session)
             else -> json(Response.Status.NOT_FOUND, errorBody("not_found", "$method $uri"))
         }
     }
@@ -130,6 +131,23 @@ class GatewayApiServer(
         return ok()
     }
 
+    private fun photo(session: IHTTPSession): Response {
+        val body = readJsonBody(session)
+        val cam = (body?.optString("camera")?.trim()
+            ?: session.parameters["camera"]?.firstOrNull()?.trim()
+            ?: "front").lowercase()
+        val useBack = cam == "back" || cam == "rear" || cam == "traseira"
+        val label = body?.optString("label")?.trim()
+            ?: session.parameters["label"]?.firstOrNull()?.trim()
+            ?: ""
+        // Fire-and-forget: a foto aparece como mensagem no chat (GET /api/chat).
+        actions.takePhoto(useBack, label)
+        return json(
+            Response.Status.ACCEPTED,
+            JSONObject().put("accepted", true).put("camera", if (useBack) "back" else "front")
+        )
+    }
+
     private fun gesture(session: IHTTPSession): Response {
         val body = readJsonBody(session) ?: return badRequest("corpo JSON obrigatorio")
         val id = body.optString("id").trim().lowercase()
@@ -184,9 +202,17 @@ class GatewayApiServer(
             messages.put(
                 JSONObject()
                     .put("id", m.id)
-                    .put("role", if (m.role == ChatRole.USER) "user" else "assistant")
+                    .put("role", when (m.role) {
+                        ChatRole.USER -> "user"
+                        ChatRole.SYSTEM -> "system"
+                        else -> "assistant"
+                    })
                     .put("text", m.text)
                     .put("atEpochMs", m.atEpochMs)
+                    .apply {
+                        m.details?.let { put("details", it) }
+                        m.imagePath?.let { put("imagePath", it) }
+                    }
             )
         }
         return JSONObject().put("messages", messages)

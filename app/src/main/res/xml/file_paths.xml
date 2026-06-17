@@ -6,4 +6,11 @@
     <files-path
         name="history"
         path="history/" />
+    <!-- Fotos da camera e screenshots tirados pelo agente (abrir no chat). -->
+    <external-files-path
+        name="agent_media"
+        path="Pictures/" />
+    <files-path
+        name="agent_media_internal"
+        path="." />
 </paths>

@@ -24,7 +24,15 @@ data class OpenClawReplyEnvelope(
      * explicações longas. Mostrado no chat como painel expansível; NUNCA é
      * falado pelo TTS.
      */
-    val detailsText: String? = null
+    val detailsText: String? = null,
+    /**
+     * Comandos de ferramenta que o agente escolheu executar no aparelho (campo
+     * "actions"). Cada item e um JSON {"tool":"<nome>", ...args}. O telefone
+     * executa localmente pela sua conexao de saida — nao precisa de rede de
+     * entrada (substitui a skill que exigia mesma rede). Ferramentas: screenshot,
+     * photo, wake, effect, say, listen, standby, interrupt, config, clearChat.
+     */
+    val actions: List<JSONObject> = emptyList()
 )
 
 internal object OpenClawReplyEnvelopeParser {
@@ -88,6 +96,19 @@ internal object OpenClawReplyEnvelopeParser {
             val detailsText = parsedJson.optString("details").trim()
                 .ifBlank { parsedJson.optString("visualNote").trim() }
                 .ifBlank { null }
+            val actions = (parsedJson.optJSONArray("actions") ?: parsedJson.optJSONArray("tools"))
+                ?.let { array ->
+                    buildList {
+                        for (index in 0 until array.length()) {
+                            // Aceita objeto {tool,...} ou string "wake" (atalho sem args).
+                            when (val item = array.opt(index)) {
+                                is JSONObject -> add(item)
+                                is String -> if (item.isNotBlank()) add(JSONObject().put("tool", item.trim()))
+                            }
+                        }
+                    }
+                }
+                .orEmpty()
             val rawEnvelopeText = when {
                 source.equals("android-pre-agent", ignoreCase = true) -> normalizedRaw
                 replyText.isNotBlank() -> normalizedRaw
@@ -106,7 +127,8 @@ internal object OpenClawReplyEnvelopeParser {
                 overlap = overlap,
                 settingsPatch = settingsPatch,
                 errorText = errorText,
-                detailsText = detailsText
+                detailsText = detailsText,
+                actions = actions
             )
         }
 

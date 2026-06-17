@@ -75,7 +75,13 @@ data class ChatMessage(
      * Conteudo visual-apenas da resposta (enderecos, links, explicacoes):
      * exibido como painel expansivel na bolha, NUNCA falado. Null = sem painel.
      */
-    val details: String? = null
+    val details: String? = null,
+    /**
+     * Caminho absoluto de uma imagem anexa (screenshot/foto da camera tirada
+     * pelo agente). Exibida como thumbnail na bolha; toque abre a imagem real.
+     * Null = mensagem so de texto.
+     */
+    val imagePath: String? = null
 )
 
 /**
@@ -118,6 +124,17 @@ object GatewayRuntime {
     private val wakeWordFlow = MutableStateFlow(WakeWordUiState())
     private val wakeWordConfigVersionFlow = MutableStateFlow(0)
     private val wakeWordRecordingRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    // Tela de configuracao aberta: o agente deve PARAR (nao despachar fala nem
+    // falar), para nao se intrometer durante o cadastro de voz/palavra de
+    // ativacao. O microfone segue ativo para capturar amostras.
+    private val configScreenActiveFlow = MutableStateFlow(false)
+
+    fun configScreenActive(): StateFlow<Boolean> = configScreenActiveFlow.asStateFlow()
+
+    fun setConfigScreenActive(active: Boolean) {
+        configScreenActiveFlow.value = active
+    }
 
     fun state(): StateFlow<GatewayUiState> = state.asStateFlow()
     fun cameraGestureGate(): StateFlow<Boolean> = cameraGestureGateFlow.asStateFlow()
@@ -207,10 +224,34 @@ object GatewayRuntime {
     private val chatMessageIdSeq = java.util.concurrent.atomic.AtomicLong(0L)
     private const val CHAT_HISTORY_LIMIT = 200
 
+    // Persistencia em disco do historico (sobrevive a reinicio/install -r).
+    // Setada pelo servico no onCreate via attachChatPersistence.
+    @Volatile
+    private var chatPersister: ((List<ChatMessage>) -> Unit)? = null
+
     fun chatMessages(): StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
+
+    /**
+     * Liga a persistencia do chat: carrega o historico salvo para a memoria e
+     * registra o gravador chamado a cada mudanca. Idempotente — chamar de novo
+     * apenas recarrega do disco.
+     */
+    fun attachChatPersistence(initial: List<ChatMessage>, persister: (List<ChatMessage>) -> Unit) {
+        if (initial.isNotEmpty()) {
+            val trimmed = initial.takeLast(CHAT_HISTORY_LIMIT)
+            chatFlow.value = trimmed
+            chatMessageIdSeq.set(trimmed.maxOf { it.id })
+        }
+        chatPersister = persister
+    }
+
+    private fun persistChat() {
+        chatPersister?.invoke(chatFlow.value)
+    }
 
     fun clearChat() {
         chatFlow.value = emptyList()
+        persistChat()
     }
 
     fun appendChatMessage(role: ChatRole, text: String, details: String? = null) {
@@ -224,6 +265,24 @@ object GatewayRuntime {
             details = details?.trim()?.takeIf { it.isNotBlank() }
         )
         chatFlow.value = (chatFlow.value + message).takeLast(CHAT_HISTORY_LIMIT)
+        persistChat()
+    }
+
+    /**
+     * Anexa uma imagem (screenshot/foto da camera) ao chat como se o agente a
+     * tivesse enviado. Mostra thumbnail; toque abre a imagem real. O texto e a
+     * legenda opcional ("Foto (camera frontal)" etc).
+     */
+    fun appendChatImage(role: ChatRole, caption: String, imagePath: String) {
+        val message = ChatMessage(
+            id = chatMessageIdSeq.incrementAndGet(),
+            role = role,
+            text = caption.trim(),
+            atEpochMs = System.currentTimeMillis(),
+            imagePath = imagePath
+        )
+        chatFlow.value = (chatFlow.value + message).takeLast(CHAT_HISTORY_LIMIT)
+        persistChat()
     }
 
     private val speakerVoiceFlow = MutableStateFlow(SpeakerVoiceUiState())

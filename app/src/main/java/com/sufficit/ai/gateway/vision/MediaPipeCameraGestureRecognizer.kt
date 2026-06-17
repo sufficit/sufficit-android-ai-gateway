@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -197,6 +199,7 @@ class MediaPipeCameraGestureRecognizer(
 
     fun start(previewVisible: Boolean, onEvent: (CameraGestureEvent) -> Unit) {
         callback = onEvent
+        active = java.lang.ref.WeakReference(this)
         if (running.getAndSet(true)) {
             Log.i(TAG, "Camera gesture recognizer already running; callback refreshed (previewVisible=$previewVisible).")
             if (previewVisible != previewAttached) {
@@ -276,6 +279,7 @@ class MediaPipeCameraGestureRecognizer(
 
     fun stop() {
         callback = null
+        if (active?.get() === this) active = null
         if (!running.getAndSet(false)) {
             return
         }
@@ -297,7 +301,69 @@ class MediaPipeCameraGestureRecognizer(
         GatewayRuntime.setGestureDebugPreviewAvailable(false)
     }
 
+    /**
+     * Tira uma FOTO com a camera (frontal por padrao, ou traseira) e salva em
+     * [output] como JPEG. Coordena com a deteccao de gestos: solta o use case de
+     * analise, liga o ImageCapture com a lente pedida, captura e restaura a
+     * analise de gestos. Requer a Activity em primeiro plano (lifecycle STARTED);
+     * o servico acorda/traz a tela antes de pedir a foto. onDone(true) no sucesso.
+     */
+    fun capturePhoto(useBackCamera: Boolean, output: java.io.File, onDone: (Boolean) -> Unit) {
+        val mainExecutor = ContextCompat.getMainExecutor(activity)
+        mainExecutor.execute {
+            val providerFuture = ProcessCameraProvider.getInstance(activity)
+            providerFuture.addListener({
+                val provider = runCatching { providerFuture.get() }.getOrNull()
+                if (provider == null) {
+                    onDone(false)
+                    return@addListener
+                }
+                val capture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+                val selector = if (useBackCamera) {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                }
+                val restoreGesture = {
+                    runCatching {
+                        provider.unbindAll()
+                        if (running.get()) bindUseCases(provider, previewAttached)
+                    }
+                }
+                try {
+                    provider.unbindAll()
+                    provider.bindToLifecycle(activity, selector, capture)
+                } catch (ex: Throwable) {
+                    Log.e(TAG, "Falha ao ligar a camera para foto.", ex)
+                    restoreGesture()
+                    onDone(false)
+                    return@addListener
+                }
+                val options = ImageCapture.OutputFileOptions.Builder(output).build()
+                capture.takePicture(
+                    options,
+                    mainExecutor,
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onImageSaved(result: ImageCapture.OutputFileResults) {
+                            restoreGesture()
+                            onDone(true)
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            Log.e(TAG, "Falha ao capturar foto.", exception)
+                            restoreGesture()
+                            onDone(false)
+                        }
+                    }
+                )
+            }, mainExecutor)
+        }
+    }
+
     override fun close() {
+        if (active?.get() === this) active = null
         stop()
         retiredHands?.let { runCatching { it.close() } }
         retiredHands = null
@@ -895,6 +961,12 @@ class MediaPipeCameraGestureRecognizer(
     }
 
     companion object {
+        // Referencia fraca para o servico pedir uma foto (capturePhoto) sem
+        // acoplar ao escopo Compose que cria o reconhecedor.
+        @Volatile
+        var active: java.lang.ref.WeakReference<MediaPipeCameraGestureRecognizer>? = null
+            private set
+
         private const val TAG = "MediaPipeGesture"
         private const val MAX_HANDS = 2
 

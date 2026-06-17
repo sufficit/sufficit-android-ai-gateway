@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         current = java.lang.ref.WeakReference(this)
+        applyWakeScreenFlags()
 
         setContent {
             SufficitOpenClawGatewayTheme {
@@ -72,12 +73,63 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_WAKE_SCREEN, false)) {
+            // Re-aplica para uma Activity ja viva trazida ao topo com a tela
+            // apagada (wake word / fala do agente). setTurnScreenOn so dispara o
+            // acendimento no proximo resume, entao reforcamos aqui.
+            applyWakeScreenFlags()
+        }
+    }
+
+    /**
+     * Faz a Activity acender a tela e aparecer sobre o bloqueio. Substitui o
+     * SCREEN_BRIGHT_WAKE_LOCK (deprecado, nao acende a tela no Android 11+).
+     */
+    private fun applyWakeScreenFlags() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            (getSystemService(android.content.Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+                ?.requestDismissKeyguard(this, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        }
+    }
+
     override fun onDestroy() {
         if (current?.get() === this) current = null
         super.onDestroy()
     }
 
     companion object {
+        const val EXTRA_WAKE_SCREEN = "com.sufficit.ai.gateway.extra.WAKE_SCREEN"
+
+        /**
+         * Acende a tela trazendo a MainActivity ao topo com as flags de
+         * turn-screen-on/show-when-locked. Chamado pelo servico quando a tela
+         * esta apagada (wake word, fala do agente) — caminho confiavel no
+         * Android moderno, ja que os wake locks de tela foram deprecados.
+         */
+        fun requestWakeScreen(context: android.content.Context) {
+            val intent = android.content.Intent(context, MainActivity::class.java).apply {
+                addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+                putExtra(EXTRA_WAKE_SCREEN, true)
+            }
+            runCatching { context.startActivity(intent) }
+        }
+
         // Referencia fraca para a API capturar a janela do app (screenshot)
         // sem MediaProjection. Funciona com o app em primeiro plano.
         @Volatile
@@ -293,6 +345,20 @@ private fun GatewayScreen() {
         keepScreenOn = keepScreenOn,
         wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY && screenAttentionActive
     )
+
+    // Tela de configuracao = agente em silencio: para de despachar/falar (para
+    // nao se intrometer no cadastro de voz/palavra de ativacao) e interrompe
+    // qualquer fala em andamento ao entrar. O microfone segue para amostras.
+    LaunchedEffect(pagerState.currentPage) {
+        val onConfig = pagerState.currentPage == CONFIG_PAGE_INDEX
+        GatewayRuntime.setConfigScreenActive(onConfig)
+        if (onConfig) {
+            RoomAudioForegroundService.interruptAssistant(activity)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { GatewayRuntime.setConfigScreenActive(false) }
+    }
 
     BackHandler {
         when {
