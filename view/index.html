@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sufficit AI Gateway — Cliente</title>
+<style>
+  :root {
+    --bg: #0b131c;
+    --panel: #101c29;
+    --panel-border: #1c2c3d;
+    --user-bubble: #1f4d3d;
+    --assistant-bubble: #18293e;
+    --bubble-text: #f1f6fb;
+    --bubble-time: #93a7ba;
+    --accent: #2fa3ff;
+    --ok: #34c77b;
+    --warn: #ffa726;
+    --err: #d32f2f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--bubble-text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; flex: 1 1 auto; min-width: 140px; }
+  header input {
+    background: #0e1824;
+    border: 1px solid var(--panel-border);
+    color: var(--bubble-text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  #baseUrl { width: 220px; }
+  #token { width: 200px; }
+  header button {
+    background: var(--accent);
+    border: none;
+    color: #06131f;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  header button.secondary {
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--bubble-text);
+  }
+  #dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--err);
+    flex: 0 0 auto;
+  }
+  main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  #chatCol {
+    flex: 2 1 480px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--panel-border);
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .bubble {
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bubble .time {
+    display: block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--bubble-time);
+    text-align: right;
+  }
+  .user { align-self: flex-end; background: var(--user-bubble); border-bottom-right-radius: 4px; }
+  .assistant { align-self: flex-start; background: var(--assistant-bubble); border-bottom-left-radius: 4px; }
+  .system {
+    align-self: center;
+    color: var(--bubble-time);
+    font-size: 11px;
+    font-style: italic;
+    padding: 2px 8px;
+  }
+  .placeholderImg {
+    color: var(--bubble-time);
+    font-size: 11px;
+    font-style: italic;
+  }
+  #composer {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background: var(--panel);
+    border-top: 1px solid var(--panel-border);
+  }
+  #composer input[type=text] {
+    flex: 1;
+    background: #0e1824;
+    border: 1px solid var(--panel-border);
+    color: var(--bubble-text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  #composer label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--bubble-time);
+    white-space: nowrap;
+  }
+  #composer button {
+    background: var(--accent);
+    border: none;
+    color: #06131f;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+  #sideCol {
+    flex: 1 1 280px;
+    max-width: 320px;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .card h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--bubble-time);
+    margin: 0 0 8px 0;
+  }
+  .statusRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+  }
+  .statusRow .k { color: var(--bubble-time); }
+  .statusRow .v { text-align: right; max-width: 60%; word-break: break-word; }
+  .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pill.on { background: rgba(52,199,123,0.18); color: var(--ok); }
+  .pill.off { background: rgba(147,167,186,0.15); color: var(--bubble-time); }
+  .btnGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .btnGrid button, .rowBtns button {
+    background: #16283a;
+    border: 1px solid var(--panel-border);
+    color: var(--bubble-text);
+    border-radius: 6px;
+    padding: 8px 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btnGrid button:hover, .rowBtns button:hover, header button:hover { filter: brightness(1.15); }
+  .rowBtns { display: flex; gap: 6px; flex-wrap: wrap; }
+  #shotImg { width: 100%; border-radius: 8px; margin-top: 8px; display: none; }
+  #errBanner {
+    display: none;
+    background: rgba(211,47,47,0.15);
+    color: #ff8a80;
+    border-bottom: 1px solid var(--err);
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #223244; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sufficit AI Gateway</h1>
+  <div id="dot" title="Desconectado"></div>
+  <input id="baseUrl" type="text" placeholder="http://192.168.15.x:8080">
+  <input id="token" type="text" placeholder="token da API">
+  <button id="connectBtn">Conectar</button>
+  <button id="clearChatBtn" class="secondary">Limpar chat</button>
+</header>
+<header style="border-top:1px solid var(--panel-border);">
+  <span style="font-size:11px;color:var(--bubble-time);">Descoberta na rede (sem UPnP — navegador nao tem socket UDP):</span>
+  <input id="subnetPrefix" type="text" placeholder="192.168.31" style="width:110px;">
+  <input id="scanPort" type="text" placeholder="8765" style="width:60px;">
+  <button id="discoverBtn" class="secondary">Descobrir</button>
+  <span id="discoverStatus" style="font-size:11px;color:var(--bubble-time);"></span>
+</header>
+
+<div id="errBanner"></div>
+
+<main>
+  <div id="chatCol">
+    <div id="messages"></div>
+    <div id="composer">
+      <input id="textInput" type="text" placeholder="Digite uma mensagem para o agente...">
+      <label><input id="speakToggle" type="checkbox" checked> falar</label>
+      <button id="sendBtn">Enviar</button>
+    </div>
+  </div>
+
+  <div id="sideCol">
+    <div class="card">
+      <h2>Status</h2>
+      <div class="statusRow"><span class="k">Ouvindo</span><span class="v" id="stListening"></span></div>
+      <div class="statusRow"><span class="k">Fala detectada</span><span class="v" id="stSpeech"></span></div>
+      <div class="statusRow"><span class="k">Transcrevendo</span><span class="v" id="stTranscribing"></span></div>
+      <div class="statusRow"><span class="k">Falando</span><span class="v" id="stSpeaking"></span></div>
+      <div class="statusRow"><span class="k">Fila transcricao</span><span class="v" id="stQueue"></span></div>
+      <div class="statusRow"><span class="k">Ganho mic</span><span class="v" id="stGain"></span></div>
+      <div class="statusRow"><span class="k">Texto atual</span><span class="v" id="stCurrent"></span></div>
+      <div class="statusRow"><span class="k">Status</span><span class="v" id="stText"></span></div>
+      <div class="statusRow"><span class="k">OpenClaw</span><span class="v" id="stOpenClaw"></span></div>
+    </div>
+
+    <div class="card">
+      <h2>Controles</h2>
+      <div class="btnGrid">
+        <button data-action="listen/start">Iniciar escuta</button>
+        <button data-action="listen/stop">Parar escuta</button>
+        <button data-action="standby">Standby</button>
+        <button data-action="wake">Acordar</button>
+        <button data-action="interrupt">Interromper</button>
+        <button data-action="finalize">Finalizar trecho</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Gestos remotos</h2>
+      <div class="rowBtns">
+        <button data-gesture="index_up">👆 Apontar</button>
+        <button data-gesture="fist">✊ Fechar</button>
+        <button data-gesture="open_hand">✋ Abrir</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Camera</h2>
+      <div class="rowBtns">
+        <button id="screenshotBtn">🖼️ Screenshot</button>
+        <button data-photo="front">📷 Frontal</button>
+        <button data-photo="back">📷 Traseira</button>
+      </div>
+      <img id="shotImg" alt="screenshot">
+    </div>
+
+    <div class="card">
+      <h2>Efeito sonoro/visual</h2>
+      <div class="rowBtns">
+        <input id="effectInput" type="text" placeholder="nome do efeito" style="flex:1;background:#0e1824;border:1px solid var(--panel-border);color:var(--bubble-text);border-radius:6px;padding:6px 8px;font-size:12px;">
+        <button id="effectBtn">Tocar</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const baseUrlInput = $("baseUrl");
+  const tokenInput = $("token");
+  const dot = $("dot");
+  const errBanner = $("errBanner");
+  const subnetInput = $("subnetPrefix");
+  const scanPortInput = $("scanPort");
+  const discoverBtn = $("discoverBtn");
+  const discoverStatus = $("discoverStatus");
+
+  const urlParams = new URLSearchParams(location.search);
+  baseUrlInput.value = urlParams.get("base") || localStorage.getItem("gw_base_url") || "";
+  tokenInput.value = urlParams.get("token") || localStorage.getItem("gw_token") || "";
+  subnetInput.value = localStorage.getItem("gw_subnet") || "";
+  scanPortInput.value = localStorage.getItem("gw_scan_port") || "8765";
+
+  let connected = false;
+  let lastChatCount = -1;
+  let statusTimer = null;
+  let chatTimer = null;
+
+  function config() {
+    let base = baseUrlInput.value.trim().replace(/\/$/, "");
+    if (base && !/^https?:\/\//i.test(base)) base = "http://" + base;
+    return { base, token: tokenInput.value.trim() };
+  }
+
+  function showError(msg) {
+    errBanner.textContent = msg;
+    errBanner.style.display = "block";
+  }
+  function hideError() {
+    errBanner.style.display = "none";
+  }
+
+  // GET usa query token: sem headers custom, sem preflight CORS.
+  async function apiGet(path) {
+    const { base, token } = config();
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetch(`${base}${path}${sep}token=${encodeURIComponent(token)}`);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res;
+  }
+
+  // POST com Content-Type text/plain fica na lista "simple" do CORS (junto
+  // com form-urlencoded e multipart) e nao dispara preflight OPTIONS — o
+  // servidor no app le o corpo cru e faz JSONObject(raw), ignorando o
+  // Content-Type declarado, entao isso funciona sem tocar no app Android.
+  async function apiPost(path, bodyObj) {
+    const { base, token } = config();
+    const res = await fetch(`${base}${path}?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(bodyObj || {})
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res;
+  }
+
+  function setConnected(ok) {
+    connected = ok;
+    dot.style.background = ok ? "var(--ok)" : "var(--err)";
+    dot.title = ok ? "Conectado" : "Desconectado";
+  }
+
+  async function tryConnect() {
+    const { base, token } = config();
+    if (!base || !token) {
+      showError("Preencha Base URL e token (veja Configuracoes > API HTTP de controle no app).");
+      setConnected(false);
+      return;
+    }
+    localStorage.setItem("gw_base_url", base);
+    localStorage.setItem("gw_token", token);
+    try {
+      const health = await fetch(`${base}/api/health`);
+      if (!health.ok) throw new Error("health check falhou");
+      await apiGet("/api/status");
+      hideError();
+      setConnected(true);
+      startPolling();
+    } catch (ex) {
+      setConnected(false);
+      showError(
+        "Falha ao conectar: " + ex.message +
+        ". Confira: mesmo Wi-Fi do celular, API ligada + 'Expor na rede local' ativo, token correto."
+      );
+    }
+  }
+
+  function fmtBool(b, onLabel, offLabel) {
+    const span = document.createElement("span");
+    span.className = "pill " + (b ? "on" : "off");
+    span.textContent = b ? (onLabel || "sim") : (offLabel || "nao");
+    return span;
+  }
+
+  async function pollStatus() {
+    if (!connected) return;
+    try {
+      const res = await apiGet("/api/status");
+      const s = await res.json();
+      hideError();
+      const set = (id, node) => { const el = $(id); el.innerHTML = ""; el.appendChild(node); };
+      const setText = (id, text) => { $(id).textContent = text; };
+
+      set("stListening", fmtBool(s.listening));
+      set("stSpeech", fmtBool(s.speechDetected));
+      set("stTranscribing", fmtBool(s.transcribing));
+      set("stSpeaking", fmtBool(s.speakingBack));
+      setText("stQueue", `${s.transcriptionQueueCount} / openclaw ${s.openClawDispatchQueueCount}`);
+      setText("stGain", s.currentMicrophoneGain != null ? s.currentMicrophoneGain.toFixed(2) : "-");
+      setText("stCurrent", s.currentTranscript || "(vazio)");
+      setText("stText", s.statusText || "");
+      setText("stOpenClaw", s.openClawStatus || "");
+    } catch (ex) {
+      setConnected(false);
+      showError("Perdeu conexao: " + ex.message);
+    }
+  }
+
+  function bubbleNode(role, text, timeMs) {
+    const div = document.createElement("div");
+    div.className = "bubble " + role;
+    const textNode = document.createElement("div");
+    textNode.textContent = text;
+    div.appendChild(textNode);
+    if (timeMs) {
+      const t = document.createElement("span");
+      t.className = "time";
+      t.textContent = new Date(timeMs).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      div.appendChild(t);
+    }
+    return div;
+  }
+
+  function systemNode(text) {
+    const div = document.createElement("div");
+    div.className = "bubble system";
+    div.textContent = text;
+    return div;
+  }
+
+  async function pollChat() {
+    if (!connected) return;
+    try {
+      const res = await apiGet("/api/chat");
+      const data = await res.json();
+      const messages = data.messages || [];
+      if (messages.length === lastChatCount) return;
+      lastChatCount = messages.length;
+
+      const container = $("messages");
+      const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+      container.innerHTML = "";
+      for (const m of messages) {
+        if (m.role === "system") {
+          container.appendChild(systemNode(m.text));
+          continue;
+        }
+        let text = m.text || "";
+        if (m.imagePath) {
+          text += (text ? "\n" : "") + "[imagem no dispositivo — sem endpoint remoto para baixar]";
+        }
+        container.appendChild(bubbleNode(m.role, text, m.atEpochMs));
+      }
+      if (wasNearBottom) container.scrollTop = container.scrollHeight;
+    } catch (ex) {
+      // silencioso: pollStatus ja reporta perda de conexao
+    }
+  }
+
+  function startPolling() {
+    if (statusTimer) clearInterval(statusTimer);
+    if (chatTimer) clearInterval(chatTimer);
+    pollStatus();
+    pollChat();
+    statusTimer = setInterval(pollStatus, 1000);
+    chatTimer = setInterval(pollChat, 1500);
+  }
+
+  $("connectBtn").addEventListener("click", tryConnect);
+
+  $("clearChatBtn").addEventListener("click", async () => {
+    if (!connected) return;
+    try {
+      await apiPost("/api/chat/clear");
+      lastChatCount = -1;
+      pollChat();
+    } catch (ex) {
+      showError("Falha ao limpar chat: " + ex.message);
+    }
+  });
+
+  $("sendBtn").addEventListener("click", sendMessage);
+  $("textInput").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") sendMessage();
+  });
+
+  async function sendMessage() {
+    const input = $("textInput");
+    const text = input.value.trim();
+    if (!text || !connected) return;
+    input.value = "";
+    try {
+      await apiPost("/api/conversation", { text, speak: $("speakToggle").checked });
+      lastChatCount = -1;
+      setTimeout(pollChat, 300);
+    } catch (ex) {
+      showError("Falha ao enviar: " + ex.message);
+    }
+  }
+
+  document.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!connected) return;
+      try {
+        await apiPost("/api/" + btn.dataset.action);
+      } catch (ex) {
+        showError("Falha na acao '" + btn.dataset.action + "': " + ex.message);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-gesture]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!connected) return;
+      try {
+        await apiPost("/api/gesture", { id: btn.dataset.gesture });
+      } catch (ex) {
+        showError("Falha no gesto: " + ex.message);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-photo]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!connected) return;
+      try {
+        await apiPost("/api/photo", { camera: btn.dataset.photo });
+      } catch (ex) {
+        showError("Falha ao tirar foto: " + ex.message);
+      }
+    });
+  });
+
+  $("screenshotBtn").addEventListener("click", () => {
+    if (!connected) return;
+    const { base, token } = config();
+    const img = $("shotImg");
+    img.src = `${base}/api/screenshot?token=${encodeURIComponent(token)}&_=${Date.now()}`;
+    img.style.display = "block";
+  });
+
+  $("effectBtn").addEventListener("click", async () => {
+    const label = $("effectInput").value.trim();
+    if (!label || !connected) return;
+    try {
+      await apiPost("/api/effect", { label });
+    } catch (ex) {
+      showError("Falha no efeito: " + ex.message);
+    }
+  });
+
+  // Sem UPnP/SSDP real: navegador nao tem socket UDP/multicast para
+  // enviar M-SEARCH. Aproximacao que funciona 100% em JS puro: varre os
+  // 254 hosts do prefixo /24 batendo em /api/health (rota sem token) em
+  // paralelo com timeout curto — quem responder ok:true e o gateway.
+  async function probeHost(base, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${base}/api/health`, { signal: controller.signal });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return data && data.ok === true && data.service === "ai-gateway";
+    } catch (ex) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function discover() {
+    const prefix = subnetInput.value.trim().replace(/\.$/, "");
+    const port = scanPortInput.value.trim() || "8765";
+    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(prefix)) {
+      discoverStatus.textContent = "prefixo invalido (ex: 192.168.31)";
+      return;
+    }
+    localStorage.setItem("gw_subnet", prefix);
+    localStorage.setItem("gw_scan_port", port);
+
+    discoverBtn.disabled = true;
+    const CONCURRENCY = 24;
+    const TIMEOUT_MS = 700;
+    let found = null;
+    let scanned = 0;
+
+    const hosts = Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
+    let cursor = 0;
+
+    async function worker() {
+      while (!found && cursor < hosts.length) {
+        const host = hosts[cursor++];
+        const base = `http://${host}:${port}`;
+        const ok = await probeHost(base, TIMEOUT_MS);
+        scanned++;
+        discoverStatus.textContent = `escaneando ${scanned}/${hosts.length}...`;
+        if (ok) found = base;
+      }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+    discoverBtn.disabled = false;
+    if (found) {
+      discoverStatus.textContent = `achou: ${found}`;
+      baseUrlInput.value = found;
+      if (tokenInput.value.trim()) tryConnect();
+    } else {
+      discoverStatus.textContent = "nao achou nenhum gateway nesse prefixo/porta.";
+    }
+  }
+
+  discoverBtn.addEventListener("click", discover);
+
+  if (baseUrlInput.value && tokenInput.value) {
+    tryConnect();
+  }
+})();
+</script>
+</body>
+</html>

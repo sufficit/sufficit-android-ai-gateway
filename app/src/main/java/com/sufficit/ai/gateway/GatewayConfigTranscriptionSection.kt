@@ -161,7 +161,7 @@ fun ConfigTranscriptionSectionPage(
 }
 
 @Composable
-private fun LocalTranscriptionSection(
+fun LocalTranscriptionSection(
     state: ConfigPageState,
     actions: ConfigPageActions,
     localModelDropdownExpanded: Boolean,

@@ -61,6 +61,9 @@ class MainActivity : ComponentActivity() {
         current = java.lang.ref.WeakReference(this)
         applyWakeScreenFlags()
 
+        // Iniciar automaticamente o RoomAudioForegroundService ao abrir o app
+        RoomAudioForegroundService.start(this)
+
         setContent {
             SufficitOpenClawGatewayTheme {
                 Surface(

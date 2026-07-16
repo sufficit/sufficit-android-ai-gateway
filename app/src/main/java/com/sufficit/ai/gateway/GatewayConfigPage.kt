@@ -120,6 +120,7 @@ data class ConfigPageSideEffectActions(
 
 enum class ConfigSectionDestination {
     HOME,
+    WIZARD,
     GENERAL,
     OPENCLAW,
     TRANSCRIPTION,
@@ -256,6 +257,11 @@ fun ConfigPage(
         ConfigSectionDestination.HOME -> ConfigHubPage(
             state = state,
             onOpenSection = onDestinationChange
+        )
+        ConfigSectionDestination.WIZARD -> SetupWizardPage(
+            state = state,
+            actions = actions,
+            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
         )
         ConfigSectionDestination.GENERAL -> ConfigGeneralSectionPage(
             state = state,

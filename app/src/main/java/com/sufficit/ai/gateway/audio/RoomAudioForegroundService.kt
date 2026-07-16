@@ -122,7 +122,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     // Em espera: captura ativa apenas para a palavra de ativacao;
     // pipeline de transcricao suspenso ate a palavra ser detectada.
-    @Volatile private var standbyMode = false
+    // PADRÃO: Em espera, aguardando wake word (autostart desabilitado).
+    @Volatile private var standbyMode = true
 
     // Pedido de finalizacao imediata do segmento de fala (gesto de punho
     // fechado = "terminei de falar, envie para processamento").
@@ -341,14 +342,18 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             }
 
             else -> {
-                standbyMode = false
+                standbyMode = true  // PADRÃO: Em espera, aguardando wake word
                 startForeground(NOTIFICATION_ID, createNotification(lastNotificationText))
                 startCaptureIfNeeded()
                 if (captureRunning.get()) {
                     GatewayRuntime.setListening(
-                        active = true,
-                        statusText = "Microfone ativo. Aguardando fala."
+                        active = false,  // Não ativo até wake word
+                        statusText = "Em espera. Diga a palavra de ativação para começar."
                     )
+                    GatewayRuntime.updateWakeWord {
+                        it.copy(status = "Em espera, escutando pela palavra de ativação.")
+                    }
+                    refreshNotification("Em espera | aguardando palavra de ativação")
                 }
             }
         }
@@ -863,7 +868,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 applyMicrophoneGain(buffer, readCount, dynamicMicrophoneGain)
                 // Depuracao: grava TUDO que o mic captou (pos-ganho), antes
                 // de qualquer supressao/descarte da segmentacao.
-                audioDebugStore.appendRolling(buffer, readCount)
+                // So ativo em modo desenvolvimento por privacidade.
+                if (settings.development) {
+                    audioDebugStore.appendRolling(buffer, readCount)
+                }
                 val rms = calculateRms(buffer, readCount)
                 val peak = calculatePeak(buffer, readCount)
                 val peakNormalized = peak.toDouble() / Short.MAX_VALUE.toDouble()
@@ -921,19 +929,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
                 handleWakeWordAudio(buffer, readCount, now, settings)
 
-                if (standbyMode) {
-                    if (!wakeWordEnabled) {
-                        // Palavra de ativacao desligada durante a espera: nada
-                        // mais a escutar, encerra a captura de vez.
-                        Log.i(TAG, "Standby sem palavra de ativacao disponivel; encerrando captura.")
-                        stopRequested.set(true)
-                        captureRunning.set(false)
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                        continue
-                    }
+                if (standbyMode && wakeWordEnabled) {
                     // Standby: microfone aberto so para a palavra de
                     // ativacao; nada daqui prefixa segmento.
+                    // Apenas entra em standby se houver templates de wake word disponíveis.
                     clearPreRoll()
                     if (speechActive) {
                         speechActive = false
@@ -1479,11 +1478,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         )
         // Depuracao: copia exata do WAV enviado ao Whisper fica no aparelho
         // (5 min) para comparar com a transcricao devolvida.
-        val debugSegmentName = audioDebugStore.saveSegment(
-            wavBytes = wavBytes,
-            durationMs = durationMs,
-            preRollPrefixBytes = preRollPrefixBytes
-        )
+        // So ativo em modo desenvolvimento por privacidade.
+        val debugSegmentName = if (settings.development) {
+            audioDebugStore.saveSegment(
+                wavBytes = wavBytes,
+                durationMs = durationMs,
+                preRollPrefixBytes = preRollPrefixBytes
+            )
+        } else {
+            null
+        }
 
         executor.execute(
             QueuedTranscriptionTask(System.currentTimeMillis()) {

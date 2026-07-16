@@ -86,7 +86,7 @@ object GatewayConfigCatalog {
             assistantVoiceStyle = AssistantVoiceStyle.FEMININE,
             assistantSpeechRate = 1.15,
             assistantPitch = 1.0,
-            transcriptionMode = TranscriptionMode.REMOTE,
+            transcriptionMode = TranscriptionMode.LOCAL,
             localModelPath = "/data/user/0/com.sufficit.ai.gateway/files/models/sherpa-whisper-tiny",
             localExecutionMode = LocalExecutionMode.NNAPI,
             development = false,

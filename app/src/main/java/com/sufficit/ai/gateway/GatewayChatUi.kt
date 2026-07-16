@@ -129,11 +129,28 @@ fun ChatMessagesList(
                 )
             }
         }
+        // Balao "transcrevendo": aparece enquanto o segmento de audio esta
+        // sendo processado (local ou remoto) e ainda nao ha texto parcial
+        // para mostrar — sem isso o usuario via silencio total durante o
+        // processamento (nada indicava que o app estava fazendo algo).
+        if (state.transcribing && partialTranscript.isBlank()) {
+            item(key = "transcribing") {
+                ProcessingBubble(title = "Transcrevendo", label = state.transcriptionBackendLabel)
+            }
+        }
         // Balao do assistente "processando": aparece enquanto o agente trabalha
         // no pedido, com o que esta sendo processado.
         if (state.assistantProcessing) {
             item(key = "processing") {
                 ProcessingBubble(label = state.assistantProcessingLabel)
+            }
+        }
+        // Erro tecnico da ultima transcricao (ex.: falha de rede, biblioteca
+        // nativa, endpoint mal configurado): antes ficava so num icone de
+        // status pequeno, sem nenhuma mensagem no fluxo da conversa.
+        if (!state.lastError.isNullOrBlank()) {
+            item(key = "lastError") {
+                ErrorMarker(text = "Erro na transcricao: ${state.lastError}")
             }
         }
         items(
@@ -204,6 +221,40 @@ private fun SystemMarker(text: String) {
                 .weight(1f)
                 .height(1.dp)
                 .background(BubbleTime.copy(alpha = 0.25f))
+        )
+    }
+}
+
+// Marca de erro tecnico da transcricao — mesmo estilo do SystemMarker mas em
+// vermelho, para o usuario ver IMEDIATAMENTE por que nada foi transcrito
+// (endpoint mal configurado, biblioteca nativa faltando, HTTP 4xx/5xx etc.).
+@Composable
+private fun ErrorMarker(text: String) {
+    val errorColor = Color(0xFFD32F2F)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(errorColor.copy(alpha = 0.35f))
+        )
+        Text(
+            text = text,
+            color = errorColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontStyle = FontStyle.Italic
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(errorColor.copy(alpha = 0.35f))
         )
     }
 }
@@ -493,7 +544,7 @@ private fun DocumentTile(fileName: String) {
  * Pontos animados + o que esta sendo processado (label).
  */
 @Composable
-private fun ProcessingBubble(label: String) {
+private fun ProcessingBubble(title: String = "Processando", label: String) {
     val transition = rememberInfiniteTransition(label = "processing")
     val dots by transition.animateValue(
         initialValue = 0,
@@ -514,7 +565,7 @@ private fun ProcessingBubble(label: String) {
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "Processando" + ".".repeat(dots.coerceIn(0, 3)),
+                text = title + ".".repeat(dots.coerceIn(0, 3)),
                 color = BubbleText,
                 style = MaterialTheme.typography.bodyMedium,
                 fontStyle = FontStyle.Italic

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -54,6 +55,16 @@ fun ConfigHubPage(
     onOpenSection: (ConfigSectionDestination) -> Unit
 ) {
     val cards = buildList {
+        add(
+            ConfigSectionCardState(
+                destination = ConfigSectionDestination.WIZARD,
+                title = "Assistente de configuracao",
+                subtitle = "Passo a passo: acesso a IA + Whisper",
+                summary = "Comece por aqui",
+                icon = Icons.Filled.CheckCircle,
+                accent = Color(0xFF35D08C)
+            )
+        )
         add(
             ConfigSectionCardState(
                 destination = ConfigSectionDestination.GENERAL,

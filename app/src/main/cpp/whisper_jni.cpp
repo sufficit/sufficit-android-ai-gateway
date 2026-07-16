@@ -39,7 +39,7 @@ static void throw_runtime_exception(JNIEnv *env, const char *message) {
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_initContext(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_initContext(
         JNIEnv *env,
         jobject /*thiz*/,
         jstring model_path_str,
@@ -80,7 +80,7 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_initConte
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_freeContext(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_freeContext(
         JNIEnv *env,
         jobject /*thiz*/,
         jlong context_ptr) {
@@ -98,7 +98,7 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_freeConte
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_fullTranscribe(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_fullTranscribe(
         JNIEnv *env,
         jobject /*thiz*/,
         jlong context_ptr,
@@ -154,7 +154,7 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_fullTrans
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getTextSegmentCount(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_getTextSegmentCount(
         JNIEnv * /*env*/,
         jobject /*thiz*/,
         jlong context_ptr) {
@@ -162,7 +162,7 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getTextSe
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getTextSegment(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_getTextSegment(
         JNIEnv *env,
         jobject /*thiz*/,
         jlong context_ptr,
@@ -172,7 +172,7 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getTextSe
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getSystemInfo(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_getSystemInfo(
         JNIEnv *env,
         jobject /*thiz*/) {
     const char *sysinfo = whisper_print_system_info();
@@ -180,14 +180,14 @@ Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getSystem
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getVulkanDeviceCount(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_getVulkanDeviceCount(
         JNIEnv * /*env*/,
         jobject /*thiz*/) {
     return ggml_backend_vk_get_device_count();
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_sufficit_openclaw_gateway_transcription_local_LocalWhisperLib_getVulkanDeviceDescription(
+Java_com_sufficit_ai_gateway_transcription_local_LocalWhisperLib_getVulkanDeviceDescription(
         JNIEnv *env,
         jobject /*thiz*/,
         jint index) {

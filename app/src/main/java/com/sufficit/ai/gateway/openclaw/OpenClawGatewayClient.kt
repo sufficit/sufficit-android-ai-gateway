@@ -53,6 +53,9 @@ data class OpenClawGatewayReply(
 )
 
 class OpenClawGatewayClient {
+    /** deviceId usado no "hello" do websocket — precisa ser o mesmo valor usado ao parear. */
+    fun currentDeviceId(): String = resolveAndroidClientId()
+
     fun verifyConnection(
         config: OpenClawGatewayConfig,
         timeoutMs: Long = 30_000L
