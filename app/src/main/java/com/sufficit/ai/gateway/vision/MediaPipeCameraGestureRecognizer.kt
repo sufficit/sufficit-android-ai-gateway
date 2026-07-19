@@ -24,6 +24,7 @@ import com.google.mediapipe.solutions.hands.Hands
 import com.google.mediapipe.solutions.hands.HandsOptions
 import com.google.mediapipe.solutions.hands.HandsResult
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
+import com.sufficit.ai.gateway.runtime.LipActivity
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -483,7 +484,7 @@ class MediaPipeCameraGestureRecognizer(
             // proxima aparicao do rosto nao medir um "salto" falso.
             synchronized(lipOpennessWindow) { lipOpennessWindow.clear() }
             GatewayRuntime.setLipActivity(
-                GatewayRuntime.LipActivity(score = 0.0, faceCount = 0, atEpochMs = now)
+                LipActivity(score = 0.0, faceCount = 0, atEpochMs = now)
             )
             return
         }
@@ -529,7 +530,7 @@ class MediaPipeCameraGestureRecognizer(
         }
 
         GatewayRuntime.setLipActivity(
-            GatewayRuntime.LipActivity(score = score, faceCount = faces.size, atEpochMs = now)
+            LipActivity(score = score, faceCount = faces.size, atEpochMs = now)
         )
     }
 

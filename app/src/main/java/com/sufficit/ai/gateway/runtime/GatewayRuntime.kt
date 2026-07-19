@@ -62,55 +62,18 @@ data class GatewayUiState(
     val assistantProcessingLabel: String = ""
 )
 
-/** Papel de uma mensagem no historico de conversa do dashboard. */
-enum class ChatRole { USER, ASSISTANT, SYSTEM }
-
-/** Mensagem do historico de conversa (estilo WhatsApp/Telegram). */
-data class ChatMessage(
-    val id: Long,
-    val role: ChatRole,
-    val text: String,
-    val atEpochMs: Long,
-    /**
-     * Conteudo visual-apenas da resposta (enderecos, links, explicacoes):
-     * exibido como painel expansivel na bolha, NUNCA falado. Null = sem painel.
-     */
-    val details: String? = null,
-    /**
-     * Caminho absoluto de uma imagem anexa (screenshot/foto da camera tirada
-     * pelo agente). Exibida como thumbnail na bolha; toque abre a imagem real.
-     * Null = mensagem so de texto.
-     */
-    val imagePath: String? = null
-)
-
 /**
- * Estado da verificacao de voz do usuario ("so a minha voz").
- * Fluxo: baixar modelo -> cadastrar falas (enrollment) -> ativar -> cada
- * segmento de fala so segue para transcricao se a similaridade com o perfil
- * cadastrado passar do limiar.
+ * Bus de estado compartilhado entre o servico de audio/visao e a UI Compose.
+ *
+ * Continua sendo a UNICA API publica consumida pelo resto do app (todo
+ * `GatewayRuntime.xxx(...)`) — internamente delega dashboard-adjacent
+ * concerns (chat, cadastro de voz, palavra de ativacao, sinais continuos de
+ * visao/gesto) para objetos dedicados em runtime/ (Phase 8 da migracao de
+ * arquitetura). O core desta classe fica com o estado do dashboard
+ * (GatewayUiState) e o gate de gesto/camera, que sao os mais acoplados aos
+ * call sites de MainActivity/RoomAudioForegroundService e por isso ficam
+ * onde ja estavam.
  */
-data class SpeakerVoiceUiState(
-    val enabled: Boolean = false,
-    val modelReady: Boolean = false,
-    val sampleCount: Int = 0,
-    val enrollRemaining: Int = 0,
-    val lastScore: Double? = null,
-    val threshold: Double = 0.55,
-    val downloadProgressPercent: Int? = null,
-    val status: String = "Perfil de voz nao configurado."
-)
-
-data class WakeWordUiState(
-    val enabled: Boolean = true,
-    val sampleCount: Int = 0,
-    val recording: Boolean = false,
-    val status: String = "Grave ao menos uma amostra da palavra.",
-    val lastDistance: Double? = null,
-    val lastMatchAtEpochMs: Long = 0L,
-    val threshold: Double = 0.18
-)
-
 object GatewayRuntime {
     private val state = MutableStateFlow(GatewayUiState())
 
@@ -120,10 +83,6 @@ object GatewayRuntime {
     // verdade" agora e o standby (punho 5s / botao parar), que volta por
     // palavra de ativacao, indicador ou botao.
     private val cameraGestureGateFlow = MutableStateFlow(true)
-    private val handTrackingFlow = MutableStateFlow<HandTrackingFrame?>(null)
-    private val wakeWordFlow = MutableStateFlow(WakeWordUiState())
-    private val wakeWordConfigVersionFlow = MutableStateFlow(0)
-    private val wakeWordRecordingRequested = java.util.concurrent.atomic.AtomicBoolean(false)
 
     // Tela de configuracao aberta: o agente deve PARAR (nao despachar fala nem
     // falar), para nao se intrometer durante o cadastro de voz/palavra de
@@ -138,218 +97,6 @@ object GatewayRuntime {
 
     fun state(): StateFlow<GatewayUiState> = state.asStateFlow()
     fun cameraGestureGate(): StateFlow<Boolean> = cameraGestureGateFlow.asStateFlow()
-
-    // Flow separado do GatewayUiState: landmarks chegam a ~30fps e nao devem
-    // forcar copia/recomposicao do estado geral da UI.
-    fun handTracking(): StateFlow<HandTrackingFrame?> = handTrackingFlow.asStateFlow()
-
-    fun setHandTrackingFrame(frame: HandTrackingFrame?) {
-        handTrackingFlow.value = frame
-    }
-
-    // Efeito visual de "flash" (ex.: ao tirar um screenshot por API): a UI
-    // observa o timestamp e dispara um clarao branco que esvanece. O som e
-    // tocado pelo servico (tem AudioManager). Label opcional aparece junto.
-    data class ScreenEffect(val atEpochMs: Long, val label: String)
-    private val screenEffectFlow = MutableStateFlow<ScreenEffect?>(null)
-    fun screenEffect(): StateFlow<ScreenEffect?> = screenEffectFlow.asStateFlow()
-    fun triggerScreenEffect(label: String = "") {
-        screenEffectFlow.value = ScreenEffect(System.currentTimeMillis(), label.trim())
-    }
-
-    // Gesto de comando ativo no momento (id de GestureCommandIds + instante).
-    // Alimentado pelo reconhecedor a cada quadro estavel; consumido por:
-    //  - RoomAudioForegroundService: "indicador mantido" segura a gravacao
-    //    aberta ignorando o corte por silencio;
-    //  - GestureCommandFooter: linha colorida no rodape da tela.
-    data class GestureCommand(
-        val gestureId: String,
-        /** Ultimo quadro que confirmou o gesto. */
-        val atEpochMs: Long,
-        /** Inicio da pose continua atual (para limites de "gesto mantido"). */
-        val sinceEpochMs: Long
-    )
-
-    private val gestureCommandFlow = MutableStateFlow<GestureCommand?>(null)
-
-    fun gestureCommand(): StateFlow<GestureCommand?> = gestureCommandFlow.asStateFlow()
-
-    fun setGestureCommand(gestureId: String?) {
-        val now = System.currentTimeMillis()
-        gestureCommandFlow.value = gestureId?.let { id ->
-            val previous = gestureCommandFlow.value
-            GestureCommand(
-                gestureId = id,
-                atEpochMs = now,
-                // Pose mantida preserva o inicio; gesto novo zera.
-                sinceEpochMs = if (previous?.gestureId == id) previous.sinceEpochMs else now
-            )
-        }
-    }
-
-    // Atividade labial detectada pela camera frontal (MediaPipe FaceMesh).
-    // Alimentada por quadro pelo reconhecedor de visao; consumida pelo
-    // RoomAudioForegroundService durante segmentos de fala para correlacionar
-    // "boca mexendo" com o audio do microfone (anti-TV/anti-gravacao no
-    // pre-agente do servidor). null = camera parada ou visao indisponivel.
-    data class LipActivity(
-        /** 0..1: variacao da abertura labial na janela recente (falando ~> 0.25). */
-        val score: Double,
-        /** Rostos no quadro (0 = sem rosto; score so vale com rosto presente). */
-        val faceCount: Int,
-        /** Quadro que produziu a medida (frescor: descartar se antigo). */
-        val atEpochMs: Long
-    )
-
-    private val lipActivityFlow = MutableStateFlow<LipActivity?>(null)
-
-    fun lipActivity(): StateFlow<LipActivity?> = lipActivityFlow.asStateFlow()
-
-    fun setLipActivity(value: LipActivity?) {
-        lipActivityFlow.value = value
-    }
-
-    private val handSkinFlow = MutableStateFlow<String?>(null)
-
-    // Skin do overlay de maos por id (string para nao acoplar o runtime ao enum de UI).
-    fun handSkin(): StateFlow<String?> = handSkinFlow.asStateFlow()
-
-    fun setHandSkin(skinId: String) {
-        handSkinFlow.value = skinId
-    }
-
-    // Historico de conversa exibido no dashboard (mais recente no FINAL da
-    // lista). Em memoria, limitado a CHAT_HISTORY_LIMIT mensagens.
-    private val chatFlow = MutableStateFlow<List<ChatMessage>>(emptyList())
-    private val chatMessageIdSeq = java.util.concurrent.atomic.AtomicLong(0L)
-    private const val CHAT_HISTORY_LIMIT = 200
-
-    // Persistencia em disco do historico (sobrevive a reinicio/install -r).
-    // Setada pelo servico no onCreate via attachChatPersistence.
-    @Volatile
-    private var chatPersister: ((List<ChatMessage>) -> Unit)? = null
-
-    fun chatMessages(): StateFlow<List<ChatMessage>> = chatFlow.asStateFlow()
-
-    /**
-     * Liga a persistencia do chat: carrega o historico salvo para a memoria e
-     * registra o gravador chamado a cada mudanca. Idempotente — chamar de novo
-     * apenas recarrega do disco.
-     */
-    fun attachChatPersistence(initial: List<ChatMessage>, persister: (List<ChatMessage>) -> Unit) {
-        if (initial.isNotEmpty()) {
-            val trimmed = initial.takeLast(CHAT_HISTORY_LIMIT)
-            chatFlow.value = trimmed
-            chatMessageIdSeq.set(trimmed.maxOf { it.id })
-        }
-        chatPersister = persister
-    }
-
-    private fun persistChat() {
-        chatPersister?.invoke(chatFlow.value)
-    }
-
-    fun clearChat() {
-        chatFlow.value = emptyList()
-        persistChat()
-    }
-
-    fun appendChatMessage(role: ChatRole, text: String, details: String? = null) {
-        val trimmed = text.trim()
-        if (trimmed.isBlank()) return
-        val message = ChatMessage(
-            id = chatMessageIdSeq.incrementAndGet(),
-            role = role,
-            text = trimmed,
-            atEpochMs = System.currentTimeMillis(),
-            details = details?.trim()?.takeIf { it.isNotBlank() }
-        )
-        chatFlow.value = (chatFlow.value + message).takeLast(CHAT_HISTORY_LIMIT)
-        persistChat()
-    }
-
-    /**
-     * Anexa uma imagem (screenshot/foto da camera) ao chat como se o agente a
-     * tivesse enviado. Mostra thumbnail; toque abre a imagem real. O texto e a
-     * legenda opcional ("Foto (camera frontal)" etc).
-     */
-    fun appendChatImage(role: ChatRole, caption: String, imagePath: String) {
-        val message = ChatMessage(
-            id = chatMessageIdSeq.incrementAndGet(),
-            role = role,
-            text = caption.trim(),
-            atEpochMs = System.currentTimeMillis(),
-            imagePath = imagePath
-        )
-        chatFlow.value = (chatFlow.value + message).takeLast(CHAT_HISTORY_LIMIT)
-        persistChat()
-    }
-
-    private val speakerVoiceFlow = MutableStateFlow(SpeakerVoiceUiState())
-
-    // Falas restantes do cadastro de voz. O servico de audio consome um slot
-    // por segmento de fala finalizado: a fala vira amostra do perfil e NAO e
-    // enviada para transcricao/OpenClaw.
-    private val speakerEnrollRemaining = java.util.concurrent.atomic.AtomicInteger(0)
-
-    fun speakerVoice(): StateFlow<SpeakerVoiceUiState> = speakerVoiceFlow.asStateFlow()
-
-    fun updateSpeakerVoice(transform: (SpeakerVoiceUiState) -> SpeakerVoiceUiState) {
-        speakerVoiceFlow.value = transform(speakerVoiceFlow.value)
-    }
-
-    fun requestSpeakerEnrollment(samples: Int) {
-        speakerEnrollRemaining.set(samples)
-        updateSpeakerVoice {
-            it.copy(
-                enrollRemaining = samples,
-                status = "Cadastro: fale uma frase de 3-5s e faca uma pausa; repita $samples vez(es)."
-            )
-        }
-    }
-
-    fun cancelSpeakerEnrollment() {
-        speakerEnrollRemaining.set(0)
-        updateSpeakerVoice { it.copy(enrollRemaining = 0) }
-    }
-
-    /** True enquanto ha falas de cadastro de voz pendentes. */
-    fun isSpeakerEnrollmentPending(): Boolean = speakerEnrollRemaining.get() > 0
-
-    /**
-     * Consome um slot de cadastro (retorna quantos restavam ANTES do
-     * consumo; 0 = nenhum cadastro pendente). Atomico: cada segmento de
-     * fala consome no maximo um slot.
-     */
-    fun takeSpeakerEnrollSlot(): Int {
-        while (true) {
-            val current = speakerEnrollRemaining.get()
-            if (current <= 0) return 0
-            if (speakerEnrollRemaining.compareAndSet(current, current - 1)) {
-                return current
-            }
-        }
-    }
-
-    fun wakeWord(): StateFlow<WakeWordUiState> = wakeWordFlow.asStateFlow()
-
-    fun updateWakeWord(transform: (WakeWordUiState) -> WakeWordUiState) {
-        wakeWordFlow.value = transform(wakeWordFlow.value)
-    }
-
-    // Incrementado quando templates/config mudam em disco; o servico de
-    // audio observa e recarrega o detector.
-    fun wakeWordConfigVersion(): StateFlow<Int> = wakeWordConfigVersionFlow.asStateFlow()
-
-    fun bumpWakeWordConfigVersion() {
-        wakeWordConfigVersionFlow.value += 1
-    }
-
-    fun requestWakeWordRecording() {
-        wakeWordRecordingRequested.set(true)
-    }
-
-    fun takeWakeWordRecordingRequest(): Boolean = wakeWordRecordingRequested.getAndSet(false)
 
     fun update(transform: (GatewayUiState) -> GatewayUiState) {
         state.value = transform(state.value)
@@ -454,4 +201,96 @@ object GatewayRuntime {
         val until = System.currentTimeMillis() + holdMillis.coerceAtLeast(0L)
         update { it.copy(screenAttentionUntilEpochMs = maxOf(it.screenAttentionUntilEpochMs, until)) }
     }
+
+    // --- Sinais continuos de visao/gesto (GatewayGestureSignalRuntime) ---
+
+    fun handTracking(): StateFlow<HandTrackingFrame?> = GatewayGestureSignalRuntime.handTracking()
+
+    fun setHandTrackingFrame(frame: HandTrackingFrame?) {
+        GatewayGestureSignalRuntime.setHandTrackingFrame(frame)
+    }
+
+    fun screenEffect(): StateFlow<ScreenEffect?> = GatewayGestureSignalRuntime.screenEffect()
+
+    fun triggerScreenEffect(label: String = "") {
+        GatewayGestureSignalRuntime.triggerScreenEffect(label)
+    }
+
+    fun gestureCommand(): StateFlow<GestureCommand?> = GatewayGestureSignalRuntime.gestureCommand()
+
+    fun setGestureCommand(gestureId: String?) {
+        GatewayGestureSignalRuntime.setGestureCommand(gestureId)
+    }
+
+    fun lipActivity(): StateFlow<LipActivity?> = GatewayGestureSignalRuntime.lipActivity()
+
+    fun setLipActivity(value: LipActivity?) {
+        GatewayGestureSignalRuntime.setLipActivity(value)
+    }
+
+    fun handSkin(): StateFlow<String?> = GatewayGestureSignalRuntime.handSkin()
+
+    fun setHandSkin(skinId: String) {
+        GatewayGestureSignalRuntime.setHandSkin(skinId)
+    }
+
+    // --- Historico de conversa (GatewayChatRuntime) ---
+
+    fun chatMessages(): StateFlow<List<ChatMessage>> = GatewayChatRuntime.chatMessages()
+
+    fun attachChatPersistence(initial: List<ChatMessage>, persister: (List<ChatMessage>) -> Unit) {
+        GatewayChatRuntime.attachChatPersistence(initial, persister)
+    }
+
+    fun clearChat() {
+        GatewayChatRuntime.clearChat()
+    }
+
+    fun appendChatMessage(role: ChatRole, text: String, details: String? = null) {
+        GatewayChatRuntime.appendChatMessage(role, text, details)
+    }
+
+    fun appendChatImage(role: ChatRole, caption: String, imagePath: String) {
+        GatewayChatRuntime.appendChatImage(role, caption, imagePath)
+    }
+
+    // --- Cadastro de voz (GatewaySpeakerVoiceRuntime) ---
+
+    fun speakerVoice(): StateFlow<SpeakerVoiceUiState> = GatewaySpeakerVoiceRuntime.speakerVoice()
+
+    fun updateSpeakerVoice(transform: (SpeakerVoiceUiState) -> SpeakerVoiceUiState) {
+        GatewaySpeakerVoiceRuntime.updateSpeakerVoice(transform)
+    }
+
+    fun requestSpeakerEnrollment(samples: Int) {
+        GatewaySpeakerVoiceRuntime.requestSpeakerEnrollment(samples)
+    }
+
+    fun cancelSpeakerEnrollment() {
+        GatewaySpeakerVoiceRuntime.cancelSpeakerEnrollment()
+    }
+
+    fun isSpeakerEnrollmentPending(): Boolean = GatewaySpeakerVoiceRuntime.isSpeakerEnrollmentPending()
+
+    fun takeSpeakerEnrollSlot(): Int = GatewaySpeakerVoiceRuntime.takeSpeakerEnrollSlot()
+
+    // --- Palavra de ativacao (GatewayWakeWordRuntime) ---
+
+    fun wakeWord(): StateFlow<WakeWordUiState> = GatewayWakeWordRuntime.wakeWord()
+
+    fun updateWakeWord(transform: (WakeWordUiState) -> WakeWordUiState) {
+        GatewayWakeWordRuntime.updateWakeWord(transform)
+    }
+
+    fun wakeWordConfigVersion(): StateFlow<Int> = GatewayWakeWordRuntime.wakeWordConfigVersion()
+
+    fun bumpWakeWordConfigVersion() {
+        GatewayWakeWordRuntime.bumpWakeWordConfigVersion()
+    }
+
+    fun requestWakeWordRecording() {
+        GatewayWakeWordRuntime.requestWakeWordRecording()
+    }
+
+    fun takeWakeWordRecordingRequest(): Boolean = GatewayWakeWordRuntime.takeWakeWordRecordingRequest()
 }

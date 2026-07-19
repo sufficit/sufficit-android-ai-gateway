@@ -87,7 +87,7 @@ class GatewaySettingsState(
     var transcriptClearTimeoutSecsInput by mutableStateOf(transcriptClearTimeoutSecsInput)
     var openClawAccumulationWindowSecsInput by mutableStateOf(openClawAccumulationWindowSecsInput)
 
-    fun toSnapshot(): GatewaySettingsInputSnapshot = currentSettingsInputSnapshot(
+    fun toSnapshot(): GatewaySettingsInputSnapshot = GatewaySettingsInputSnapshot(
         localEndpointUrl = localEndpointUrl,
         openClawServerAddress = openClawServerAddress,
         openClawGatewayToken = openClawGatewayToken,

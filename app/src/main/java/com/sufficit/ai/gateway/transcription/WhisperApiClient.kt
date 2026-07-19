@@ -14,6 +14,15 @@ data class WhisperTranscriptionResult(
     val emotion: String? = null
 )
 
+/**
+ * Thrown when a Whisper/ElevenLabs transcription request returns a non-2xx
+ * HTTP status. Carries [statusCode] so callers can branch on auth failures
+ * (401/403) instead of string-matching the exception message.
+ */
+class WhisperHttpException(val statusCode: Int, message: String) : IllegalStateException(message) {
+    val isAuthFailure: Boolean get() = statusCode == 401 || statusCode == 403
+}
+
 class WhisperApiClient {
     fun transcribe(
         wavBytes: ByteArray,
@@ -56,10 +65,6 @@ class WhisperApiClient {
             }
         }
 
-        if (normalizedToken.isNotBlank()) {
-            connection.setRequestProperty("Authorization", "Bearer $normalizedToken")
-        }
-
         DataOutputStream(connection.outputStream).use { output ->
             writeFormField(output, boundary, "model", model)
             writeFormField(output, boundary, "language", "pt")
@@ -91,7 +96,7 @@ class WhisperApiClient {
         }.orEmpty()
 
         if (responseCode !in 200..299) {
-            throw IllegalStateException("Whisper HTTP $responseCode: $responseBody")
+            throw WhisperHttpException(responseCode, "Whisper HTTP $responseCode: $responseBody")
         }
 
         val json = JSONObject(responseBody)
@@ -149,7 +154,7 @@ class WhisperApiClient {
         }.orEmpty()
 
         if (responseCode !in 200..299) {
-            throw IllegalStateException("ElevenLabs HTTP $responseCode: $responseBody")
+            throw WhisperHttpException(responseCode, "ElevenLabs HTTP $responseCode: $responseBody")
         }
 
         val json = JSONObject(responseBody)

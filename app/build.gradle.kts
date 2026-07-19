@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.gitlab.arturbosch.detekt")
 }
 
 android {
@@ -51,6 +52,12 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
+}
+
+detekt {
+    config.setFrom(file("$rootDir/config/detekt/detekt.yml"))
+    buildUponDefaultConfig = true
+    baseline = file("$rootDir/config/detekt/baseline.xml")
 }
 
 dependencies {

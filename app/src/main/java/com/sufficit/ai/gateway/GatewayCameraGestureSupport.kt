@@ -3,6 +3,7 @@ package com.sufficit.ai.gateway
 import android.os.Handler
 import android.os.Looper
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
+import com.sufficit.ai.gateway.vision.CameraCaptureCoordinator
 import com.sufficit.ai.gateway.vision.CameraGestureEvent
 import com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer
 
@@ -141,7 +142,7 @@ fun startCameraGestureCapture(
  previewVisible: Boolean,
  cameraGestureEnabled: Boolean,
  hasCameraPermission: Boolean,
- gestureRecognizer: MediaPipeCameraGestureRecognizer,
+ captureCoordinator: CameraCaptureCoordinator,
  requestCameraGestureStart: () -> Unit,
  clearPendingCameraGestureStart: () -> Unit,
  launchCameraPermission: () -> Unit,
@@ -197,7 +198,7 @@ fun startCameraGestureCapture(
  //  3. Punho       -> finaliza o segmento e envia para processamento.
  // Cada evento tambem acende a linha colorida do rodape via o estado
  // continuo publicado pelo reconhecedor (GatewayRuntime.gestureCommand).
- gestureRecognizer.start(previewVisible) { event ->
+ captureCoordinator.start(previewVisible) { event ->
  when (event) {
  is CameraGestureEvent.IndexRaised -> {
  handleIndexRaisedEvent(

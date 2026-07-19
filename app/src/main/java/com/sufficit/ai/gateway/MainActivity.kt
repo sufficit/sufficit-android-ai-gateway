@@ -3,10 +3,7 @@
 import android.Manifest
 import android.content.pm.ActivityInfo
 import android.os.Bundle
-import android.os.SystemClock
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,7 +34,6 @@ import com.sufficit.ai.gateway.config.GatewaySettings
 import com.sufficit.ai.gateway.config.GatewaySettingsStore
 import com.sufficit.ai.gateway.config.LocalExecutionMode
 import com.sufficit.ai.gateway.config.ScreenMode
-import com.sufficit.ai.gateway.config.TranscriptionMode
 import com.sufficit.ai.gateway.config.readGatewaySettingsBackup
 import com.sufficit.ai.gateway.history.TranscriptHistoryLogger
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
@@ -47,6 +43,7 @@ import com.sufficit.ai.gateway.state.GatewayViewModelFactory
 import com.sufficit.ai.gateway.transcription.local.LocalSherpaOnnxEngine
 import com.sufficit.ai.gateway.transcription.local.LocalWhisperEngine
 import com.sufficit.ai.gateway.ui.theme.SufficitOpenClawGatewayTheme
+import com.sufficit.ai.gateway.vision.CameraPreviewController
 import com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -275,40 +272,15 @@ private fun GatewayScreen() {
         ScreenMode.ACTIVITY -> screenAttentionActive
     }
 
-    LaunchedEffect(settingsState.localModelName) {
-        modelState = modelState.copy(localModelExists = isLocalModelReady(context, settingsState.localModelName))
-        val normalizedName = settingsState.localModelName.trim()
-        if (normalizedName.isBlank()) {
-            modelState = modelState.copy(
-                huggingFaceModelExists = null,
-                huggingFaceCheckInProgress = false
-            )
-            return@LaunchedEffect
-        }
-        modelState = modelState.copy(huggingFaceCheckInProgress = true)
-        val exists = withContext(Dispatchers.IO) { checkHuggingFaceModelExists(normalizedName) }
-        modelState = modelState.copy(
-            huggingFaceModelExists = exists,
-            huggingFaceCheckInProgress = false
-        )
-    }
-
-    LaunchedEffect(downloadState.optionsRefreshTick) {
-        modelState = modelState.copy(localOptionsLoading = true)
-        localModelOptions = withContext(Dispatchers.IO) { loadLocalModelOptions(context) }
-        modelState = modelState.copy(localOptionsLoading = false)
-    }
-
-    LaunchedEffect(settingsState.transcriptionMode, runtimeState.transcriptionModelLabel) {
-        if (TranscriptionMode.fromPersistedValue(settingsState.transcriptionMode) != TranscriptionMode.LOCAL) {
-            return@LaunchedEffect
-        }
-
-        val actualModel = runtimeState.transcriptionModelLabel.trim()
-        if (actualModel.isNotBlank() && actualModel != settingsState.localModelName) {
-            settingsState.localModelName = actualModel
-        }
-    }
+    HandleModelAvailabilityEffects(
+        context = context,
+        settingsState = settingsState,
+        transcriptionModelLabel = runtimeState.transcriptionModelLabel,
+        optionsRefreshTick = downloadState.optionsRefreshTick,
+        currentModelState = { modelState },
+        updateModelState = { modelState = it },
+        updateLocalModelOptions = { localModelOptions = it }
+    )
 
     fun reapplyImportedSettings(settings: GatewaySettings) {
         settingsState.applyFrom(settings)
@@ -317,14 +289,11 @@ private fun GatewayScreen() {
 
     val settingsInputSnapshot = settingsState.toSnapshot()
 
-    LaunchedEffect(settingsInputSnapshot) {
-        delay(300)
-        val settings = buildSettings(
-            context = context,
-            input = settingsInputSnapshot
-        )
-        settingsStore.save(settings)
-    }
+    HandleSettingsPersistenceEffect(
+        context = context,
+        settingsStore = settingsStore,
+        settingsInputSnapshot = settingsInputSnapshot
+    )
 
     val selectedModelOption = localModelOptions.firstOrNull {
         it.name.equals(settingsState.localModelName.trim(), ignoreCase = true)
@@ -333,7 +302,8 @@ private fun GatewayScreen() {
     val shouldOfferDownload = !modelState.localModelExists || selectedModelInvalid
     val isGestureDebugPageVisible = pagerState.currentPage == GESTURE_DEBUG_PAGE_INDEX
     val gestureRecognizer = remember(activity) { MediaPipeCameraGestureRecognizer(activity) }
-    val gesturePreviewView = remember(gestureRecognizer) { gestureRecognizer.ensurePreviewView() }
+    val cameraPreviewController = remember(gestureRecognizer) { CameraPreviewController(gestureRecognizer) }
+    val gesturePreviewView = remember(cameraPreviewController) { cameraPreviewController.ensurePreviewView() }
 
     DisposableEffect(gestureRecognizer) {
         onDispose {
@@ -349,48 +319,23 @@ private fun GatewayScreen() {
         wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY && screenAttentionActive
     )
 
-    // Tela de configuracao = agente em silencio: para de despachar/falar (para
-    // nao se intrometer no cadastro de voz/palavra de ativacao) e interrompe
-    // qualquer fala em andamento ao entrar. O microfone segue para amostras.
-    LaunchedEffect(pagerState.currentPage) {
-        val onConfig = pagerState.currentPage == CONFIG_PAGE_INDEX
-        GatewayRuntime.setConfigScreenActive(onConfig)
-        if (onConfig) {
-            RoomAudioForegroundService.interruptAssistant(activity)
-        }
-    }
-    DisposableEffect(Unit) {
-        onDispose { GatewayRuntime.setConfigScreenActive(false) }
-    }
+    HandleConfigScreenActiveEffect(
+        activity = activity,
+        pagerState = pagerState,
+        configPageIndex = CONFIG_PAGE_INDEX
+    )
 
-    BackHandler {
-        when {
-            pagerState.currentPage == 1 &&
-                uiState.configDestination != ConfigSectionDestination.HOME -> {
-                uiState = uiState.copy(configDestination = ConfigSectionDestination.HOME)
-            }
-
-            pagerState.currentPage != initialPage -> {
-                uiScope.launch {
-                    pagerState.animateScrollToPage(0)
-                }
-            }
-
-            else -> {
-                val now = SystemClock.elapsedRealtime()
-                if (now - uiState.lastBackPressedAt <= EXIT_CONFIRMATION_WINDOW_MS) {
-                    activity.finish()
-                } else {
-                    uiState = uiState.copy(lastBackPressedAt = now)
-                    Toast.makeText(
-                        context,
-                        "Aperte novamente para sair.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
-    }
+    GatewayBackHandler(
+        activity = activity,
+        context = context,
+        uiScope = uiScope,
+        pagerState = pagerState,
+        initialPage = initialPage,
+        configPageIndex = CONFIG_PAGE_INDEX,
+        exitConfirmationWindowMs = EXIT_CONFIRMATION_WINDOW_MS,
+        currentUiState = { uiState },
+        updateUiState = { uiState = it }
+    )
 
     fun startListeningWithStatus(statusText: String) {
         persistSettingsAndStartListening(
@@ -452,62 +397,15 @@ private fun GatewayScreen() {
         )
     }
 
-    fun runStartCameraGestureCapture(previewVisible: Boolean) {
-        startCameraGestureCapture(
-            previewVisible = previewVisible,
-            cameraGestureEnabled = settingsState.cameraGestureEnabled,
-            hasCameraPermission = hasCameraPermission,
-            gestureRecognizer = gestureRecognizer,
-            requestCameraGestureStart = {
-                gatewayViewModel.onEvent(
-                    GatewayUiEvent.PendingCameraGestureStartChanged(
-                        value = true
-                    )
-                )
-            },
-            clearPendingCameraGestureStart = {
-                gatewayViewModel.onEvent(
-                    GatewayUiEvent.PendingCameraGestureStartChanged(
-                        value = false
-                    )
-                )
-            },
-            launchCameraPermission = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) },
-            screenHoldMillis = (settingsState.screenHoldSecondsInput.toLongOrNull() ?: 4L) * 1000L,
-            startForegroundListening = ::requestStartForegroundListening,
-            // Gesto 1 (mao aberta): corta a fala do assistente na hora.
-            interruptAssistant = { RoomAudioForegroundService.interruptAssistant(context) },
-            // Gesto 3 (punho fechado): finaliza o segmento e envia.
-            finalizeSpeechSegment = { RoomAudioForegroundService.finalizeSegment(context) },
-            // Gesto 4 (punho mantido 5s): para a escuta como o botao de parar.
-            stopListening = { RoomAudioForegroundService.stop(context) },
-            // Indicador/apontar = "vou falar": fala seguinte e enderecada ao
-            // assistente (nao deve ser retida como conversa ambiente).
-            markDirectAddress = { RoomAudioForegroundService.markDirectAddress(context) },
-            logStart = { android.util.Log.i("MainActivity", it) }
-        )
-    }
-
-    fun startGestureDebugCamera() {
-        gatewayViewModel.onEvent(
-            GatewayUiEvent.StartCameraGestureCaptureRequested(
-                previewVisible = true
-            )
-        )
-    }
-
-    fun runStopGestureDebugCamera() {
-        stopGestureDebugCamera(
-            gestureRecognizer = gestureRecognizer,
-            clearPendingCameraGestureStart = {
-                gatewayViewModel.onEvent(
-                    GatewayUiEvent.PendingCameraGestureStartChanged(
-                        value = false
-                    )
-                )
-            }
-        )
-    }
+    val cameraGestureCallbacks = buildCameraGestureCallbacks(
+        context = context,
+        settingsState = settingsState,
+        hasCameraPermission = hasCameraPermission,
+        gestureRecognizer = gestureRecognizer,
+        gatewayViewModel = gatewayViewModel,
+        cameraPermissionLauncher = cameraPermissionLauncher,
+        requestStartForegroundListening = ::requestStartForegroundListening
+    )
 
     HandleGatewayUiCommands(
         gatewayViewModel = gatewayViewModel,
@@ -518,12 +416,8 @@ private fun GatewayScreen() {
         onStartListening = { statusText ->
             startListeningWithStatus(statusText)
         },
-        onStartCameraGestureCapture = { previewVisible ->
-            runStartCameraGestureCapture(previewVisible)
-        },
-        onStopGestureDebugCamera = {
-            runStopGestureDebugCamera()
-        },
+        onStartCameraGestureCapture = cameraGestureCallbacks.startCapture,
+        onStopGestureDebugCamera = cameraGestureCallbacks.stopDebugCamera,
     )
 
     val settingsImportLauncher = rememberLauncherForActivityResult(
@@ -675,7 +569,7 @@ private fun GatewayScreen() {
                         pagerState.animateScrollToPage(DASHBOARD_PAGE_INDEX)
                     }
                 },
-                onStartCameraDebug = { startGestureDebugCamera() },
+                onStartCameraDebug = cameraGestureCallbacks.startDebugCamera,
                 onStopCameraDebug = {
                     gatewayViewModel.onEvent(GatewayUiEvent.StopCameraGestureDebugRequested)
                 }

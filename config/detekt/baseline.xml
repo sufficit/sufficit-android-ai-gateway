@@ -1,0 +1,1025 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$!speechActive &amp;&amp; phraseCommitPending &amp;&amp; !isIndexFingerHeld(now) &amp;&amp; (autoCommitBySilence || autoCommitByTranscription)</ID>
+    <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$(previous &lt; 0 &amp;&amp; current &gt;= 0) || (previous &gt;= 0 &amp;&amp; current &lt; 0)</ID>
+    <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$commitRequestedAt &gt; 0L &amp;&amp; System.currentTimeMillis() - commitRequestedAt &lt;= COMMIT_REQUEST_TTL_MS &amp;&amp; transcriptionExecutor?.let { reconcileTranscriptionQueue(it) == 0 } != false &amp;&amp; GatewayRuntime.state().value.currentTranscript.isNotBlank()</ID>
+    <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$reply.shouldSpeak &amp;&amp; !reply.isSystemInfo &amp;&amp; spokenReply.isNotBlank() &amp;&amp; !speechSuppressedByApi</ID>
+    <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$settings.openClawGatewayUrl.isBlank() || settings.openClawGatewayToken.isBlank() || settings.openClawDeviceToken.isBlank() || settings.openClawSessionKey.isBlank()</ID>
+    <ID>CyclomaticComplexMethod:GatewayApiServer.kt$GatewayApiServer$private fun route(session: IHTTPSession): Response</ID>
+    <ID>CyclomaticComplexMethod:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
+    <ID>CyclomaticComplexMethod:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
+    <ID>CyclomaticComplexMethod:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
+    <ID>CyclomaticComplexMethod:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:GatewayDeviceGuideSupport.kt$fun resolveFieldGuideTooltip( deviceGuide: DeviceModelGuide?, transcriptionMode: String, localModelName: String, localExecutionMode: String, remoteModel: String, field: String ): String?</ID>
+    <ID>CyclomaticComplexMethod:GatewayModelDownloadSupport.kt$fun downloadModelFromHuggingFace( context: Context, modelName: String, onProgress: (downloadedBytes: Long, totalBytes: Long) -&gt; Unit = { _, _ -&gt; } ): Result&lt;String&gt;</ID>
+    <ID>CyclomaticComplexMethod:GatewaySettings.kt$GatewaySettingsStore$private fun loadFromLegacyPreferences(): GatewaySettings</ID>
+    <ID>CyclomaticComplexMethod:GatewaySettingsJson.kt$fun GatewaySettings.toJson(): JSONObject</ID>
+    <ID>CyclomaticComplexMethod:GatewaySettingsPatch.kt$fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySettingsPatchResult</ID>
+    <ID>CyclomaticComplexMethod:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(state: GatewayUiState)</ID>
+    <ID>CyclomaticComplexMethod:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
+    <ID>CyclomaticComplexMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
+    <ID>CyclomaticComplexMethod:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
+    <ID>CyclomaticComplexMethod:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$private fun classifyFromFeatures( pitches: List&lt;Double&gt;, energies: List&lt;Double&gt; ): LocalVoiceAnalysisResult</ID>
+    <ID>CyclomaticComplexMethod:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
+    <ID>CyclomaticComplexMethod:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun analyzeHandGesture(landmarks: NormalizedLandmarkList): GestureDebugAnalysis</ID>
+    <ID>CyclomaticComplexMethod:OpenClawReplyEnvelope.kt$OpenClawReplyEnvelopeParser$fun parse( rawText: String, uncertainPrefix: String ): OpenClawReplyEnvelope</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun buildOpenClawMetadata( state: GatewayUiState, settings: GatewaySettings, voiceDecision: VoiceChannelSkillDecision, transcript: String? = null ): JSONObject</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun dispatchTranscriptToOpenClaw( phrase: String, state: GatewayUiState )</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun executeAgentActions(actions: List&lt;JSONObject&gt;)</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun finalizeSpeechSegment( pcmBytes: ByteArray, settings: GatewaySettings, durationMs: Long, captureProfile: CaptureProfile, // Bytes de pre-roll (ambiente pre-fala) no INICIO de pcmBytes: vao // para a transcricao (e o motivo do pre-roll existir), mas ficam // FORA da verificacao de locutor — ambiente dilui o embedding e // infla a duracao usada no limiar adaptativo de trecho curto. preRollPrefixBytes: Int = 0 )</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun handleOpenClawReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply)</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun handleWakeWordAudio( buffer: ShortArray, readCount: Int, now: Long, settings: GatewaySettings )</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun runCaptureLoop(recorder: AudioRecord, bufferSize: Int)</ID>
+    <ID>CyclomaticComplexMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun segmentLooksLikeSpeech( pcmBytes: ByteArray, settings: GatewaySettings ): Boolean</ID>
+    <ID>CyclomaticComplexMethod:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$fun updateWithComputation( currentState: SpeakerContinuityState?, signature: VoiceSignature? ): SpeakerContinuityUpdateResult</ID>
+    <ID>CyclomaticComplexMethod:SpeakerVoiceConfigSection.kt$@Composable fun SpeakerVoiceConfigSection()</ID>
+    <ID>EmptyElseBlock:RoomAudioForegroundService.kt$RoomAudioForegroundService${ }</ID>
+    <ID>FunctionNaming:ApiConfigSection.kt$@Composable fun ApiConfigSection()</ID>
+    <ID>FunctionNaming:FistCountdownOverlay.kt$@Composable fun FistCountdownOverlay(modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:FistCountdownOverlay.kt$@Composable private fun PunchDigit(digit: Int, exitAlpha: Float)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable fun ChatInputBar( state: GatewayUiState, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable fun ChatMessagesList( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ChatBubble( text: String, role: ChatRole, timeLabel: String, provisional: Boolean = false, details: String? = null )</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun DocumentTile(fileName: String)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ErrorMarker(text: String)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ListeningSpectrum( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun MediaUnavailablePlaceholder(wasImage: Boolean)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ProcessingBubble(title: String = "Processando", label: String)</ID>
+    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun SystemMarker(text: String)</ID>
+    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun ConfigSection( title: String, subtitle: String? = null, content: @Composable () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun MetadataChip(label: String, value: String)</ID>
+    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun OptionalSliderSettingRow( title: String, rawValue: String, effectiveValue: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun SettingToggleRow( title: String, supportingText: String, checked: Boolean, onCheckedChange: (Boolean) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun SliderSettingRow( title: String, value: Float, valueText: String, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable fun ConfigHubPage( state: ConfigPageState, onOpenSection: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable fun ConfigSectionScaffold( title: String, subtitle: String, onBack: () -&gt; Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable private fun ConfigHubCard( state: ConfigSectionCardState, onClick: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigPage.kt$@Composable fun ConfigPage( state: ConfigPageState, actions: ConfigPageActions, destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigPageHost.kt$@Composable internal fun GatewayConfigPageHost( // Grouped settings state holder settingsState: GatewaySettingsState, // Permission state hasPermission: Boolean, hasCameraPermission: Boolean, // Runtime-derived cameraGestureStatus: String, // Aggregated state holders downloadState: GatewayDownloadState, modelState: GatewayModelState, historyState: GatewayHistoryState, // Derived/computed state localModelOptions: List&lt;LocalModelOption&gt;, selectedModelInvalid: Boolean, shouldOfferDownload: Boolean, localSystemInfo: String, deviceGuide: DeviceModelGuide?, historySnapshot: TranscriptHistorySnapshot, // Factory dependencies context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, // Side-effect launchers (owned by MainActivity) launchSettingsImport: ActivityResultLauncher&lt;Array&lt;String&gt;&gt;, requestMicrophonePermission: () -&gt; Unit, requestCameraPermission: () -&gt; Unit, openGestureDebug: () -&gt; Unit, // State updaters updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, // Navigation destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigGeneralSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigOpenClawSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigAssistantVoiceSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigDebugSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigHistorySectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigScreenSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigTranscriptionSection.kt$@Composable fun ConfigTranscriptionSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun ActionStrip( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun BlockingAnnouncementBanner( message: String, modifier: Modifier = Modifier, confidence: Double? = null, overlap: Boolean = false, tags: List&lt;String&gt; = emptyList() )</ID>
+    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun InfoAnnouncementBanner( message: String, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun ListeningDotsPlaceholder( active: Boolean, color: Color, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
+    <ID>FunctionNaming:GatewayDeviceGuideSupport.kt$@Composable fun DeviceGuideCard( deviceModelLabel: String, guide: DeviceModelGuide, currentRecommendation: DeviceModelRecommendation? )</ID>
+    <ID>FunctionNaming:GatewayDictionaryPage.kt$@Composable fun DictionaryPage( colloquialNormalizationStrengthInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayModelAvailabilityEffects.kt$@Composable fun HandleModelAvailabilityEffects( context: Context, settingsState: GatewaySettingsState, transcriptionModelLabel: String, optionsRefreshTick: Int, currentModelState: () -&gt; GatewayModelState, updateModelState: (GatewayModelState) -&gt; Unit, updateLocalModelOptions: (List&lt;LocalModelOption&gt;) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayNavigationEffects.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun GatewayBackHandler( activity: ComponentActivity, context: Context, uiScope: CoroutineScope, pagerState: PagerState, initialPage: Int, configPageIndex: Int, exitConfirmationWindowMs: Long, currentUiState: () -&gt; GatewayUiState, updateUiState: (GatewayUiState) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayNavigationEffects.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun HandleConfigScreenActiveEffect( activity: ComponentActivity, pagerState: PagerState, configPageIndex: Int )</ID>
+    <ID>FunctionNaming:GatewayOpenClawResponseCard.kt$@Composable fun OpenClawResponseCard(state: GatewayUiState)</ID>
+    <ID>FunctionNaming:GatewayScreenBehavior.kt$@Composable fun HandleScreenBehavior( activity: ComponentActivity, screenMode: ScreenMode, keepScreenOn: Boolean, wakeRequested: Boolean )</ID>
+    <ID>FunctionNaming:GatewaySettingsPersistenceEffect.kt$@Composable fun HandleSettingsPersistenceEffect( context: Context, settingsStore: GatewaySettingsStore, settingsInputSnapshot: GatewaySettingsInputSnapshot )</ID>
+    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(state: GatewayUiState)</ID>
+    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun GatewayControlIcon( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun ServiceStatusIcon(state: GatewayUiState)</ID>
+    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun StatusIcons( state: GatewayUiState, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
+    <ID>FunctionNaming:GatewayUiCommandHandler.kt$@Composable fun HandleGatewayUiCommands( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
+    <ID>FunctionNaming:GestureCommandFooter.kt$@Composable fun GestureCommandFooter(modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:GestureDebugPage.kt$@Composable fun GestureDebugPage( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun DebugActionChip( label: String, icon: ImageVector, onClick: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayBooleanChip(label: String, value: Boolean)</ID>
+    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayBooleanGrid( indexExtended: Boolean, middleFolded: Boolean, ringFolded: Boolean, pinkyFolded: Boolean, thumbFolded: Boolean )</ID>
+    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayMetricRow(label: String, value: String)</ID>
+    <ID>FunctionNaming:HandGloveOverlay.kt$@Composable fun HandGloveOverlay(modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:HandSkinConfigSection.kt$@Composable fun HandSkinConfigSection()</ID>
+    <ID>FunctionNaming:IdentityConfigSection.kt$@Composable fun IdentityConfigSection()</ID>
+    <ID>FunctionNaming:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
+    <ID>FunctionNaming:ScreenEffectOverlay.kt$@Composable fun ScreenEffectOverlay(modifier: Modifier = Modifier)</ID>
+    <ID>FunctionNaming:SetupWizardPage.kt$@Composable fun SetupWizardPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SetupWizardPage.kt$@Composable private fun WizardAiAccessStep( state: ConfigPageState, actions: ConfigPageActions, onNext: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SetupWizardPage.kt$@Composable private fun WizardWhisperStep( state: ConfigPageState, actions: ConfigPageActions, onBackStep: () -&gt; Unit, onFinish: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SpeakerVoiceConfigSection.kt$@Composable fun SpeakerVoiceConfigSection()</ID>
+    <ID>FunctionNaming:Theme.kt$@Composable fun SufficitOpenClawGatewayTheme(content: @Composable () -&gt; Unit)</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun CompactMetricBadge( tint: Color, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier, content: @Composable () -&gt; Unit )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun FieldGuideInfoIcon( tooltip: String, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun ListeningBadgeIcon( listening: Boolean, speechDetected: Boolean, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun OpenClawDispatchBadgeIcon( queueCount: Int, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun QueueBadgeIcon( queueCount: Int, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun TooltipBadgeIcon( icon: @Composable () -&gt; Unit, tooltip: String, color: Color, outerSize: androidx.compose.ui.unit.Dp = 36.dp, innerSize: androidx.compose.ui.unit.Dp = 28.dp, tooltipWidth: androidx.compose.ui.unit.Dp = 188.dp, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun TranscriptTopBadge( onToggle: () -&gt; Unit, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, modifier: Modifier = Modifier, accentColor: Color = Color(0xFF8A939F), content: @Composable () -&gt; Unit )</ID>
+    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun UnifiedTooltipBubble( visible: Boolean, text: String, width: androidx.compose.ui.unit.Dp, anchorType: TooltipAnchorType, onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:WakeWordConfigSection.kt$@Composable fun WakeWordConfigSection()</ID>
+    <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is CancellationException</ID>
+    <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is IllegalStateException</ID>
+    <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is InterruptedException</ID>
+    <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is WhisperHttpException</ID>
+    <ID>LargeClass:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer : AutoCloseable</ID>
+    <ID>LargeClass:RoomAudioForegroundService.kt$RoomAudioForegroundService : ServiceOnInitListenerGatewayApiActions</ID>
+    <ID>LongMethod:ApiConfigSection.kt$@Composable fun ApiConfigSection()</ID>
+    <ID>LongMethod:GatewayCameraGestureSupport.kt$fun startCameraGestureCapture( previewVisible: Boolean, cameraGestureEnabled: Boolean, hasCameraPermission: Boolean, captureCoordinator: CameraCaptureCoordinator, requestCameraGestureStart: () -&gt; Unit, clearPendingCameraGestureStart: () -&gt; Unit, launchCameraPermission: () -&gt; Unit, screenHoldMillis: Long, startForegroundListening: () -&gt; Unit, interruptAssistant: () -&gt; Unit, finalizeSpeechSegment: () -&gt; Unit, stopListening: () -&gt; Unit, markDirectAddress: () -&gt; Unit, logStart: (String) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatInputBar( state: GatewayUiState, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatMessagesList( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable private fun ChatBubble( text: String, role: ChatRole, timeLabel: String, provisional: Boolean = false, details: String? = null )</ID>
+    <ID>LongMethod:GatewayConfigActionsFactory.kt$fun buildConfigPageActions( context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, currentLocalModelName: () -&gt; String, currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot, sideEffectActions: ConfigPageSideEffectActions, updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, updateLocalEndpointUrl: (String) -&gt; Unit, updateOpenClawServerAddress: (String) -&gt; Unit, updateOpenClawGatewayToken: (String) -&gt; Unit, updateOpenClawDeviceToken: (String) -&gt; Unit, updateOpenClawSessionKey: (String) -&gt; Unit, updateWhisperUrl: (String) -&gt; Unit, updateRemoteModel: (String) -&gt; Unit, updateWhisperAuthToken: (String) -&gt; Unit, updateAutoStartEnabled: (Boolean) -&gt; Unit, updateCameraGestureEnabled: (Boolean) -&gt; Unit, updateDevelopment: (Boolean) -&gt; Unit, updateVoiceChannelSkillEnabled: (Boolean) -&gt; Unit, updateVoiceChannelWakeTerms: (String) -&gt; Unit, updateVoiceChannelFollowUpSeconds: (String) -&gt; Unit, updateVoiceChannelIdlePromptSeconds: (String) -&gt; Unit, updateOpenClawAccumulationWindowSecs: (String) -&gt; Unit, updateAssistantVoiceEnabled: (Boolean) -&gt; Unit, updateAssistantVoiceStyle: (String) -&gt; Unit, updateAssistantSpeechRate: (String) -&gt; Unit, updateAssistantPitch: (String) -&gt; Unit, updateTranscriptionMode: (String) -&gt; Unit, updateLocalModelName: (String) -&gt; Unit, resetDownloadState: () -&gt; Unit, updateLocalExecutionMode: (String) -&gt; Unit, updateMicrophoneAutoSensitivityEnabled: (Boolean) -&gt; Unit, updateMicrophoneGain: (String) -&gt; Unit, updateTranscriptionRepeatSuppression: (String) -&gt; Unit, updateColloquialNormalizationStrength: (String) -&gt; Unit, updateVadThreshold: (String) -&gt; Unit, updateDebugSpeechHoldMs: (String) -&gt; Unit, updateDebugMaxSpeechSegmentMs: (String) -&gt; Unit, updateDebugMinTranscriptionMs: (String) -&gt; Unit, updateDebugPhraseBreakSilenceMs: (String) -&gt; Unit, updateScreenMode: (String) -&gt; Unit, updateScreenHoldSeconds: (String) -&gt; Unit, updateTranscriptClearTimeoutSecs: (String) -&gt; Unit ): ConfigPageActions</ID>
+    <ID>LongMethod:GatewayConfigCatalog.kt$GatewayConfigCatalog$private fun bootstrapFallback(): GatewaySettings</ID>
+    <ID>LongMethod:GatewayConfigNavigation.kt$@Composable fun ConfigHubPage( state: ConfigPageState, onOpenSection: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigNavigation.kt$@Composable private fun ConfigHubCard( state: ConfigSectionCardState, onClick: () -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigPageHost.kt$@Composable internal fun GatewayConfigPageHost( // Grouped settings state holder settingsState: GatewaySettingsState, // Permission state hasPermission: Boolean, hasCameraPermission: Boolean, // Runtime-derived cameraGestureStatus: String, // Aggregated state holders downloadState: GatewayDownloadState, modelState: GatewayModelState, historyState: GatewayHistoryState, // Derived/computed state localModelOptions: List&lt;LocalModelOption&gt;, selectedModelInvalid: Boolean, shouldOfferDownload: Boolean, localSystemInfo: String, deviceGuide: DeviceModelGuide?, historySnapshot: TranscriptHistorySnapshot, // Factory dependencies context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, // Side-effect launchers (owned by MainActivity) launchSettingsImport: ActivityResultLauncher&lt;Array&lt;String&gt;&gt;, requestMicrophonePermission: () -&gt; Unit, requestCameraPermission: () -&gt; Unit, openGestureDebug: () -&gt; Unit, // State updaters updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, // Navigation destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigGeneralSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigOpenClawSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigDebugSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigTranscriptionSection.kt$@Composable fun ConfigTranscriptionSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
+    <ID>LongMethod:GatewayDictionaryPage.kt$@Composable fun DictionaryPage( colloquialNormalizationStrengthInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit )</ID>
+    <ID>LongMethod:GatewayModelDownloadSupport.kt$fun downloadModelFromHuggingFace( context: Context, modelName: String, onProgress: (downloadedBytes: Long, totalBytes: Long) -&gt; Unit = { _, _ -&gt; } ): Result&lt;String&gt;</ID>
+    <ID>LongMethod:GatewayModelSupport.kt$fun buildSettings( context: Context, input: GatewaySettingsInputSnapshot ): GatewaySettings</ID>
+    <ID>LongMethod:GatewayOpenClawResponseCard.kt$@Composable fun OpenClawResponseCard(state: GatewayUiState)</ID>
+    <ID>LongMethod:GatewaySettings.kt$GatewaySettingsStore$private fun loadFromLegacyPreferences(): GatewaySettings</ID>
+    <ID>LongMethod:GatewaySettingsJson.kt$fun GatewaySettings.toJson(): JSONObject</ID>
+    <ID>LongMethod:GatewaySettingsPatch.kt$fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySettingsPatchResult</ID>
+    <ID>LongMethod:GatewaySettingsPatch.kt$fun flattenSectionedJson(root: JSONObject): JSONObject</ID>
+    <ID>LongMethod:GatewayStatusIcons.kt$@Composable fun GatewayControlIcon( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
+    <ID>LongMethod:GatewayUiCommandHandler.kt$@Composable fun HandleGatewayUiCommands( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
+    <ID>LongMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
+    <ID>LongMethod:GestureDebugPage.kt$@Composable fun GestureDebugPage( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
+    <ID>LongMethod:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
+    <ID>LongMethod:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
+    <ID>LongMethod:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun analyzeHandGesture(landmarks: NormalizedLandmarkList): GestureDebugAnalysis</ID>
+    <ID>LongMethod:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$override fun onMessage(webSocket: WebSocket, text: String)</ID>
+    <ID>LongMethod:OpenClawReplyEnvelope.kt$OpenClawReplyEnvelopeParser$fun parse( rawText: String, uncertainPrefix: String ): OpenClawReplyEnvelope</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun createNotification(contentText: String): Notification</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun dispatchTranscriptToOpenClaw( phrase: String, state: GatewayUiState )</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun evaluateSpeakerVoiceGate(pcmBytes: ByteArray, preRollPrefixBytes: Int = 0): Boolean</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun executeAgentActions(actions: List&lt;JSONObject&gt;)</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun finalizeSpeechSegment( pcmBytes: ByteArray, settings: GatewaySettings, durationMs: Long, captureProfile: CaptureProfile, // Bytes de pre-roll (ambiente pre-fala) no INICIO de pcmBytes: vao // para a transcricao (e o motivo do pre-roll existir), mas ficam // FORA da verificacao de locutor — ambiente dilui o embedding e // infla a duracao usada no limiar adaptativo de trecho curto. preRollPrefixBytes: Int = 0 )</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun handleOpenClawReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply)</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun handleWakeWordAudio( buffer: ShortArray, readCount: Int, now: Long, settings: GatewaySettings )</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun runCaptureLoop(recorder: AudioRecord, bufferSize: Int)</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun segmentLooksLikeSpeech( pcmBytes: ByteArray, settings: GatewaySettings ): Boolean</ID>
+    <ID>LongMethod:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun shouldIgnoreAmbientTranscript(text: String): Boolean</ID>
+    <ID>LongMethod:SetupWizardPage.kt$@Composable private fun WizardAiAccessStep( state: ConfigPageState, actions: ConfigPageActions, onNext: () -&gt; Unit )</ID>
+    <ID>LongMethod:SetupWizardPage.kt$@Composable private fun WizardWhisperStep( state: ConfigPageState, actions: ConfigPageActions, onBackStep: () -&gt; Unit, onFinish: () -&gt; Unit )</ID>
+    <ID>LongMethod:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$fun updateWithComputation( currentState: SpeakerContinuityState?, signature: VoiceSignature? ): SpeakerContinuityUpdateResult</ID>
+    <ID>LongMethod:SpeakerVoiceConfigSection.kt$@Composable fun SpeakerVoiceConfigSection()</ID>
+    <ID>LongMethod:TranscriptTextPipeline.kt$TranscriptTextPipeline$fun shouldIgnoreAmbientTranscript(text: String): Boolean</ID>
+    <ID>LongMethod:VoiceChannelSkill.kt$VoiceChannelSkill$fun evaluate( phrase: String, settings: GatewaySettings, conversationUntilEpochMs: Long, lastDirectAddressEpochMs: Long, nowEpochMs: Long = System.currentTimeMillis() ): VoiceChannelSkillDecision</ID>
+    <ID>LongMethod:WakeWordConfigSection.kt$@Composable fun WakeWordConfigSection()</ID>
+    <ID>LongParameterList:GatewayApiServer.kt$GatewayApiServer.Companion$( enabled: Boolean, token: String, port: Int, bindAll: Boolean, tokenProvider: () -&gt; String, actions: GatewayApiActions )</ID>
+    <ID>LongParameterList:GatewayCameraGestureEffects.kt$( context: Context, settingsState: GatewaySettingsState, hasCameraPermission: Boolean, gestureRecognizer: MediaPipeCameraGestureRecognizer, gatewayViewModel: GatewayViewModel, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, requestStartForegroundListening: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayCameraGestureSupport.kt$( granted: Boolean, cameraGestureEnabled: Boolean, pendingCameraGestureStart: Boolean, isGestureDebugPageVisible: Boolean, gestureRecognizer: MediaPipeCameraGestureRecognizer, clearPendingCameraGestureStart: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayCameraGestureSupport.kt$( previewVisible: Boolean, cameraGestureEnabled: Boolean, hasCameraPermission: Boolean, captureCoordinator: CameraCaptureCoordinator, requestCameraGestureStart: () -&gt; Unit, clearPendingCameraGestureStart: () -&gt; Unit, launchCameraPermission: () -&gt; Unit, screenHoldMillis: Long, startForegroundListening: () -&gt; Unit, interruptAssistant: () -&gt; Unit, finalizeSpeechSegment: () -&gt; Unit, stopListening: () -&gt; Unit, markDirectAddress: () -&gt; Unit, logStart: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayConfigActionsFactory.kt$( context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, currentLocalModelName: () -&gt; String, currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot, sideEffectActions: ConfigPageSideEffectActions, updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, updateLocalEndpointUrl: (String) -&gt; Unit, updateOpenClawServerAddress: (String) -&gt; Unit, updateOpenClawGatewayToken: (String) -&gt; Unit, updateOpenClawDeviceToken: (String) -&gt; Unit, updateOpenClawSessionKey: (String) -&gt; Unit, updateWhisperUrl: (String) -&gt; Unit, updateRemoteModel: (String) -&gt; Unit, updateWhisperAuthToken: (String) -&gt; Unit, updateAutoStartEnabled: (Boolean) -&gt; Unit, updateCameraGestureEnabled: (Boolean) -&gt; Unit, updateDevelopment: (Boolean) -&gt; Unit, updateVoiceChannelSkillEnabled: (Boolean) -&gt; Unit, updateVoiceChannelWakeTerms: (String) -&gt; Unit, updateVoiceChannelFollowUpSeconds: (String) -&gt; Unit, updateVoiceChannelIdlePromptSeconds: (String) -&gt; Unit, updateOpenClawAccumulationWindowSecs: (String) -&gt; Unit, updateAssistantVoiceEnabled: (Boolean) -&gt; Unit, updateAssistantVoiceStyle: (String) -&gt; Unit, updateAssistantSpeechRate: (String) -&gt; Unit, updateAssistantPitch: (String) -&gt; Unit, updateTranscriptionMode: (String) -&gt; Unit, updateLocalModelName: (String) -&gt; Unit, resetDownloadState: () -&gt; Unit, updateLocalExecutionMode: (String) -&gt; Unit, updateMicrophoneAutoSensitivityEnabled: (Boolean) -&gt; Unit, updateMicrophoneGain: (String) -&gt; Unit, updateTranscriptionRepeatSuppression: (String) -&gt; Unit, updateColloquialNormalizationStrength: (String) -&gt; Unit, updateVadThreshold: (String) -&gt; Unit, updateDebugSpeechHoldMs: (String) -&gt; Unit, updateDebugMaxSpeechSegmentMs: (String) -&gt; Unit, updateDebugMinTranscriptionMs: (String) -&gt; Unit, updateDebugPhraseBreakSilenceMs: (String) -&gt; Unit, updateScreenMode: (String) -&gt; Unit, updateScreenHoldSeconds: (String) -&gt; Unit, updateTranscriptClearTimeoutSecs: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayConfigComponents.kt$( title: String, rawValue: String, effectiveValue: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayConfigComponents.kt$( title: String, value: Float, valueText: String, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayConfigPage.kt$( hasPermission: Boolean, hasCameraPermission: Boolean, localEndpointUrl: String, openClawServerAddress: String, openClawGatewayToken: String, openClawDeviceToken: String, openClawSessionKey: String, whisperUrl: String, remoteModel: String, whisperAuthToken: String, autoStartEnabled: Boolean, cameraGestureEnabled: Boolean, cameraGestureStatus: String, voiceChannelSkillEnabled: Boolean, voiceChannelWakeTermsInput: String, voiceChannelFollowUpSecondsInput: String, voiceChannelIdlePromptSecondsInput: String, assistantVoiceEnabled: Boolean, assistantVoiceStyle: String, assistantSpeechRateInput: String, assistantPitchInput: String, development: Boolean, transcriptionMode: String, deviceGuide: DeviceModelGuide?, deviceModelLabel: String, localModelName: String, localModelExists: Boolean, huggingFaceModelExists: Boolean?, huggingFaceCheckInProgress: Boolean, localModelDownloadInProgress: Boolean, localModelDownloadStatus: String, localModelDownloadProgress: Float, localModelDownloadProgressLabel: String, localModelOptions: List&lt;LocalModelOption&gt;, localModelOptionsLoading: Boolean, selectedModelInvalid: Boolean, shouldOfferDownload: Boolean, localExecutionMode: String, localSystemInfo: String, microphoneAutoSensitivityEnabled: Boolean, microphoneGainInput: String, transcriptionRepeatSuppressionInput: String, colloquialNormalizationStrengthInput: String, vadThresholdInput: String, debugSpeechHoldMsInput: String, debugMaxSpeechSegmentMsInput: String, debugMinTranscriptionMsInput: String, debugPhraseBreakSilenceMsInput: String, screenMode: String, screenHoldSecondsInput: String, transcriptClearTimeoutSecsInput: String, openClawAccumulationWindowSecsInput: String, historySnapshot: TranscriptHistorySnapshot, historyActionStatus: String, settingsBackupStatus: String )</ID>
+    <ID>LongParameterList:GatewayConfigPageHost.kt$( // Grouped settings state holder settingsState: GatewaySettingsState, // Permission state hasPermission: Boolean, hasCameraPermission: Boolean, // Runtime-derived cameraGestureStatus: String, // Aggregated state holders downloadState: GatewayDownloadState, modelState: GatewayModelState, historyState: GatewayHistoryState, // Derived/computed state localModelOptions: List&lt;LocalModelOption&gt;, selectedModelInvalid: Boolean, shouldOfferDownload: Boolean, localSystemInfo: String, deviceGuide: DeviceModelGuide?, historySnapshot: TranscriptHistorySnapshot, // Factory dependencies context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, // Side-effect launchers (owned by MainActivity) launchSettingsImport: ActivityResultLauncher&lt;Array&lt;String&gt;&gt;, requestMicrophonePermission: () -&gt; Unit, requestCameraPermission: () -&gt; Unit, openGestureDebug: () -&gt; Unit, // State updaters updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, // Navigation destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayConfigSideEffectActionsFactory.kt$( context: Context, currentHistoryState: () -&gt; GatewayHistoryState, updateHistoryState: (GatewayHistoryState) -&gt; Unit, currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot, launchSettingsImport: ActivityResultLauncher&lt;Array&lt;String&gt;&gt;, requestMicrophonePermission: () -&gt; Unit, requestCameraPermission: () -&gt; Unit, openGestureDebug: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayDashboardBanners.kt$( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayDashboardUi.kt$( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayDeviceGuideSupport.kt$( deviceGuide: DeviceModelGuide?, transcriptionMode: String, localModelName: String, localExecutionMode: String, remoteModel: String, field: String )</ID>
+    <ID>LongParameterList:GatewayDictionaryPage.kt$( colloquialNormalizationStrengthInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayModelAvailabilityEffects.kt$( context: Context, settingsState: GatewaySettingsState, transcriptionModelLabel: String, optionsRefreshTick: Int, currentModelState: () -&gt; GatewayModelState, updateModelState: (GatewayModelState) -&gt; Unit, updateLocalModelOptions: (List&lt;LocalModelOption&gt;) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayModelSupport.kt$( settings: GatewaySettings, onLocalEndpointUrlChange: (String) -&gt; Unit, onOpenClawServerAddressChange: (String) -&gt; Unit, onOpenClawGatewayTokenChange: (String) -&gt; Unit, onOpenClawDeviceTokenChange: (String) -&gt; Unit, onOpenClawSessionKeyChange: (String) -&gt; Unit, onWhisperUrlChange: (String) -&gt; Unit, onRemoteModelChange: (String) -&gt; Unit, onWhisperAuthTokenChange: (String) -&gt; Unit, onAutoStartEnabledChange: (Boolean) -&gt; Unit, onCameraGestureEnabledChange: (Boolean) -&gt; Unit, onVoiceChannelSkillEnabledChange: (Boolean) -&gt; Unit, onVoiceChannelWakeTermsChange: (String) -&gt; Unit, onVoiceChannelFollowUpSecondsChange: (String) -&gt; Unit, onVoiceChannelIdlePromptSecondsChange: (String) -&gt; Unit, onAssistantVoiceEnabledChange: (Boolean) -&gt; Unit, onAssistantVoiceStyleChange: (String) -&gt; Unit, onAssistantSpeechRateChange: (String) -&gt; Unit, onAssistantPitchChange: (String) -&gt; Unit, onTranscriptionModeChange: (String) -&gt; Unit, onLocalModelNameChange: (String) -&gt; Unit, onLocalExecutionModeChange: (String) -&gt; Unit, onDevelopmentChange: (Boolean) -&gt; Unit, onMicrophoneAutoSensitivityEnabledChange: (Boolean) -&gt; Unit, onMicrophoneGainChange: (String) -&gt; Unit, onTranscriptionRepeatSuppressionChange: (String) -&gt; Unit, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onVadThresholdChange: (String) -&gt; Unit, onDebugSpeechHoldMsChange: (String) -&gt; Unit, onDebugMaxSpeechSegmentMsChange: (String) -&gt; Unit, onDebugMinTranscriptionMsChange: (String) -&gt; Unit, onDebugPhraseBreakSilenceMsChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit, onScreenModeChange: (String) -&gt; Unit, onScreenHoldSecondsChange: (String) -&gt; Unit, onTranscriptClearTimeoutSecsChange: (String) -&gt; Unit, onOpenClawAccumulationWindowSecsChange: (String) -&gt; Unit, onLocalModelDownloadStatusChange: (String) -&gt; Unit, onLocalModelDownloadProgressChange: (Float) -&gt; Unit, onLocalModelDownloadProgressLabelChange: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayNavigationEffects.kt$( activity: ComponentActivity, context: Context, uiScope: CoroutineScope, pagerState: PagerState, initialPage: Int, configPageIndex: Int, exitConfirmationWindowMs: Long, currentUiState: () -&gt; GatewayUiState, updateUiState: (GatewayUiState) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayPermissionSupport.kt$( granted: Boolean, hasMicrophonePermission: Boolean, pendingServiceStart: Boolean, isNotificationPermissionFullyGranted: () -&gt; Boolean, clearPendingServiceStart: () -&gt; Unit, openNotificationSettings: () -&gt; Unit, showPersistentNotificationToast: () -&gt; Unit, showDeniedNotificationToast: () -&gt; Unit, startListening: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayPermissionSupport.kt$( granted: Boolean, hasNotificationPermission: Boolean, autoStartEnabled: Boolean, requestServiceStart: () -&gt; Unit, clearPendingServiceStart: () -&gt; Unit, launchNotificationPermission: () -&gt; Unit, startListeningAutomatically: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayPermissionSupport.kt$( hasPermission: Boolean, hasNotificationPermission: Boolean, hasNotificationRuntimePermission: Boolean, requestServiceStart: () -&gt; Unit, clearPendingServiceStart: () -&gt; Unit, launchMicrophonePermission: () -&gt; Unit, launchNotificationPermission: () -&gt; Unit, openNotificationSettings: () -&gt; Unit, showNotificationSettingsToast: () -&gt; Unit, startListening: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayPermissionSupport.kt$( settings: GatewaySettings, appliedKeys: List&lt;String&gt;, ignoredKeys: List&lt;String&gt;, saveSettings: (GatewaySettings) -&gt; Unit, reapplyImportedSettings: (GatewaySettings) -&gt; Unit, updateStatus: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayRuntime.kt$GatewayRuntime$( detectedLabel: String?, matched: Boolean, reason: String, handedness: String? = null, landmarkCount: Int = 0, indexExtended: Boolean = false, middleFolded: Boolean = false, ringFolded: Boolean = false, pinkyFolded: Boolean = false, thumbFolded: Boolean = false, active: Boolean = false )</ID>
+    <ID>LongParameterList:GatewaySettingsState.kt$GatewaySettingsState$( localEndpointUrl: String, openClawServerAddress: String, openClawGatewayToken: String, openClawDeviceToken: String, openClawSessionKey: String, whisperUrl: String, remoteModel: String, whisperAuthToken: String, autoStartEnabled: Boolean, cameraGestureEnabled: Boolean, voiceChannelSkillEnabled: Boolean, voiceChannelWakeTermsInput: String, voiceChannelFollowUpSecondsInput: String, voiceChannelIdlePromptSecondsInput: String, assistantVoiceEnabled: Boolean, assistantVoiceStyle: String, assistantSpeechRateInput: String, assistantPitchInput: String, transcriptionMode: String, localModelName: String, localExecutionMode: String, development: Boolean, microphoneAutoSensitivityEnabled: Boolean, microphoneGainInput: String, transcriptionRepeatSuppressionInput: String, colloquialNormalizationStrengthInput: String, vadThresholdInput: String, debugSpeechHoldMsInput: String, debugMaxSpeechSegmentMsInput: String, debugMinTranscriptionMsInput: String, debugPhraseBreakSilenceMsInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, screenMode: String, screenHoldSecondsInput: String, transcriptClearTimeoutSecsInput: String, openClawAccumulationWindowSecsInput: String )</ID>
+    <ID>LongParameterList:GatewayStatusIcons.kt$( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:GatewayUiCommandHandler.kt$( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:GestureDebugPage.kt$( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
+    <ID>LongParameterList:RoomAudioForegroundService.kt$RoomAudioForegroundService$( peakGain: Double, noiseFloorRms: Double, speechLikeFrame: Boolean, speechActive: Boolean, inputPeakNormalized: Double, settings: GatewaySettings )</ID>
+    <ID>LongParameterList:RoomAudioForegroundService.kt$RoomAudioForegroundService$( rawRms: Double, adjustedRms: Double, noiseFloorRms: Double, dynamicContrast: Double, rmsVariance: Double, spectrumMotion: Double, stabilityScore: Double, ambientNoiseDetected: Boolean, ambientNoiseKind: String?, speechLikeRaw: Boolean, speechLikeEffective: Boolean, dynamicSpeechOverride: Boolean, shouldCompensateAmbientNoise: Boolean, shouldBlockAsAmbientNoise: Boolean, dynamicMicrophoneGain: Double, zeroCrossingRate: Double, peakNormalized: Double, spectrum: List&lt;Float&gt; )</ID>
+    <ID>LongParameterList:RoomAudioForegroundService.kt$RoomAudioForegroundService$( rms: Double, peakNormalized: Double, zeroCrossingRate: Double, vadThreshold: Double, noiseFloorRms: Double, transcriptionMode: TranscriptionMode, settings: GatewaySettings )</ID>
+    <ID>LongParameterList:TooltipIcons.kt$( icon: @Composable () -&gt; Unit, tooltip: String, color: Color, outerSize: androidx.compose.ui.unit.Dp = 36.dp, innerSize: androidx.compose.ui.unit.Dp = 28.dp, tooltipWidth: androidx.compose.ui.unit.Dp = 188.dp, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:TooltipIcons.kt$( listening: Boolean, speechDetected: Boolean, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:TooltipIcons.kt$( onToggle: () -&gt; Unit, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, modifier: Modifier = Modifier, accentColor: Color = Color(0xFF8A939F), content: @Composable () -&gt; Unit )</ID>
+    <ID>LongParameterList:TooltipIcons.kt$( queueCount: Int, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:TooltipIcons.kt$( tint: Color, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier, content: @Composable () -&gt; Unit )</ID>
+    <ID>LongParameterList:WhisperApiClient.kt$WhisperApiClient$( wavBytes: ByteArray, whisperUrl: String, authToken: String, model: String, prompt: String = "", vadFilter: Boolean, conditionOnPreviousText: Boolean, noSpeechThreshold: Double, compressionRatioThreshold: Double, repetitionPenalty: Double )</ID>
+    <ID>LoopWithTooManyJumpStatements:RoomAudioForegroundService.kt$RoomAudioForegroundService$while</ID>
+    <ID>LoopWithTooManyJumpStatements:SpeakerContinuityHistoryLogger.kt$SpeakerContinuityHistoryLogger$for</ID>
+    <ID>MagicNumber:ApiConfigSection.kt$1024</ID>
+    <ID>MagicNumber:ApiConfigSection.kt$24</ID>
+    <ID>MagicNumber:ApiConfigSection.kt$5</ID>
+    <ID>MagicNumber:ApiConfigSection.kt$65535</ID>
+    <ID>MagicNumber:AudioDebugStore.kt$AudioDebugStore$16</ID>
+    <ID>MagicNumber:AudioDebugStore.kt$AudioDebugStore$36</ID>
+    <ID>MagicNumber:AudioDebugStore.kt$AudioDebugStore$44</ID>
+    <ID>MagicNumber:AudioDebugStore.kt$AudioDebugStore$60_000</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF040A12</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF0A1421</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF0E1A28</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF16263A</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF22354C</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF35D08C</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF647A8F</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFF9FB2C4</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFFF1F6FB</ID>
+    <ID>MagicNumber:ConfigTheme.kt$ConfigTheme$0xFFFF8A80</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$0xCC000000</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$0xFF1A1208</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$0xFFFF3D00</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$0xFFFFB300</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$0xFFFFF176</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$1000</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$1000L</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$1000f</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$10f</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$3</ID>
+    <ID>MagicNumber:FistCountdownOverlay.kt$999</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0.06f</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0.46f</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0x66000000</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF101C2B</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF101E2E</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF16263A</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF18293E</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF1F4D3D</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF1F8A5F</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF22354C</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF2C415C</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF2C6E7F</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF35D08C</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF39D0FF</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF55C2D8</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFF93A7BA</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFFD32F2F</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$0xFFF1F6FB</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$180f</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$270f</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$3</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$4</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$45f</ID>
+    <ID>MagicNumber:GatewayChatUi.kt$90f</ID>
+    <ID>MagicNumber:GatewayConfigActionsFactory.kt$100f</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFF2DD4BF</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFF34D399</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFF35D08C</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFF38BDF8</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFFC084FC</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFFD9B864</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFFF87171</ID>
+    <ID>MagicNumber:GatewayConfigNavigation.kt$0xFFFBBF24</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$10</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$10f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$1800</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$1800f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$3</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$30</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$30f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$3f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$60</ID>
+    <ID>MagicNumber:GatewayConfigSectionsPrimary.kt$60f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$0.6f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$0.7f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$1.4f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$1.8f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$100f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$1200f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$30</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$300</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$3000f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$300f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$30f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$4000f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$5000f</ID>
+    <ID>MagicNumber:GatewayConfigSectionsSecondary.kt$500f</ID>
+    <ID>MagicNumber:GatewayConfigTranscriptionSection.kt$0.001f</ID>
+    <ID>MagicNumber:GatewayConfigTranscriptionSection.kt$0.05f</ID>
+    <ID>MagicNumber:GatewayConfigTranscriptionSection.kt$12</ID>
+    <ID>MagicNumber:GatewayConfigTranscriptionSection.kt$6f</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFF154360</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFF1A6496</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFF5E4313</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFF8A5A12</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFFC98322</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFFD6EAF8</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$0xFFFCE7C8</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$100.0</ID>
+    <ID>MagicNumber:GatewayDashboardBanners.kt$320</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0.05f</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0.28f</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0.5f</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0x143A87E8</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0x221E3246</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0x223CCB9D</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0x33000000</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xA8B47B1D</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF08111C</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF13283A</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF39D0FF</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF6E8398</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF8AAFCC</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF90C7FF</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFA9BBCB</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFB9F6E8</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFF2EFE8</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFF6D365</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFF6B5A</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFFE5A8</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFFF3D5</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$220</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$24f</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$3f</ID>
+    <ID>MagicNumber:GatewayDashboardUi.kt$500</ID>
+    <ID>MagicNumber:GatewayDeviceGuideSupport.kt$0x140B1520</ID>
+    <ID>MagicNumber:GatewayDeviceGuideSupport.kt$0xFF111C27</ID>
+    <ID>MagicNumber:GatewayDeviceGuideSupport.kt$0xFF24384D</ID>
+    <ID>MagicNumber:GatewayDeviceGuideSupport.kt$0xFF506070</ID>
+    <ID>MagicNumber:GatewayDeviceGuideSupport.kt$4</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$1024</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$10_000</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$200</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$299</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$30_000</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$64</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$8192</ID>
+    <ID>MagicNumber:GatewayModelDownloadSupport.kt$8_000</ID>
+    <ID>MagicNumber:GatewayModelOptionsSupport.kt$1024.0</ID>
+    <ID>MagicNumber:GatewayModelOptionsSupport.kt$12</ID>
+    <ID>MagicNumber:GatewayModelSupport.kt$5.0</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$0xFF102030</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$0xFFE9F1F7</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$10_000L</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$1800</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$1_800L</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$22_000L</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$430L</ID>
+    <ID>MagicNumber:GatewayOpenClawResponseCard.kt$48L</ID>
+    <ID>MagicNumber:GatewayRuntime.kt$GatewayUiState$48</ID>
+    <ID>MagicNumber:GatewaySettings.kt$GatewaySettingsStore$4</ID>
+    <ID>MagicNumber:GatewaySettings.kt$GatewaySettingsStore$5.0</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$0.001</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$0.2</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$0.6</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$0.7</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$1.4</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$1.8</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$10</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$120</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$3</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$30</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$300</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$3600</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$6.0</ID>
+    <ID>MagicNumber:GatewaySettingsNormalizer.kt$60</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.001</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.005</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.01</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.05</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.1</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.10</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.20</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.5</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.50</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.6</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.7</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$0.80</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$1.4</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$1.8</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$10</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$100</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$1024</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$1200</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$1800</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$20.0</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$3</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$30</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$300</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$3000</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$4000</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$5.0</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$500</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$5000</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$6.0</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$60</ID>
+    <ID>MagicNumber:GatewaySettingsPatch.kt$65535</ID>
+    <ID>MagicNumber:GatewaySettingsPersistenceEffect.kt$300</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFF2D8CFF</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFF3A7DDA</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFF42D392</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFF6C7A89</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFF7B61FF</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFFC98322</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFFD32F2F</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFFD94B4B</ID>
+    <ID>MagicNumber:GatewayStatusIcons.kt$0xFFFFA726</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0.14f</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0.18f</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0.62f</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF102030</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF3A4A58</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF6B5A3A</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF6C7A86</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF7A1F1F</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFFF3EBDD</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$1800</ID>
+    <ID>MagicNumber:GatewayTranscriptCard.kt$4</ID>
+    <ID>MagicNumber:GestureCommandFooter.kt$0xB3040A12</ID>
+    <ID>MagicNumber:GestureCommandFooter.kt$0xFF35D08C</ID>
+    <ID>MagicNumber:GestureCommandFooter.kt$0xFF5EA8FF</ID>
+    <ID>MagicNumber:GestureCommandFooter.kt$0xFFFF8A50</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x120A1723</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x33040A12</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x40000000</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x44040A12</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x4D000000</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x55000000</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x66000000</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x6632D296</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0x66C94B4B</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFF040A12</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFF6FF7B8</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFF9EB5C7</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFFD5E0EA</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFFF4F7FB</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$0xFFFF8A80</ID>
+    <ID>MagicNumber:GestureDebugPage.kt$500</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.075f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.12f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.16f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.18f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.28f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.32f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.34f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.35f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.38f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.40f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.55f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.5f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.62f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.6f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.75f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.85f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0.95f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0x59FFFFFF</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0xFF46566E</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0xFF59D9A1</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0xFF6FA8FF</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0xFFD4DAE3</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$0xFFFFFFFF</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$1.02f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$1.55f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$1.5f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$10</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$11</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$12</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$12f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$13</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$14</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$14f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$15</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$16</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$17</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$18</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$19</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$1e-4f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$2.5f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$20</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$3</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$4</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$5</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$6</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$64f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$6f</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$7</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$8</ID>
+    <ID>MagicNumber:HandGloveOverlay.kt$9</ID>
+    <ID>MagicNumber:LocalSherpaOnnxEngine.kt$LocalSherpaOnnxEngine$0xFF</ID>
+    <ID>MagicNumber:LocalSherpaOnnxEngine.kt$LocalSherpaOnnxEngine$32768f</ID>
+    <ID>MagicNumber:LocalSherpaOnnxEngine.kt$LocalSherpaOnnxEngine$8</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.018</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.028</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.035</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.04</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.085</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.11</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0.35</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$0xFF</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$1000.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$128</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$145.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$155.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$16</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$16.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$185.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$1e-9</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$20.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$24.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$256</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$28.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$3</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$30.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$5</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$55.0</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$8</ID>
+    <ID>MagicNumber:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$95.0</ID>
+    <ID>MagicNumber:LocalWhisperEngine.kt$LocalWhisperEngine$0xFF</ID>
+    <ID>MagicNumber:LocalWhisperEngine.kt$LocalWhisperEngine$32768f</ID>
+    <ID>MagicNumber:LocalWhisperEngine.kt$LocalWhisperEngine$500_000_000L</ID>
+    <ID>MagicNumber:LocalWhisperEngine.kt$LocalWhisperEngine$8</ID>
+    <ID>MagicNumber:MainActivity.kt$1200</ID>
+    <ID>MagicNumber:MainActivity.kt$2000</ID>
+    <ID>MagicNumber:MainActivity.kt$500</ID>
+    <ID>MagicNumber:MainActivity.kt$MainActivity.Companion$90</ID>
+    <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$0.01f</ID>
+    <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$0.02f</ID>
+    <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$1000L</ID>
+    <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$1e-4f</ID>
+    <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$1e-6f</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$0.46</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$0.5</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$0.54</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$10.0</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$1e-10f</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$2.0</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$2595.0</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$700.0</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$7_600.0</ID>
+    <ID>MagicNumber:MfccExtractor.kt$MfccExtractor$80.0</ID>
+    <ID>MagicNumber:OpenClawGatewayClient.kt$OpenClawGatewayClient$1000</ID>
+    <ID>MagicNumber:OpenClawGatewayClient.kt$OpenClawGatewayClient$4</ID>
+    <ID>MagicNumber:OpenClawGatewayPersistentConnection.kt$OpenClawGatewayPersistentConnection$1000</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.0001</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.003</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.004</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.006</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.008</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.010</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.012</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.015</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.020</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.030</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.03f</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.05</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.06</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.10</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.18</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.22</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.28</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.30</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.34</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.35</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.42</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.686</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.8</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.806</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.85</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.94</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$0.985</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$1.241</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$1000</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$1000L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$1024</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$10_000L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$12</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$120</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$120_000</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$150</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$16</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$180</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$180f</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$1_000L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$2.4</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$200</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$20_000</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$220</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$250L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$256</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$270f</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$299</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$3</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$300</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$36</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$3_000L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$4</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$44</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$5</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$512</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$5_000L</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$6</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$64</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$8</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$80</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$90</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$90f</ID>
+    <ID>MagicNumber:RoomAudioForegroundService.kt$RoomAudioForegroundService$92</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$0.001f</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$0.02f</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$0.85f</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$0xCCFFFFFF</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$0xFF0F172A</ID>
+    <ID>MagicNumber:ScreenEffectOverlay.kt$420</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$200</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$299</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$401</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$403</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$6</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$6_000</ID>
+    <ID>MagicNumber:SetupWizardPage.kt$8_000</ID>
+    <ID>MagicNumber:SpeakerContinuityHistoryLogger.kt$SpeakerContinuityHistoryLogger$1000</ID>
+    <ID>MagicNumber:SpeakerContinuityHistoryLogger.kt$SpeakerContinuityHistoryLogger$60</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.06</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.08</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.12</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.15</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.18</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.25</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.35</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.46</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.55</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.65</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$0.75</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$120.0</ID>
+    <ID>MagicNumber:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$45.0</ID>
+    <ID>MagicNumber:SpeakerVerifier.kt$SpeakerVerifier$0xFF</ID>
+    <ID>MagicNumber:SpeakerVerifier.kt$SpeakerVerifier$32768f</ID>
+    <ID>MagicNumber:SpeakerVerifier.kt$SpeakerVerifier$8</ID>
+    <ID>MagicNumber:SpeakerVerifier.kt$SpeakerVerifier.Companion$1e-9</ID>
+    <ID>MagicNumber:SpeakerVoiceConfigSection.kt$100</ID>
+    <ID>MagicNumber:SpeakerVoiceConfigSection.kt$1024</ID>
+    <ID>MagicNumber:SpeakerVoiceConfigSection.kt$120</ID>
+    <ID>MagicNumber:SpeakerVoiceConfigSection.kt$30</ID>
+    <ID>MagicNumber:SpeakerVoiceConfigSection.kt$64</ID>
+    <ID>MagicNumber:SpeakerVoiceStore.kt$SpeakerVoiceStore$1e-6f</ID>
+    <ID>MagicNumber:SpectrumDiagnosticsLogger.kt$SpectrumDiagnosticsLogger$1000</ID>
+    <ID>MagicNumber:SpectrumDiagnosticsLogger.kt$SpectrumDiagnosticsLogger$60</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xB3102030</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xFF2D8CFF</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xFF4F6B8A</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xFF8A939F</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xFFD32F2F</ID>
+    <ID>MagicNumber:TooltipIcons.kt$0xFFFF8A3D</ID>
+    <ID>MagicNumber:TooltipIcons.kt$2200</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0.50</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0.55</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0.80</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFF2EAF62</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFF3E7BFA</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFF5C7CFA</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFF8A939F</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFFD94B4B</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFFE55B6B</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$0xFFFFA726</ID>
+    <ID>MagicNumber:TranscriptBadgeStyles.kt$100</ID>
+    <ID>MagicNumber:TranscriptHistoryLogger.kt$TranscriptHistoryLogger$1000</ID>
+    <ID>MagicNumber:TranscriptHistoryLogger.kt$TranscriptHistoryLogger$60</ID>
+    <ID>MagicNumber:TranscriptTextPipeline.kt$TranscriptTextPipeline$0.01</ID>
+    <ID>MagicNumber:TranscriptTextPipeline.kt$TranscriptTextPipeline$0.2</ID>
+    <ID>MagicNumber:TranscriptTextPipeline.kt$TranscriptTextPipeline$3</ID>
+    <ID>MagicNumber:TranscriptTextPipeline.kt$TranscriptTextPipeline$6</ID>
+    <ID>MagicNumber:TranscriptTextPipeline.kt$TranscriptTextPipeline$8</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$0.40</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$0.65</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$0.75</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$0.85</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$3</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$4</ID>
+    <ID>MagicNumber:TranscriptWindowing.kt$TranscriptWindowing$5</ID>
+    <ID>MagicNumber:VoiceChannelSkill.kt$VoiceChannelSkill$1000L</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$0.04</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$0.12f</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$0.45</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$1.6f</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$1024</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$1e-9</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$32768f</ID>
+    <ID>MagicNumber:WakeWordDetector.kt$WakeWordDetector$400</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperApiClient$120_000</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperApiClient$200</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperApiClient$20_000</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperApiClient$299</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperHttpException$401</ID>
+    <ID>MagicNumber:WhisperApiClient.kt$WhisperHttpException$403</ID>
+    <ID>MatchingDeclarationName:GatewayCameraGestureEffects.kt$GatewayCameraGestureCallbacks</ID>
+    <ID>MatchingDeclarationName:GatewaySettingsNormalizer.kt$GatewaySettingsNormalizedNumbers</ID>
+    <ID>MatchingDeclarationName:GatewaySettingsPatch.kt$GatewaySettingsPatchResult</ID>
+    <ID>MatchingDeclarationName:GatewayTranscriptCard.kt$TranscriptCardHint</ID>
+    <ID>MatchingDeclarationName:WhisperConfigurationGuard.kt$WhisperConfigurationCheck</ID>
+    <ID>MaxLineLength:DeviceModelGuideCatalog.kt$DeviceModelGuide$recommendation.localExecutionMode.orEmpty().equals(normalizedLocalExecution, ignoreCase = true)</ID>
+    <ID>MaxLineLength:GatewayApiServer.kt$GatewayApiServer$(method == Method.POST || method == Method.PATCH || method == Method.PUT) &amp;&amp; uri == "/api/config" -&gt; applyConfig(session)</ID>
+    <ID>MaxLineLength:GatewayApiServer.kt$GatewayApiServer$?:</ID>
+    <ID>MaxLineLength:GatewayApiServer.kt$GatewayApiServer$method == Method.GET &amp;&amp; uri == "/api/config" -&gt; json(Response.Status.OK, actions.currentSettings().toConfigJson())</ID>
+    <ID>MaxLineLength:GatewayConfigActionsFactory.kt$if</ID>
+    <ID>MaxLineLength:GatewayConfigCatalog.kt$GatewayConfigCatalog$voiceChannelWakeTerms = "xuxu\nxu xu\nchuchu\nchu chu\nopenclaw\nopen claw\nopen crowd\nclaw\npinklau\naudiodestino\naudio destino\nassistente\nagente"</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$supportingText = "Depois desse tempo sem fala direta com o OpenClaw, ele deve preferir responder com duvida e pedir que voce fale o nome dele."</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$supportingText = "Envia tudo ao OpenClaw, mas acrescenta pistas para ele decidir se a fala parece conversa ambiente ou continuidade do dialogo."</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$supportingText = "Silencio que o app aguarda antes de enviar a transcricao ao OpenClaw. Aumente para agrupar frases longas em um unico envio."</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$supportingText = { Text("Uma por linha. Quando um desses nomes aparecer, o OpenClaw prioriza resposta em voz e reinicia o contexto local.") }</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$valueText = "${state.openClawAccumulationWindowSecsInput.toIntOrNull()?.coerceIn(1, 10) ?: GatewaySettingsStore.DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS}s"</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$valueText = "${state.voiceChannelFollowUpSecondsInput.toIntOrNull()?.coerceIn(3, 60) ?: GatewaySettingsStore.DEFAULT_VOICE_CHANNEL_FOLLOW_UP_SECONDS}s"</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsPrimary.kt$valueText = "${state.voiceChannelIdlePromptSecondsInput.toIntOrNull()?.coerceIn(30, 1800) ?: GatewaySettingsStore.DEFAULT_VOICE_CHANNEL_IDLE_PROMPT_SECONDS}s"</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$?:</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$MetadataChip("Ultima atualizacao", formatHistoryTimestamp(state.historySnapshot.lastModifiedEpochMs))</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$assistantVoiceOptions().firstOrNull { it.persistedValue == state.assistantVoiceStyle }?.label ?: "Sistema"</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$effectiveValue = state.debugPhraseBreakSilenceMsInput.toFloatOrNull()?.coerceIn(500f, 4000f) ?: 1400f</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$onValueChange = { actions.onTranscriptionRepeatSuppressionChange(String.format(Locale.US, "%.2f", it)) }</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$supportingText = "Quanto maior, mais agressivo o app fica para suprimir repeticoes e sobreposicoes de texto entre janelas."</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$value</ID>
+    <ID>MaxLineLength:GatewayConfigSectionsSecondary.kt$valueText = "${state.screenHoldSecondsInput.toIntOrNull()?.coerceIn(1, 30) ?: GatewaySettingsStore.DEFAULT_SCREEN_HOLD_SECONDS}s"</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$.</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$Text(if (state.localModelOptionsLoading) "Carregando modelos locais..." else "Selecionar da pasta local (${state.localModelOptions.size})")</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$if (LocalExecutionMode.fromPersistedValue(state.localExecutionMode) == LocalExecutionMode.CPU) "CPU" else "NNAPI"</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$supportingText = "Reduz ganho no ruido de fundo e libera o ganho maximo ao detectar fala. Padrao: habilitado."</ID>
+    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$title = if (state.microphoneAutoSensitivityEnabled) "Ganho maximo da fala" else "Ganho do microfone"</ID>
+    <ID>MaxLineLength:GatewayDashboardUi.kt$text = "Mic atual: $micGainLabel | Ruido base RMS: $noiseFloorLabel | Estabilidade: $noiseScoreLabel"</ID>
+    <ID>MaxLineLength:GatewayDashboardUi.kt$val micGainLabel = state.currentMicrophoneGain?.let { String.format(java.util.Locale.US, "%.2fx", it) } ?: "-"</ID>
+    <ID>MaxLineLength:GatewayDashboardUi.kt$val noiseFloorLabel = state.estimatedNoiseFloorRms?.let { String.format(java.util.Locale.US, "%.4f", it) } ?: "-"</ID>
+    <ID>MaxLineLength:GatewayDashboardUi.kt$val noiseScoreLabel = state.ambientNoiseScore?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "-"</ID>
+    <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"${translateGuideStatus(recommendation.status)} | experiencia ${translateExperienceLevel(recommendation.experienceLevel)}"</ID>
+    <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"Neste aparelho, o modelo local mais validado foi ${bestLocal.localModelId} com ${bestLocal.localExecutionMode}. ${bestLocal.summary}"</ID>
+    <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"Neste aparelho, o runtime local mais validado foi ${bestLocal.localExecutionMode} usando ${bestLocal.localModelId}. ${bestLocal.summary}"</ID>
+    <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$value = "${translateGuideStatus(recommendation.status)} | experiencia ${translateExperienceLevel(recommendation.experienceLevel)}"</ID>
+    <ID>MaxLineLength:GatewayDictionaryPage.kt$?:</ID>
+    <ID>MaxLineLength:GatewayDictionaryPage.kt$Text("Um por linha. No modo remoto vai junto como dica; no local serve como memoria de referencia para configuracao.")</ID>
+    <ID>MaxLineLength:GatewayDictionaryPage.kt$supportingText = "Controla quanto o app tenta corrigir fala coloquial automaticamente antes do dicionario manual."</ID>
+    <ID>MaxLineLength:GatewayDictionaryPage.kt$text = "Use esta tela para forcar termos da empresa e corrigir palavras reconhecidas com frequencia errada."</ID>
+    <ID>MaxLineLength:GatewayModelDownloadSupport.kt$error("Download incompleto para $requiredFile: ${formatBytes(tempFile.length())} de ${formatBytes(expectedSize)}.")</ID>
+    <ID>MaxLineLength:GatewayModelDownloadSupport.kt$val</ID>
+    <ID>MaxLineLength:GatewayModelSupport.kt$apiBindAllInterfaces = runtimeCurrent?.apiBindAllInterfaces ?: GatewaySettingsStore.DEFAULT_API_BIND_ALL_INTERFACES</ID>
+    <ID>MaxLineLength:GatewayModelSupport.kt$openClawGatewayToken = input.openClawGatewayToken.ifBlank { GatewaySettingsStore.DEFAULT_OPENCLAW_GATEWAY_TOKEN }</ID>
+    <ID>MaxLineLength:GatewaySettings.kt$GatewaySettings$val ambientSpeechOverrideDynamicContrast: Double = GatewaySettingsStore.DEFAULT_AMBIENT_SPEECH_OVERRIDE_DYNAMIC_CONTRAST</ID>
+    <ID>MaxLineLength:GatewaySettings.kt$GatewaySettings$val ambientSpeechOverrideSpectrumMotion: Double = GatewaySettingsStore.DEFAULT_AMBIENT_SPEECH_OVERRIDE_SPECTRUM_MOTION</ID>
+    <ID>MaxLineLength:GatewaySettings.kt$GatewaySettingsStore$"load modelPath raw=$loadedModelPath, rawName=$rawModelName, normalizedName=$loadedModelName, fixed=$fixedModelPath"</ID>
+    <ID>MaxLineLength:GatewaySettings.kt$GatewaySettingsStore$"migrating openclaw settings: server_address=$normalizedServerAddress, session_key=$storedOpenClawSessionKey -&gt; $normalizedOpenClawSessionKey"</ID>
+    <ID>MaxLineLength:GatewaySettings.kt$GatewaySettingsStore$"migrating settings local_model_path=$loadedModelPath -&gt; $normalizedModelPath, local_execution_mode=${loadedExecutionMode.persistedValue} -&gt; ${normalizedExecutionMode.persistedValue}, transcription_mode=${storedTranscriptionMode.persistedValue} -&gt; ${loadedTranscriptionMode.persistedValue}"</ID>
+    <ID>MaxLineLength:GatewaySettingsDraftState.kt$GatewaySettingsDraftState.Companion$colloquialNormalizationStrengthInput = String.format(Locale.US, "%.2f", settings.colloquialNormalizationStrength)</ID>
+    <ID>MaxLineLength:GatewaySettingsDraftState.kt$GatewaySettingsDraftState.Companion$transcriptionRepeatSuppressionInput = String.format(Locale.US, "%.2f", settings.transcriptionRepeatSuppression)</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(localEndpointUrl = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(localModelPath = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(openClawDeviceToken = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(openClawGatewayToken = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(openClawServerAddress = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(openClawSessionKey = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(remoteModel = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null || value.isBlank()) ignored += key else applyIfChanged(key, updated.copy(whisperUrl = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientDetectionHoldFrames = value.coerceIn(1, 30)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientDetectionReleaseFrames = value.coerceIn(1, 30)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientDynamicContrastMax = value.coerceIn(0.005, 0.20)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainFactor = value.coerceIn(0.1, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainMinGain = value.coerceIn(0.1, 2.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainSmoothingFast = value.coerceIn(0.05, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainSmoothingSlow = value.coerceIn(0.01, 0.50)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainStabilityReduction = value.coerceIn(0.0, 0.80)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientGainStabilityThreshold = value.coerceIn(0.1, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientRmsVarianceMax = value.coerceIn(0.01, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientSpectrumMotionMax = value.coerceIn(0.01, 0.50)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientSpeechOverrideDynamicContrast = value.coerceIn(0.005, 0.20)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientSpeechOverrideSpectrumMotion = value.coerceIn(0.01, 0.50)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientSpeechPenalty = value.coerceIn(0.0, 0.80)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(ambientStabilityThreshold = value.coerceIn(0.1, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(apiPort = value.coerceIn(1024, 65535)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(assistantPitch = value.coerceIn(0.7, 1.4)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(assistantSpeechRate = value.coerceIn(0.6, 1.8)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(colloquialNormalizationStrength = value.coerceIn(0.0, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(debugMaxSpeechSegmentMs = value.coerceIn(300, 5000)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(debugMinTranscriptionMs = value.coerceIn(100, 3000)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(debugPhraseBreakSilenceMs = value.coerceIn(500, 4000)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(debugSpeechHoldMs = value.coerceIn(100, 1200)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(maxTransientCrestFactor = value.coerceIn(1.0, 20.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(maxZeroCrossingRate = value.coerceIn(0.10, 0.50)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(microphoneAutoSensitivityEnabled = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(microphoneGain = value.coerceIn(1.0, 6.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(minSpeechCandidateFrames = value.coerceIn(1, 10)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(minSpeechPeakNormalized = value.coerceIn(0.001, 0.20)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(minSpeechRms = value.coerceIn(0.001, 0.10)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(minZeroCrossingRate = value.coerceIn(0.001, 0.10)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(noiseGateMultiplier = value.coerceIn(0.5, 5.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(openClawAccumulationWindowSecs = value.coerceIn(1, 10)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(screenHoldSeconds = value.coerceIn(1, 30)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(transcriptClearTimeoutSecs = value.coerceIn(0, 300)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(transcriptionRepeatSuppression = value.coerceIn(0.0, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(vadThreshold = value.coerceIn(0.001, 0.05)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(voiceChannelFollowUpSeconds = value.coerceIn(3, 60)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(voiceChannelIdlePromptSeconds = value.coerceIn(30, 1800)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(voiceChannelSkillEnabled = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(whisperCompressionRatioThreshold = value.coerceIn(1.0, 5.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(whisperConditionOnPreviousText = value))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(whisperNoSpeechThreshold = value.coerceIn(0.0, 1.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsPatch.kt$if (value == null) ignored += key else applyIfChanged(key, updated.copy(whisperRepetitionPenalty = value.coerceIn(1.0, 2.0)))</ID>
+    <ID>MaxLineLength:GatewaySettingsState.kt$GatewaySettingsState$colloquialNormalizationStrengthInput = String.format(Locale.US, "%.2f", settings.colloquialNormalizationStrength)</ID>
+    <ID>MaxLineLength:GatewaySettingsState.kt$colloquialNormalizationStrengthInput = String.format(Locale.US, "%.2f", initial.colloquialNormalizationStrength)</ID>
+    <ID>MaxLineLength:GatewaySettingsState.kt$transcriptionRepeatSuppressionInput = String.format(Locale.US, "%.2f", initial.transcriptionRepeatSuppression)</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Emotion) null else TranscriptCardHint.Emotion</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Learning) null else TranscriptCardHint.Learning</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Listening) null else TranscriptCardHint.Listening</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.OpenClawDispatch) null else TranscriptCardHint.OpenClawDispatch</ID>
+    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.SameVoice) null else TranscriptCardHint.SameVoice</ID>
+    <ID>MaxLineLength:GestureDebugPage.kt$.</ID>
+    <ID>MaxLineLength:LocalSherpaOnnxEngine.kt$LocalSherpaOnnxEngine$"Pacote local incompleto para ${bundle.id}. Arquivos obrigatorios: ${bundle.requiredFiles.joinToString(", ")}"</ID>
+    <ID>MaxLineLength:MainActivity.kt$LaunchedEffect</ID>
+    <ID>MaxLineLength:MainActivity.kt$settingsBackupStatus = "Falha ao importar JSON: ${result.exceptionOrNull()?.message ?: "erro desconhecido"}"</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$Log.i(TAG, "Camera gesture recognizer already running; callback refreshed (previewVisible=$previewVisible).")</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$else -&gt; kotlin.math.abs(thumbTip.x - wrist.x) &lt; kotlin.math.abs(indexMcp.x - wrist.x) + THUMB_HORIZONTAL_TOLERANCE</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val indexExtended = isFingerExtended(points, HandLandmark.INDEX_FINGER_MCP, HandLandmark.INDEX_FINGER_PIP, HandLandmark.INDEX_FINGER_DIP, HandLandmark.INDEX_FINGER_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val indexFolded = isFingerFolded(points, HandLandmark.INDEX_FINGER_MCP, HandLandmark.INDEX_FINGER_PIP, HandLandmark.INDEX_FINGER_DIP, HandLandmark.INDEX_FINGER_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val middleExtended = isFingerExtended(points, HandLandmark.MIDDLE_FINGER_MCP, HandLandmark.MIDDLE_FINGER_PIP, HandLandmark.MIDDLE_FINGER_DIP, HandLandmark.MIDDLE_FINGER_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val middleFolded = isFingerFolded(points, HandLandmark.MIDDLE_FINGER_MCP, HandLandmark.MIDDLE_FINGER_PIP, HandLandmark.MIDDLE_FINGER_DIP, HandLandmark.MIDDLE_FINGER_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val pinkyExtended = isFingerExtended(points, HandLandmark.PINKY_MCP, HandLandmark.PINKY_PIP, HandLandmark.PINKY_DIP, HandLandmark.PINKY_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val pinkyFolded = isFingerFolded(points, HandLandmark.PINKY_MCP, HandLandmark.PINKY_PIP, HandLandmark.PINKY_DIP, HandLandmark.PINKY_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val ringExtended = isFingerExtended(points, HandLandmark.RING_FINGER_MCP, HandLandmark.RING_FINGER_PIP, HandLandmark.RING_FINGER_DIP, HandLandmark.RING_FINGER_TIP)</ID>
+    <ID>MaxLineLength:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$val ringFolded = isFingerFolded(points, HandLandmark.RING_FINGER_MCP, HandLandmark.RING_FINGER_PIP, HandLandmark.RING_FINGER_DIP, HandLandmark.RING_FINGER_TIP)</ID>
+    <ID>MaxLineLength:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$"Gateway OpenClaw Android fechou antes da resposta final ($code): ${reason.ifBlank { "sem motivo" }}"</ID>
+    <ID>MaxLineLength:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$"Gateway OpenClaw Android fechou antes do hello.ack ($code): ${reason.ifBlank { "sem motivo" }}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Auto gain update: gain=${"%.2f".format(dynamicMicrophoneGain)} mode=$noiseLabel contrast=${"%.4f".format(dynamicContrast)} score=${"%.2f".format(stabilityScore)}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Commit automatico (${if (autoCommitBySilence) "silencio" else "pos-transcricao"}): despachando frase."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Houve sobreposicao de vozes neste trecho e o OpenClaw reteve a resposta para evitar agir no contexto errado."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"O OpenClaw nao conseguiu confirmar que essa fala era direcionada a ele. Diga o nome do assistente ou um apelido para destravar o fluxo."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"OpenClaw reply recebida: ${reply.rawReplyText.take(180)} | patch=${patchSummary ?: "nenhum"} | actions=${reply.actions.size}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Patch aplicado parcialmente. applied=${result.appliedKeys.joinToString(",")} ignored=${result.ignoredKeys.joinToString(",")}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Reply OpenClaw sem fala automatica. attention=$requiresAttention systemInfo=${reply.isSystemInfo} apiSuppressed=$speechSuppressedByApi tags=${reply.tags.joinToString(",")}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$"Voice TTS aplicada: ${targetVoice.name} | locale=${targetVoice.locale} | style=${settings.assistantVoiceStyle.persistedValue}"</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$(lastWarnedGain.isNaN() || abs(dynamicMicrophoneGain - lastWarnedGain) &gt;= AMBIENT_GAIN_WARNING_DELTA)</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$)</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$@Volatile private var openClawAccumulationWindowMs: Long = GatewaySettingsStore.DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS * 1000L</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$Log.i(TAG, "Segmento com baixa confianca local mantido para o OpenClaw decidir: bytes=${pcmBytes.size}, duracao=${durationMs}ms.")</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$Log.i(TAG, "Segmento rejeitado pela verificacao de voz: score=${"%.3f".format(score)} &lt; ${"%.2f".format(hardRejectThreshold)} (duracao=${durationMs}ms).")</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$Log.i(TAG, "Sobreposicao provavel de vozes detectada; continuidade de falante congelada neste trecho.")</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$Log.i(TAG, "Verificacao de voz em faixa cinzenta: score=${"%.3f".format(score)} (limiar ${"%.2f".format(effectiveThreshold)}); servidor decide.")</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$Log.w(TAG, "Indicador 'mantido' ha mais de ${INDEX_HOLD_MAX_MS / 1000}s: ignorando como falso positivo.")</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$TranscriptTextPipeline.isNeutralMarkerTranscript(phrase) -&gt; "OpenClaw recebeu marcador neutro para decidir contexto."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$TranscriptTextPipeline.shouldIgnoreAmbientTranscript(phrase) -&gt; "OpenClaw recebeu frase ambiente para decidir contexto."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$class</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$decision.reason == "ambient_conversation" -&gt; "OpenClaw recebeu frase ambiente para decidir contexto."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$decision.reason == "idle_confirmation_window" -&gt; "OpenClaw recebeu frase fora do contexto recente; pode pedir confirmacao."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$if</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$lastAssistantReply = if (requiresAttention || reply.isSystemInfo) "" else displayReply.ifBlank { it.lastAssistantReply }</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$maxSpeechSegmentMs = (settings.debugMaxSpeechSegmentMs?.takeIf { it &gt; 0 } ?: baseProfile.maxSpeechSegmentMs.toInt()).toLong()</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$minTranscriptionMs = (settings.debugMinTranscriptionMs?.takeIf { it &gt; 0 } ?: baseProfile.minTranscriptionMs.toInt()).toLong()</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$phraseBreakSilenceMs = (settings.debugPhraseBreakSilenceMs?.takeIf { it &gt; 0 } ?: baseProfile.phraseBreakSilenceMs.toInt()).toLong()</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$state.multipleVoicesLikely -&gt; "OpenClaw recebeu trecho com sobreposicao provavel para decidir contexto."</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService$systemInfoMessageUntilEpochMs = if (systemInfoMessage != null) System.currentTimeMillis() + 8_000L else it.systemInfoMessageUntilEpochMs</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DYNAMIC_CONTRAST_MAX = 0.050 // Raised: 0.014 was too low and zeroed out the dynamic score for music/loud ambient</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_STABILITY_THRESHOLD = 0.35 // Lowered: gain reduction should trigger earlier for stable ambient environments</ID>
+    <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_OVERRIDE_DYNAMIC_CONTRAST = 0.050 // Raised: 0.018 was firing on all music/noise, blocking gain reduction</ID>
+    <ID>MaxLineLength:SetupWizardPage.kt$if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"</ID>
+    <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$append(" Nao adicione fechamentos ou cortesias como \"obrigado\", \"obrigada\", \"tchau\", \"ate a proxima\" ou similares se nao estiverem claramente audiveis.")</ID>
+    <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$val remainingWords = words.dropLast(suffixWords).joinToString(" ").trim().trimEnd(',', '.', ';', ':', '!', '?')</ID>
+    <ID>MayBeConst:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private val LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000L</ID>
+    <ID>NestedBlockDepth:GatewaySettingsPatch.kt$fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySettingsPatchResult</ID>
+    <ID>NestedBlockDepth:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
+    <ID>NestedBlockDepth:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun runCaptureLoop(recorder: AudioRecord, bufferSize: Int)</ID>
+    <ID>NewLineAtEndOfFile:GatewayConfigCatalog.kt$com.sufficit.ai.gateway.config.GatewayConfigCatalog.kt</ID>
+    <ID>NewLineAtEndOfFile:GatewaySettingsDraftState.kt$com.sufficit.ai.gateway.state.GatewaySettingsDraftState.kt</ID>
+    <ID>NewLineAtEndOfFile:GatewaySettingsJson.kt$com.sufficit.ai.gateway.config.GatewaySettingsJson.kt</ID>
+    <ID>NewLineAtEndOfFile:GatewaySettingsPatch.kt$com.sufficit.ai.gateway.config.GatewaySettingsPatch.kt</ID>
+    <ID>NewLineAtEndOfFile:GestureDebugPage.kt$com.sufficit.ai.gateway.GestureDebugPage.kt</ID>
+    <ID>NewLineAtEndOfFile:MediaPipeCameraGestureRecognizer.kt$com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer.kt</ID>
+    <ID>NewLineAtEndOfFile:SpeakerContinuityHistoryLogger.kt$com.sufficit.ai.gateway.history.SpeakerContinuityHistoryLogger.kt</ID>
+    <ID>NewLineAtEndOfFile:SpectrumDiagnosticsLogger.kt$com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger.kt</ID>
+    <ID>NewLineAtEndOfFile:TranscriptHistoryLogger.kt$com.sufficit.ai.gateway.history.TranscriptHistoryLogger.kt</ID>
+    <ID>ReturnCount:ColloquialNormalizationCatalog.kt$ColloquialNormalizationCatalog$private fun parseRule(line: String): ColloquialNormalizationRule?</ID>
+    <ID>ReturnCount:FistCountdownOverlay.kt$@Composable fun FistCountdownOverlay(modifier: Modifier = Modifier)</ID>
+    <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun conversation(session: IHTTPSession): Response</ID>
+    <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun gesture(session: IHTTPSession): Response</ID>
+    <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun route(session: IHTTPSession): Response</ID>
+    <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun say(session: IHTTPSession): Response</ID>
+    <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer.Companion$fun startIfEnabled( enabled: Boolean, token: String, port: Int, bindAll: Boolean, tokenProvider: () -&gt; String, actions: GatewayApiActions ): GatewayApiServer?</ID>
+    <ID>ReturnCount:GatewayModelDownloadSupport.kt$fun huggingFaceRepoId(modelName: String): String</ID>
+    <ID>ReturnCount:GatewayPermissionSupport.kt$fun Context.hasNotificationPermission(): Boolean</ID>
+    <ID>ReturnCount:GatewaySettings.kt$GatewaySettingsStore$private fun normalizeModelName(rawModelName: String, defaultModelName: String): String</ID>
+    <ID>ReturnCount:GatewaySettings.kt$GatewaySettingsStore$private fun normalizeOpenClawServerAddress(value: String): String</ID>
+    <ID>ReturnCount:GatewaySettings.kt$GatewaySettingsStore$private fun normalizeStoredModelName(storedValue: String, defaultModelName: String): String</ID>
+    <ID>ReturnCount:GatewaySettings.kt$GatewaySettingsStore.Companion$fun buildGatewayUrl(serverAddress: String): String</ID>
+    <ID>ReturnCount:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
+    <ID>ReturnCount:GestureCommandFooter.kt$@Composable fun GestureCommandFooter(modifier: Modifier = Modifier)</ID>
+    <ID>ReturnCount:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
+    <ID>ReturnCount:HandGloveOverlay.kt$private fun smoothPathThrough(points: List&lt;Offset&gt;): Path</ID>
+    <ID>ReturnCount:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$fun analyzePcm16( pcmBytes: ByteArray, sampleRate: Int ): LocalVoiceAnalysisResult</ID>
+    <ID>ReturnCount:MainActivity.kt$MainActivity.Companion$fun captureWindowToFile(): java.io.File?</ID>
+    <ID>ReturnCount:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun analyzeFrame(image: ImageProxy)</ID>
+    <ID>ReturnCount:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun imageProxyToBitmap(image: ImageProxy): Bitmap?</ID>
+    <ID>ReturnCount:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun maybeAnalyzeFace(bitmap: Bitmap)</ID>
+    <ID>ReturnCount:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun obtainFaceMesh(): FaceMesh?</ID>
+    <ID>ReturnCount:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun onFaceMeshResult(result: FaceMeshResult)</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$override fun onInit(status: Int)</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun dispatchTranscriptToOpenClaw( phrase: String, state: GatewayUiState )</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun estimateNormalizedRmsVariance(rmsWindow: ArrayDeque&lt;Double&gt;): Double</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun evaluateSpeakerVoiceGate(pcmBytes: ByteArray, preRollPrefixBytes: Int = 0): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun finalizeSpeechSegment( pcmBytes: ByteArray, settings: GatewaySettings, durationMs: Long, captureProfile: CaptureProfile, // Bytes de pre-roll (ambiente pre-fala) no INICIO de pcmBytes: vao // para a transcricao (e o motivo do pre-roll existir), mas ficam // FORA da verificacao de locutor — ambiente dilui o embedding e // infla a duracao usada no limiar adaptativo de trecho curto. preRollPrefixBytes: Int = 0 )</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun handleWakeWordAudio( buffer: ShortArray, readCount: Int, now: Long, settings: GatewaySettings )</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun isImprobableIsolatedWordCandidate( normalizedToken: String, knownWords: Set&lt;String&gt; ): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun isIndexFingerHeld(now: Long): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun isVoiceFriendlyReplyLine(line: String): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun mergeCurrentTranscript( current: String, incoming: String ): String</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun mergePendingDispatchText( existing: String, incoming: String ): String</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun removeImprobableIsolatedWords( text: String, settings: GatewaySettings, strength: Double ): String</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun resolveAssistantVoice( tts: TextToSpeech, style: AssistantVoiceStyle ): android.speech.tts.Voice?</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun sampleLipActivityForSegment(now: Long)</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun sanitizeImplausibleShortTranscript( text: String, settings: GatewaySettings ): String</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun scheduleTranscriptDispatchToOpenClaw( phrase: String, state: GatewayUiState, immediate: Boolean = false )</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun segmentLooksLikeSpeech( pcmBytes: ByteArray, settings: GatewaySettings ): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun shouldAdvanceTranscriptWindow( current: String, incoming: String, phraseAdvanceReady: Boolean ): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun shouldIgnoreAmbientTranscript(text: String): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun shouldSuppressAttentionPromptSpeech( text: String, requiresAttention: Boolean ): Boolean</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun speakAssistantReply(replyText: String)</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun startCaptureIfNeeded()</ID>
+    <ID>ReturnCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun transcriptLooksUnfinished(text: String): Boolean</ID>
+    <ID>ReturnCount:SpeakerContinuityHistoryLogger.kt$SpeakerContinuityHistoryLogger$private fun needsRotation(file: File): Boolean</ID>
+    <ID>ReturnCount:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$fun updateWithComputation( currentState: SpeakerContinuityState?, signature: VoiceSignature? ): SpeakerContinuityUpdateResult</ID>
+    <ID>ReturnCount:SpeakerVerifier.kt$SpeakerVerifier$fun embed(pcmBytes: ByteArray, sampleRateHz: Int): FloatArray?</ID>
+    <ID>ReturnCount:SpectrumDiagnosticsLogger.kt$SpectrumDiagnosticsLogger$private fun needsRotation(file: File): Boolean</ID>
+    <ID>ReturnCount:TranscriptHistoryLogger.kt$TranscriptHistoryLogger$private fun needsRotation(file: File): Boolean</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$fun isLikelyHallucinatedRepetition(text: String): Boolean</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$fun shouldIgnoreAmbientTranscript(text: String): Boolean</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$fun wakeTermOnlyTranscript(text: String, settings: GatewaySettings): String?</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$private fun applySafePortugueseColloquialNormalization( context: Context, text: String, strength: Double ): String</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$private fun discardLikelyHallucinatedCourtesyOnlyTranscript( text: String, onDiscardedShortTranscript: ((String) -&gt; Unit)? = null ): String</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$private fun isImprobableIsolatedWordCandidate( normalizedToken: String, knownWords: Set&lt;String&gt; ): Boolean</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$private fun removeLikelyHallucinatedCourtesyTail(text: String): String</ID>
+    <ID>ReturnCount:TranscriptTextPipeline.kt$TranscriptTextPipeline$private fun sanitizeImplausibleShortTranscript( text: String, settings: GatewaySettings, onDiscardedShortTranscript: ((String) -&gt; Unit)? = null ): String</ID>
+    <ID>ReturnCount:TranscriptWindowing.kt$TranscriptWindowing$fun mergeCurrentTranscript( current: String, incoming: String, repeatSuppression: Double ): String</ID>
+    <ID>ReturnCount:TranscriptWindowing.kt$TranscriptWindowing$fun shouldAdvanceTranscriptWindow( current: String, incoming: String, phraseAdvanceReady: Boolean, repeatSuppression: Double ): Boolean</ID>
+    <ID>ReturnCount:VoiceChannelSkill.kt$VoiceChannelSkill$fun evaluate( phrase: String, settings: GatewaySettings, conversationUntilEpochMs: Long, lastDirectAddressEpochMs: Long, nowEpochMs: Long = System.currentTimeMillis() ): VoiceChannelSkillDecision</ID>
+    <ID>ReturnCount:VoiceChannelSkill.kt$VoiceChannelSkill$private fun containsWakeTerm( normalizedText: String, compactedText: String, wakeTerm: WakeTerm ): Boolean</ID>
+    <ID>ReturnCount:WakeWordDetector.kt$WakeWordDetector$fun feed(buffer: ShortArray, count: Int, nowMs: Long): WakeWordFeedResult</ID>
+    <ID>ReturnCount:WakeWordDetector.kt$WakeWordDetector$fun suggestedThreshold(): Double?</ID>
+    <ID>ReturnCount:WakeWordDetector.kt$WakeWordDetector$private fun prepareTemplate(samples: ShortArray): Template?</ID>
+    <ID>ReturnCount:WhisperConfigurationGuard.kt$fun checkWhisperConfiguration(whisperUrl: String, authToken: String): WhisperConfigurationCheck</ID>
+    <ID>ThrowsCount:OpenClawGatewayClient.kt$OpenClawGatewayClient$private fun executeGatewayFlow( config: OpenClawGatewayConfig, transcript: String?, timeoutMs: Long ): OpenClawGatewayReply</ID>
+    <ID>ThrowsCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
+    <ID>TooGenericExceptionCaught:GatewayApiServer.kt$GatewayApiServer$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:GatewayApiServer.kt$GatewayApiServer.Companion$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$ex: Throwable</ID>
+    <ID>TooGenericExceptionCaught:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:OpenClawGatewayPersistentConnection.kt$OpenClawGatewayPersistentConnection.&lt;no name provided&gt;$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:SpeakerVerifier.kt$SpeakerVerifier$ex: Throwable</ID>
+    <ID>TooManyFunctions:GatewayApiActions.kt$GatewayApiActions</ID>
+    <ID>TooManyFunctions:GatewayApiServer.kt$GatewayApiServer : NanoHTTPD</ID>
+    <ID>TooManyFunctions:GatewayPermissionSupport.kt$com.sufficit.ai.gateway.GatewayPermissionSupport.kt</ID>
+    <ID>TooManyFunctions:GatewayRuntime.kt$GatewayRuntime</ID>
+    <ID>TooManyFunctions:GatewaySettings.kt$GatewaySettingsStore</ID>
+    <ID>TooManyFunctions:GatewayViewModel.kt$GatewayViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:HandGloveOverlay.kt$com.sufficit.ai.gateway.HandGloveOverlay.kt</ID>
+    <ID>TooManyFunctions:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer : AutoCloseable</ID>
+    <ID>TooManyFunctions:OpenClawGatewayClient.kt$OpenClawGatewayClient</ID>
+    <ID>TooManyFunctions:RoomAudioForegroundService.kt$RoomAudioForegroundService : ServiceOnInitListenerGatewayApiActions</ID>
+    <ID>TooManyFunctions:SpeakerContinuityHistoryLogger.kt$SpeakerContinuityHistoryLogger</ID>
+    <ID>TooManyFunctions:TranscriptBadgeStyles.kt$com.sufficit.ai.gateway.TranscriptBadgeStyles.kt</ID>
+    <ID>TooManyFunctions:TranscriptTextPipeline.kt$TranscriptTextPipeline</ID>
+    <ID>TooManyFunctions:WakeWordDetector.kt$WakeWordDetector</ID>
+    <ID>UnusedParameter:GatewayConfigActionsFactory.kt$currentHistoryState: () -&gt; GatewayHistoryState</ID>
+    <ID>UnusedParameter:GatewayConfigActionsFactory.kt$currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot</ID>
+    <ID>UnusedParameter:GatewayConfigActionsFactory.kt$updateHistoryState: (GatewayHistoryState) -&gt; Unit</ID>
+    <ID>UnusedParameter:GatewaySettings.kt$GatewaySettingsStore.Companion$localModelPath: String</ID>
+    <ID>UnusedParameter:RoomAudioForegroundService.kt$RoomAudioForegroundService$settings: GatewaySettings</ID>
+    <ID>UnusedParameter:RoomAudioForegroundService.kt$RoomAudioForegroundService$strength: Double</ID>
+    <ID>UnusedParameter:TranscriptTextPipeline.kt$TranscriptTextPipeline$onDiscardedShortTranscript: ((String) -&gt; Unit)? = null</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun applyPortugueseColloquialNormalization(text: String): String</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun applyTranscriptionDictionary(text: String, settings: GatewaySettings): String</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun buildTranscriptionPrompt(settings: GatewaySettings): String</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun runLocalSelfTestIfNeeded(settings: GatewaySettings)</ID>
+    <ID>UnusedPrivateMember:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun shouldSuppressAttentionPromptSpeech( text: String, requiresAttention: Boolean ): Boolean</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DETECTION_HOLD_FRAMES = 6</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DETECTION_RELEASE_FRAMES = 4</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DYNAMIC_CONTRAST_MAX = 0.050 // Raised: 0.014 was too low and zeroed out the dynamic score for music/loud ambient</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_SMOOTHING_FAST = 0.40</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_SMOOTHING_SLOW = 0.14</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_STABILITY_THRESHOLD = 0.35 // Lowered: gain reduction should trigger earlier for stable ambient environments</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_NOISE_GAIN_FACTOR = 0.58</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_NOISE_GAIN_STABILITY_REDUCTION = 0.22</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_NOISE_MIN_GAIN = 0.55</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_RMS_VARIANCE_MAX = 0.22</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPECTRUM_MOTION_MAX = 0.060</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_LIKELY_PENALTY = 0.20</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_OVERRIDE_DYNAMIC_CONTRAST = 0.050 // Raised: 0.018 was firing on all music/noise, blocking gain reduction</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_OVERRIDE_SPECTRUM_MOTION = 0.090</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_STABILITY_SCORE_THRESHOLD = 0.66</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MAX_SPEECH_ZERO_CROSSING_RATE = 0.24</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MAX_TRANSIENT_CREST_FACTOR = 5.8</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MIN_SPEECH_CANDIDATE_FRAMES = 3</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MIN_SPEECH_PEAK_NORMALIZED = 0.035</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MIN_SPEECH_RMS = 0.010</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val MIN_SPEECH_ZERO_CROSSING_RATE = 0.015</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val NOISE_GATE_MULTIPLIER = 1.8</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val OPENCLAW_REASONING_HOLD_MS = 2200L</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val OPENCLAW_UNCERTAIN_PREFIX = "[?]"</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MAX_SPEECH_ZERO_CROSSING_RATE = 0.28</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MAX_TRANSIENT_CREST_FACTOR = 7.2</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_CANDIDATE_FRAMES = 2</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_PEAK_NORMALIZED = 0.024</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_RMS = 0.008</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_ZERO_CROSSING_RATE = 0.008</ID>
+    <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_NOISE_GATE_MULTIPLIER = 1.45</ID>
+    <ID>UseCheckOrError:LocalWhisperEngine.kt$LocalWhisperEngine$throw IllegalStateException( "Modelo parece incompleto (${modelFileSize} bytes). Rebaixe o arquivo ${modelFile.name}." )</ID>
+    <ID>UseCheckOrError:OpenClawGatewayClient.kt$OpenClawGatewayClient$throw IllegalStateException("OpenClaw nao retornou resposta final.")</ID>
+    <ID>UseCheckOrError:OpenClawGatewayClient.kt$OpenClawGatewayClient$throw IllegalStateException("Timeout aguardando resposta do canal Android do OpenClaw.")</ID>
+  </CurrentIssues>
+</SmellBaseline>

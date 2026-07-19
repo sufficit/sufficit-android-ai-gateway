@@ -52,6 +52,9 @@ import com.sufficit.ai.gateway.runtime.GatewayUiState
 import com.sufficit.ai.gateway.transcription.local.LocalSherpaOnnxEngine
 import com.sufficit.ai.gateway.transcription.local.LocalWhisperEngine
 import com.sufficit.ai.gateway.transcription.WhisperApiClient
+import com.sufficit.ai.gateway.transcription.WhisperConfigurationCheck
+import com.sufficit.ai.gateway.transcription.WhisperHttpException
+import com.sufficit.ai.gateway.transcription.checkWhisperConfiguration
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.BufferedInputStream
@@ -192,7 +195,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     // nunca volte (websocket caido), evitando o balao preso.
     @Volatile private var assistantProcessingSinceMs = 0L
     @Volatile private var lastQueueReconcileAtEpochMs = 0L
-    @Volatile private var cameraGestureGateOpen = false
 
     @Volatile private var transcriptClearTimeoutSecs = GatewaySettingsStore.DEFAULT_TRANSCRIPT_CLEAR_TIMEOUT_SECS
     @Volatile private var openClawAccumulationWindowMs: Long = GatewaySettingsStore.DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS * 1000L
@@ -231,10 +233,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
         openClawExecutor = Executors.newSingleThreadExecutor()
         textToSpeech = TextToSpeech(applicationContext, this)
-        GatewayRuntime.cameraGestureGate().value.let { gateOpen ->
-            cameraGestureGateOpen = gateOpen
-            Log.i(TAG, "Camera gesture gate synced on create: open=$gateOpen")
-        }
+        Log.i(TAG, "Camera gesture gate at create: open=${GatewayRuntime.cameraGestureGate().value}")
         persistentOpenClawConnection = OpenClawGatewayPersistentConnection(
             object : OpenClawGatewayPersistentConnection.Listener {
                 override fun onConnected() {
@@ -618,12 +617,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         if (settings != loadedSettings) {
             runCatching { settingsStore?.save(settings) ?: GatewaySettingsStore(this).save(settings) }
         }
-        cameraGestureGateOpen = if (settings.cameraGestureEnabled) {
-            GatewayRuntime.cameraGestureGate().value
-        } else {
-            true
-        }
-        Log.i(TAG, "Capture loop gate state: enabled=${settings.cameraGestureEnabled}, open=$cameraGestureGateOpen")
+        val initialGateOpen = resolveCameraGestureGateOpen(settings)
+        Log.i(TAG, "Capture loop gate state: enabled=${settings.cameraGestureEnabled}, open=$initialGateOpen")
         updateCameraGestureGateStatus(settings)
         val captureProfile = resolveCaptureProfile(settings)
         Log.i(
@@ -1530,8 +1525,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 try {
                 val rawResult = when (settings.transcriptionMode) {
                     TranscriptionMode.REMOTE -> {
-                        if (settings.whisperUrl.isBlank()) {
-                            throw IllegalStateException("Endpoint remoto nao configurado.")
+                        val configCheck = checkWhisperConfiguration(settings.whisperUrl, settings.whisperAuthToken)
+                        if (configCheck is WhisperConfigurationCheck.Blocked) {
+                            throw IllegalStateException(configCheck.reason)
                         }
 
                         whisperApiClient.transcribe(
@@ -1768,8 +1764,20 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
                 Log.e(TAG, "Whisper transcription failed", ex)
                 val msg = ex.message.orEmpty()
-                // HTTP 4xx/5xx are transient (e.g. 429 capacity, 503 unavailable) — don't kill the service
-                if (ex is IllegalStateException && (msg.contains("HTTP 4") || msg.contains("HTTP 5"))) {
+                if (ex is WhisperHttpException && ex.isAuthFailure) {
+                    // Token invalido/ausente: distinto de indisponibilidade transitoria
+                    // (ver o ramo generico HTTP 4xx/5xx abaixo) para nao confundir o
+                    // usuario com "servidor fora do ar" quando o problema e o token.
+                    GatewayRuntime.update {
+                        it.copy(
+                            transcribing = false,
+                            lastError = msg.take(120),
+                            statusText = "Whisper: token invalido ou ausente (HTTP ${ex.statusCode})."
+                        )
+                    }
+                    refreshNotification("Whisper: token invalido.")
+                } else if (ex is IllegalStateException && (msg.contains("HTTP 4") || msg.contains("HTTP 5"))) {
+                    // HTTP 4xx/5xx are transient (e.g. 429 capacity, 503 unavailable) — don't kill the service
                     GatewayRuntime.update {
                         it.copy(
                             transcribing = false,
@@ -1949,21 +1957,20 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         )
     }
 
-    private fun syncCameraGestureGateFromRuntime(settings: GatewaySettings): Boolean {
-        cameraGestureGateOpen = if (settings.cameraGestureEnabled) {
+    private fun resolveCameraGestureGateOpen(settings: GatewaySettings): Boolean {
+        return if (settings.cameraGestureEnabled) {
             GatewayRuntime.cameraGestureGate().value
         } else {
             true
         }
-        return cameraGestureGateOpen
     }
 
     private fun isCameraGestureGateBlocking(settings: GatewaySettings): Boolean {
-        return settings.cameraGestureEnabled && !syncCameraGestureGateFromRuntime(settings)
+        return settings.cameraGestureEnabled && !resolveCameraGestureGateOpen(settings)
     }
 
     private fun updateCameraGestureGateStatus(settings: GatewaySettings) {
-        val gateOpen = syncCameraGestureGateFromRuntime(settings)
+        val gateOpen = resolveCameraGestureGateOpen(settings)
         if (!settings.cameraGestureEnabled) {
             return
         }
@@ -2623,7 +2630,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             //    a escuta ja ativa — e o caso "chuchu" com o telefone dormindo.
             // Somente com a escuta ativa E a tela acesa o "chuchu" no meio da
             // conversa e ignorado (nao interfere no papo em andamento).
-            val gateBlocked = settings.cameraGestureEnabled && !cameraGestureGateOpen
+            val gateBlocked = isCameraGestureGateBlocking(settings)
             val screenOff = getSystemService(PowerManager::class.java)?.isInteractive == false
             if (!standbyMode && !gateBlocked && !screenOff) {
                 Log.i(
@@ -2647,7 +2654,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             // Chamar pela palavra de ativacao = enderecamento direto: a fala
             // seguinte e para o assistente.
             markDirectAddressNow()
-            cameraGestureGateOpen = true
             GatewayRuntime.setCameraGestureGateOpen(true)
             GatewayRuntime.setCameraGestureStatus("Palavra de ativacao detectada. Abrindo microfone.")
             if (screenOff) {

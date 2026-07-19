@@ -170,32 +170,7 @@ fun buildSettings(
 ): GatewaySettings {
     val runtimeDefaults = GatewayConfigCatalog.ensureSeedLoaded(context)
     val runtimeCurrent = GatewayConfigCatalog.loadRuntime(context)
-    val parsedMicrophoneGain = input.microphoneGainInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_MICROPHONE_GAIN
-    val parsedAssistantSpeechRate = input.assistantSpeechRateInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_ASSISTANT_SPEECH_RATE
-    val parsedAssistantPitch = input.assistantPitchInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_ASSISTANT_PITCH
-    val parsedVoiceChannelFollowUpSeconds = input.voiceChannelFollowUpSecondsInput.toIntOrNull()
-        ?: GatewaySettingsStore.DEFAULT_VOICE_CHANNEL_FOLLOW_UP_SECONDS
-    val parsedVoiceChannelIdlePromptSeconds = input.voiceChannelIdlePromptSecondsInput.toIntOrNull()
-        ?: GatewaySettingsStore.DEFAULT_VOICE_CHANNEL_IDLE_PROMPT_SECONDS
-    val parsedColloquialNormalizationStrength = input.colloquialNormalizationStrengthInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_COLLOQUIAL_NORMALIZATION_STRENGTH
-    val parsedTranscriptionRepeatSuppression = input.transcriptionRepeatSuppressionInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_TRANSCRIPTION_REPEAT_SUPPRESSION
-    val parsedThreshold = input.vadThresholdInput.replace(',', '.').toDoubleOrNull()
-        ?: GatewaySettingsStore.DEFAULT_VAD_THRESHOLD
-    val parsedDebugSpeechHoldMs = input.debugSpeechHoldMsInput.trim().toIntOrNull()?.takeIf { it > 0 }
-    val parsedDebugMaxSpeechSegmentMs = input.debugMaxSpeechSegmentMsInput.trim().toIntOrNull()?.takeIf { it > 0 }
-    val parsedDebugMinTranscriptionMs = input.debugMinTranscriptionMsInput.trim().toIntOrNull()?.takeIf { it > 0 }
-    val parsedDebugPhraseBreakSilenceMs = input.debugPhraseBreakSilenceMsInput.trim().toIntOrNull()?.takeIf { it > 0 }
-    val parsedScreenHoldSeconds = input.screenHoldSecondsInput.toIntOrNull()
-        ?: GatewaySettingsStore.DEFAULT_SCREEN_HOLD_SECONDS
-    val parsedTranscriptClearTimeoutSecs = input.transcriptClearTimeoutSecsInput.toIntOrNull()
-        ?: GatewaySettingsStore.DEFAULT_TRANSCRIPT_CLEAR_TIMEOUT_SECS
-    val parsedOpenClawAccumulationWindowSecs = input.openClawAccumulationWindowSecsInput.toIntOrNull()
-        ?: GatewaySettingsStore.DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS
+    val numbers = normalizeSettingsNumbers(input)
 
     val resolvedWhisperAuthToken = input.whisperAuthToken.trim().ifBlank {
         runtimeCurrent?.whisperAuthToken?.trim()?.ifBlank { runtimeDefaults.whisperAuthToken }
@@ -217,12 +192,12 @@ fun buildSettings(
         voiceChannelWakeTerms = input.voiceChannelWakeTermsInput.trim().ifBlank {
             GatewaySettingsStore.DEFAULT_VOICE_CHANNEL_WAKE_TERMS
         },
-        voiceChannelFollowUpSeconds = parsedVoiceChannelFollowUpSeconds.coerceIn(3, 60),
-        voiceChannelIdlePromptSeconds = parsedVoiceChannelIdlePromptSeconds.coerceIn(30, 3600),
+        voiceChannelFollowUpSeconds = numbers.voiceChannelFollowUpSeconds,
+        voiceChannelIdlePromptSeconds = numbers.voiceChannelIdlePromptSeconds,
         assistantVoiceEnabled = input.assistantVoiceEnabled,
         assistantVoiceStyle = AssistantVoiceStyle.fromPersistedValue(input.assistantVoiceStyleValue),
-        assistantSpeechRate = parsedAssistantSpeechRate.coerceIn(0.6, 1.8),
-        assistantPitch = parsedAssistantPitch.coerceIn(0.7, 1.4),
+        assistantSpeechRate = numbers.assistantSpeechRate,
+        assistantPitch = numbers.assistantPitch,
         transcriptionMode = TranscriptionMode.fromPersistedValue(input.transcriptionModeValue),
         localModelPath = resolveLocalModelTarget(
             context = context,
@@ -231,10 +206,10 @@ fun buildSettings(
         localExecutionMode = LocalExecutionMode.fromPersistedValue(input.localExecutionModeValue),
         development = input.development,
         microphoneAutoSensitivityEnabled = input.microphoneAutoSensitivityEnabled,
-        microphoneGain = parsedMicrophoneGain.coerceIn(1.0, 6.0),
-        transcriptionRepeatSuppression = parsedTranscriptionRepeatSuppression.coerceIn(0.0, 1.0),
-        colloquialNormalizationStrength = parsedColloquialNormalizationStrength.coerceIn(0.0, 1.0),
-        vadThreshold = parsedThreshold.coerceIn(0.001, 0.2),
+        microphoneGain = numbers.microphoneGain,
+        transcriptionRepeatSuppression = numbers.transcriptionRepeatSuppression,
+        colloquialNormalizationStrength = numbers.colloquialNormalizationStrength,
+        vadThreshold = numbers.vadThreshold,
         whisperVadFilter = runtimeCurrent?.whisperVadFilter ?: runtimeDefaults.whisperVadFilter,
         whisperConditionOnPreviousText = runtimeCurrent?.whisperConditionOnPreviousText
             ?: runtimeDefaults.whisperConditionOnPreviousText,
@@ -244,16 +219,16 @@ fun buildSettings(
             ?: runtimeDefaults.whisperCompressionRatioThreshold).coerceIn(1.0, 5.0),
         whisperRepetitionPenalty = (runtimeCurrent?.whisperRepetitionPenalty
             ?: runtimeDefaults.whisperRepetitionPenalty).coerceIn(1.0, 2.0),
-        debugSpeechHoldMs = parsedDebugSpeechHoldMs,
-        debugMaxSpeechSegmentMs = parsedDebugMaxSpeechSegmentMs,
-        debugMinTranscriptionMs = parsedDebugMinTranscriptionMs,
-        debugPhraseBreakSilenceMs = parsedDebugPhraseBreakSilenceMs,
+        debugSpeechHoldMs = numbers.debugSpeechHoldMs,
+        debugMaxSpeechSegmentMs = numbers.debugMaxSpeechSegmentMs,
+        debugMinTranscriptionMs = numbers.debugMinTranscriptionMs,
+        debugPhraseBreakSilenceMs = numbers.debugPhraseBreakSilenceMs,
         transcriptionTerms = input.transcriptionTermsInput.trim(),
         transcriptionDictionary = input.transcriptionDictionaryInput.trim(),
         screenMode = ScreenMode.fromPersistedValue(input.screenModeValue),
-        screenHoldSeconds = parsedScreenHoldSeconds.coerceIn(1, 120),
-        transcriptClearTimeoutSecs = parsedTranscriptClearTimeoutSecs.coerceIn(0, 300),
-        openClawAccumulationWindowSecs = parsedOpenClawAccumulationWindowSecs.coerceIn(1, 10),
+        screenHoldSeconds = numbers.screenHoldSeconds,
+        transcriptClearTimeoutSecs = numbers.transcriptClearTimeoutSecs,
+        openClawAccumulationWindowSecs = numbers.openClawAccumulationWindowSecs,
         // Campos da API nao sao gerenciados por este snapshot da UI principal
         // (tem secao propria). Preserva o que ja esta persistido para o save
         // de normalizacao nao zerar a config da API.
@@ -267,82 +242,3 @@ fun buildSettings(
     )
 }
 
-fun currentSettingsInputSnapshot(
- localEndpointUrl: String,
- openClawServerAddress: String,
- openClawGatewayToken: String,
- openClawDeviceToken: String,
- openClawSessionKey: String,
- whisperUrl: String,
- remoteModel: String,
- whisperAuthToken: String,
- autoStartEnabled: Boolean,
- cameraGestureEnabled: Boolean,
- voiceChannelSkillEnabled: Boolean,
- voiceChannelWakeTermsInput: String,
- voiceChannelFollowUpSecondsInput: String,
- voiceChannelIdlePromptSecondsInput: String,
- assistantVoiceEnabled: Boolean,
- assistantVoiceStyleValue: String,
- assistantSpeechRateInput: String,
- assistantPitchInput: String,
- transcriptionModeValue: String,
- localModelName: String,
- localExecutionModeValue: String,
- development: Boolean,
- microphoneAutoSensitivityEnabled: Boolean,
- microphoneGainInput: String,
- transcriptionRepeatSuppressionInput: String,
- colloquialNormalizationStrengthInput: String,
- vadThresholdInput: String,
- debugSpeechHoldMsInput: String,
- debugMaxSpeechSegmentMsInput: String,
- debugMinTranscriptionMsInput: String,
- debugPhraseBreakSilenceMsInput: String,
- transcriptionTermsInput: String,
- transcriptionDictionaryInput: String,
- screenModeValue: String,
- screenHoldSecondsInput: String,
- transcriptClearTimeoutSecsInput: String,
- openClawAccumulationWindowSecsInput: String
-): GatewaySettingsInputSnapshot {
- return GatewaySettingsInputSnapshot(
- localEndpointUrl = localEndpointUrl,
- openClawServerAddress = openClawServerAddress,
- openClawGatewayToken = openClawGatewayToken,
- openClawDeviceToken = openClawDeviceToken,
- openClawSessionKey = openClawSessionKey,
- whisperUrl = whisperUrl,
- remoteModel = remoteModel,
- whisperAuthToken = whisperAuthToken,
- autoStartEnabled = autoStartEnabled,
- cameraGestureEnabled = cameraGestureEnabled,
- voiceChannelSkillEnabled = voiceChannelSkillEnabled,
- voiceChannelWakeTermsInput = voiceChannelWakeTermsInput,
- voiceChannelFollowUpSecondsInput = voiceChannelFollowUpSecondsInput,
- voiceChannelIdlePromptSecondsInput = voiceChannelIdlePromptSecondsInput,
- assistantVoiceEnabled = assistantVoiceEnabled,
- assistantVoiceStyleValue = assistantVoiceStyleValue,
- assistantSpeechRateInput = assistantSpeechRateInput,
- assistantPitchInput = assistantPitchInput,
- transcriptionModeValue = transcriptionModeValue,
- localModelName = localModelName,
- localExecutionModeValue = localExecutionModeValue,
- development = development,
- microphoneAutoSensitivityEnabled = microphoneAutoSensitivityEnabled,
- microphoneGainInput = microphoneGainInput,
- transcriptionRepeatSuppressionInput = transcriptionRepeatSuppressionInput,
- colloquialNormalizationStrengthInput = colloquialNormalizationStrengthInput,
- vadThresholdInput = vadThresholdInput,
- debugSpeechHoldMsInput = debugSpeechHoldMsInput,
- debugMaxSpeechSegmentMsInput = debugMaxSpeechSegmentMsInput,
- debugMinTranscriptionMsInput = debugMinTranscriptionMsInput,
- debugPhraseBreakSilenceMsInput = debugPhraseBreakSilenceMsInput,
- transcriptionTermsInput = transcriptionTermsInput,
- transcriptionDictionaryInput = transcriptionDictionaryInput,
- screenModeValue = screenModeValue,
- screenHoldSecondsInput = screenHoldSecondsInput,
- transcriptClearTimeoutSecsInput = transcriptClearTimeoutSecsInput,
- openClawAccumulationWindowSecsInput = openClawAccumulationWindowSecsInput
- )
-}

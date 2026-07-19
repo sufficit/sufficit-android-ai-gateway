@@ -1,5 +1,6 @@
 package com.sufficit.ai.gateway
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,8 @@ import java.net.URL
  * mesmos campos/acoes das telas "OpenClaw" e "Transcricao" — o assistente
  * so guia a ordem e explica cada campo, nao duplica a logica de estado.
  */
+private const val WIZARD_STEP_COUNT = 2
+
 @Composable
 fun SetupWizardPage(
     state: ConfigPageState,
@@ -61,19 +64,33 @@ fun SetupWizardPage(
         onBack = onBack
     ) {
         item {
-            if (step == 1) {
-                WizardAiAccessStep(
-                    state = state,
-                    actions = actions,
-                    onNext = { step = 2 }
-                )
-            } else {
-                WizardWhisperStep(
-                    state = state,
-                    actions = actions,
-                    onBackStep = { step = 1 },
-                    onFinish = onBack
-                )
+            WizardStepIndicator(currentStep = step, totalSteps = WIZARD_STEP_COUNT)
+        }
+        item {
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = { wizardStepTransition(forward = targetState > initialState) },
+                label = "wizard-step"
+            ) { targetStep ->
+                // AnimatedContent nao empilha filhos verticalmente sozinho (ao
+                // contrario do item{} do LazyColumn) — sem este Column, os
+                // ConfigSection/Row de cada passo ficam sobrepostos.
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (targetStep == 1) {
+                        WizardAiAccessStep(
+                            state = state,
+                            actions = actions,
+                            onNext = { step = 2 }
+                        )
+                    } else {
+                        WizardWhisperStep(
+                            state = state,
+                            actions = actions,
+                            onBackStep = { step = 1 },
+                            onFinish = onBack
+                        )
+                    }
+                }
             }
         }
     }
