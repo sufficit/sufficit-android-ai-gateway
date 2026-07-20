@@ -41,6 +41,7 @@ private val CAPTURE_RESTART_PATCH_KEYS = setOf(
     "debugPhraseBreakSilenceMs",
     "transcriptionTerms",
     "transcriptionDictionary",
+    "transcriptionContextMessageCount",
     "noiseGateMultiplier",
     "minSpeechRms",
     "minSpeechPeakNormalized",
@@ -79,6 +80,8 @@ private val TTS_REFRESH_PATCH_KEYS = setOf(
     "assistantPitch"
 )
 
+private const val MAX_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT = 50
+
 /**
  * Converts the structured sectioned config format (v1) into the flat canonical key map
  * expected by [applyWebSocketSettingsPatch].
@@ -115,6 +118,7 @@ fun flattenSectionedJson(root: JSONObject): JSONObject {
         copyKey(s, "localExecution", "localExecutionMode")
         copyKey(s, "terms", "transcriptionTerms")
         copyKey(s, "dictionary", "transcriptionDictionary")
+        copyKey(s, "contextMessageCount", "transcriptionContextMessageCount")
         copyKey(s, "repeatSuppression", "transcriptionRepeatSuppression")
         copyKey(s, "colloquialNormalization", "colloquialNormalizationStrength")
     }
@@ -468,6 +472,22 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
             "transcriptionDictionary" -> {
                 val value = stringValue(key) ?: ""
                 applyIfChanged(key, updated.copy(transcriptionDictionary = value))
+            }
+            "transcriptionContextMessageCount" -> {
+                val value = intValue(key)
+                if (value == null) {
+                    ignored += key
+                } else {
+                    applyIfChanged(
+                        key,
+                        updated.copy(
+                            transcriptionContextMessageCount = value.coerceIn(
+                                0,
+                                MAX_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT
+                            )
+                        )
+                    )
+                }
             }
             "screenMode" -> {
                 val value = parseScreenMode(key)

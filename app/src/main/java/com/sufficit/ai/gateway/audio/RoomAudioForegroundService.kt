@@ -47,12 +47,14 @@ import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayPersistentConnection
 import com.sufficit.ai.gateway.runtime.ChatRole
+import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.runtime.GatewayUiState
 import com.sufficit.ai.gateway.transcription.local.LocalSherpaOnnxEngine
 import com.sufficit.ai.gateway.transcription.local.LocalWhisperEngine
 import com.sufficit.ai.gateway.transcription.CompanionTranscriptionClient
 import com.sufficit.ai.gateway.transcription.CompanionTranscriptionException
+import com.sufficit.ai.gateway.transcription.ElevenLabsRealtimeClient
 import com.sufficit.ai.gateway.transcription.WhisperApiClient
 import com.sufficit.ai.gateway.transcription.WhisperConfigurationCheck
 import com.sufficit.ai.gateway.transcription.WhisperHttpException
@@ -71,6 +73,7 @@ import java.time.Instant
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -84,6 +87,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.sufficit.ai.gateway.api.GatewayApiActions {
+    private data class RetainedTranscriptAudio(val messageId: Long)
+
     private val captureRunning = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
     private var captureExecutor: ExecutorService? = null
@@ -107,10 +112,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     // agente uma unica vez (consumido em handleOpenClawReply).
     @Volatile private var suppressNextReplySpeech = false
     private val whisperApiClient = WhisperApiClient()
+    private val elevenLabsRealtimeClient = ElevenLabsRealtimeClient()
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
+    private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
     private var persistentOpenClawConnection: OpenClawGatewayPersistentConnection? = null
     private val selfTestExecuted = AtomicBoolean(false)
+    private val openClawHandshakeStarted = AtomicBoolean(false)
     @Volatile private var phraseCommitPending = false
     @Volatile private var phraseAdvanceReady = false
     @Volatile private var localWhisperEngine: LocalWhisperEngine? = null
@@ -371,6 +379,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         releaseLocalSherpaOnnxEngine()
         speakerVerifier?.close()
         speakerVerifier = null
+        elevenLabsRealtimeClient.close()
         speakerContinuityState = null
         transcriptionExecutor?.shutdownNow()
         transcriptionExecutor = null
@@ -634,6 +643,22 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 "whisperUrl=${settings.whisperUrl}"
         )
         Log.i(TAG, "Local transcription timeout: ${LOCAL_TRANSCRIPTION_TIMEOUT_MS / 1000}s")
+        if (
+            settings.transcriptionMode == TranscriptionMode.REMOTE &&
+            settings.whisperUrl.contains("api.elevenlabs.io", ignoreCase = true) &&
+            settings.whisperAuthToken.isNotBlank()
+        ) {
+            transcriptionExecutor?.execute {
+                runCatching { elevenLabsRealtimeClient.warmUp(settings.whisperAuthToken) }
+                    .onFailure {
+                        Log.w(
+                            TAG,
+                            "Pre-conexao ElevenLabs falhou; nova tentativa sera feita no segmento.",
+                            it
+                        )
+                    }
+            }
+        }
         // Historico de niveis RMS CRUS (pre-ganho): alimenta as metricas de
         // estabilidade ambiente (spectrumMotion/variancia). Nunca misturar
         // valores pos-ganho aqui — o ganho dinamico variando criaria saltos
@@ -1463,6 +1488,18 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val pendingTranscriptions = queuedTranscriptions + if (executor.activeCount > 0) 1 else 0
         if (pendingTranscriptions >= MAX_TRANSCRIPTION_QUEUE) {
             Log.w(TAG, "Fila de transcricao cheia (${pendingTranscriptions}); segmento descartado.")
+            val queuedWav = buildWavPcm16(pcmBytes, SAMPLE_RATE_HZ, 1, 16)
+            val queuedFile = savePendingAudioCapture(queuedWav)
+            val queuedMessageId = GatewayRuntime.appendChatAudioMessage(
+                queuedFile.absolutePath,
+                durationMs,
+                System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
+            )
+            GatewayRuntime.updateChatAudioMessage(
+                id = queuedMessageId,
+                state = ChatAudioState.ERROR,
+                error = "Fila de transcrição cheia; trecho não processado"
+            )
             GatewayRuntime.update {
                 it.copy(
                     statusText = "Fila de transcricao cheia. Aguarde processamento.",
@@ -1491,20 +1528,48 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             null
         }
 
+        // Entra no histórico no instante em que o bloco é enfileirado. Assim,
+        // vários trechos aparecem em sequência mesmo se o primeiro ainda
+        // estiver ocupando o motor de transcrição.
+        val pendingAudioFile = savePendingAudioCapture(wavBytes)
+        val audioMessageId = GatewayRuntime.appendChatAudioMessage(
+            audioPath = pendingAudioFile.absolutePath,
+            audioDurationMs = durationMs,
+            audioExpiresAtEpochMs = System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
+        )
+
         executor.execute(
-            QueuedTranscriptionTask(System.currentTimeMillis()) {
+            QueuedTranscriptionTask(
+                enqueuedAtEpochMs = System.currentTimeMillis(),
+                onDropped = {
+                    GatewayRuntime.updateChatAudioMessage(
+                        id = audioMessageId,
+                        state = ChatAudioState.ERROR,
+                        error = "Tempo de espera excedido na fila"
+                    )
+                }
+            ) {
                 updateQueueCount()
                 // Verificacao de locutor ("so a minha voz"): roda aqui no
                 // executor de transcricao (custo de CPU fora da captura).
                 // Retorna false quando o segmento foi consumido pelo cadastro
                 // de voz ou rejeitado por nao ser a voz do usuario.
                 if (!evaluateSpeakerVoiceGate(pcmBytes, preRollPrefixBytes)) {
+                    GatewayRuntime.updateChatAudioMessage(
+                        id = audioMessageId,
+                        state = ChatAudioState.ERROR,
+                        error = "Trecho rejeitado pela verificação de voz"
+                    )
                     updateQueueCount()
                     return@QueuedTranscriptionTask
                 }
                 GatewayRuntime.update {
                     it.copy(
                         transcribing = true,
+                        // O marcador representa a tentativa atual. Um erro
+                        // antigo não deve continuar vermelho enquanto um novo
+                        // trecho já está sendo processado com o modelo ativo.
+                        lastError = null,
                         statusText = when (settings.transcriptionMode) {
                             TranscriptionMode.REMOTE -> "Enviando trecho para transcricao..."
                             TranscriptionMode.LOCAL -> {
@@ -1539,18 +1604,35 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                             throw IllegalStateException(configCheck.reason)
                         }
 
-                        whisperApiClient.transcribe(
-                            wavBytes = wavBytes,
-                            whisperUrl = settings.whisperUrl,
-                            authToken = settings.whisperAuthToken,
-                            model = settings.remoteModel,
-                            prompt = TranscriptTextPipeline.buildPrompt(settings),
-                            vadFilter = settings.whisperVadFilter,
-                            conditionOnPreviousText = settings.whisperConditionOnPreviousText,
-                            noSpeechThreshold = settings.whisperNoSpeechThreshold,
-                            compressionRatioThreshold = settings.whisperCompressionRatioThreshold,
-                            repetitionPenalty = settings.whisperRepetitionPenalty
-                        )
+                        if (settings.whisperUrl.contains("api.elevenlabs.io", ignoreCase = true)) {
+                            elevenLabsRealtimeClient.transcribe(
+                                pcmBytes = pcmBytes,
+                                apiKey = settings.whisperAuthToken,
+                                previousText = buildTranscriptionPreviousText(
+                                    settings.transcriptionContextMessageCount
+                                ),
+                                onPartialTranscript = { partial ->
+                                    GatewayRuntime.updateChatAudioMessage(
+                                        id = audioMessageId,
+                                        text = partial,
+                                        state = ChatAudioState.TRANSCRIBING
+                                    )
+                                }
+                            )
+                        } else {
+                            whisperApiClient.transcribe(
+                                wavBytes = wavBytes,
+                                whisperUrl = settings.whisperUrl,
+                                authToken = settings.whisperAuthToken,
+                                model = settings.remoteModel,
+                                prompt = TranscriptTextPipeline.buildPrompt(settings),
+                                vadFilter = settings.whisperVadFilter,
+                                conditionOnPreviousText = settings.whisperConditionOnPreviousText,
+                                noSpeechThreshold = settings.whisperNoSpeechThreshold,
+                                compressionRatioThreshold = settings.whisperCompressionRatioThreshold,
+                                repetitionPenalty = settings.whisperRepetitionPenalty
+                            )
+                        }
                     }
 
                     TranscriptionMode.LOCAL -> {
@@ -1609,6 +1691,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         ChatRole.SYSTEM,
                         "palavra de ativacao reconhecida: \u201C$wakeTermOnly\u201D"
                     )
+                    GatewayRuntime.updateChatAudioMessage(
+                        id = audioMessageId,
+                        text = correctedText,
+                        state = ChatAudioState.TRANSCRIBED
+                    )
                     GatewayRuntime.update {
                         it.copy(statusText = "Palavra de ativacao reconhecida: $wakeTermOnly.")
                     }
@@ -1623,7 +1710,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (ambientTranscriptLikely) {
                     Log.i(TAG, "Marcador de ambiente mantido para avaliacao do OpenClaw: $correctedText")
                 }
-
+                GatewayRuntime.updateChatAudioMessage(
+                    id = audioMessageId,
+                    text = correctedText.takeIf { it.isNotBlank() },
+                    state = if (correctedText.isBlank()) ChatAudioState.ERROR else ChatAudioState.TRANSCRIBED,
+                    error = if (correctedText.isBlank()) "Nenhum texto reconhecido" else null
+                )
                 val enriched = enrichLocalVoiceAnalysisIfNeeded(
                     settings = settings,
                     pcmBytes = pcmBytes,
@@ -1728,6 +1820,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
                     )
                 }
+                // Só entra na frase corrente depois que um eventual commit da
+                // frase anterior aconteceu dentro do update acima.
+                if (correctedText.isNotBlank() && !neutralTranscriptMarker) {
+                    completedTranscriptAudio.add(RetainedTranscriptAudio(audioMessageId))
+                }
                 if (correctedText.isNotBlank()) {
                     phraseCommitPending = true
                     phraseAdvanceReady = false
@@ -1768,6 +1865,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             } catch (ex: Exception) {
                 if (ex is CancellationException || ex is InterruptedException || stopRequested.get()) {
                     Log.i(TAG, "Transcricao cancelada durante parada do servico.")
+                    GatewayRuntime.updateChatAudioMessage(
+                        id = audioMessageId,
+                        state = ChatAudioState.ERROR,
+                        error = "Transcrição interrompida"
+                    )
                     GatewayRuntime.update {
                         it.copy(
                             transcribing = false,
@@ -1783,6 +1885,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
                 Log.e(TAG, "Whisper transcription failed", ex)
                 val msg = ex.message.orEmpty()
+                GatewayRuntime.updateChatAudioMessage(
+                    id = audioMessageId,
+                    state = ChatAudioState.ERROR,
+                    error = msg.ifBlank { "Falha na transcrição" }.take(120)
+                )
                 if (ex is WhisperHttpException && ex.isAuthFailure) {
                     // Token invalido/ausente: distinto de indisponibilidade transitoria
                     // (ver o ramo generico HTTP 4xx/5xx abaixo) para nao confundir o
@@ -1821,6 +1928,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     handleFatalError("Falha na transcricao", ex)
                 }
             } finally {
+                // A bolha e seu WAV permanecem no histórico mesmo em timeout
+                // ou erro. A limpeza acontece somente após seis horas.
                 updateQueueCount()
             }
         })
@@ -1849,6 +1958,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         } finally {
             worker.shutdownNow()
         }
+    }
+
+    private fun savePendingAudioCapture(wavBytes: ByteArray): File {
+        val directory = File(filesDir, "transcription-audio")
+        directory.mkdirs()
+        val expiration = System.currentTimeMillis() - TRANSCRIPT_AUDIO_RETENTION_MS
+        directory.listFiles()?.filter { it.lastModified() < expiration }?.forEach { it.delete() }
+        return File.createTempFile("segment-", ".wav", directory).also { it.writeBytes(wavBytes) }
     }
 
     private fun handleFatalError(title: String, ex: Exception) {
@@ -2016,6 +2133,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     private fun resolveCaptureProfile(settings: GatewaySettings): CaptureProfile {
         val baseProfile = when {
+            settings.transcriptionMode == TranscriptionMode.COMPANION -> CaptureProfile(
+                speechHoldMs = COMPANION_SPEECH_HOLD_MS,
+                maxSpeechSegmentMs = COMPANION_MAX_SPEECH_SEGMENT_MS,
+                minTranscriptionMs = COMPANION_MIN_TRANSCRIPTION_MS,
+                phraseBreakSilenceMs = COMPANION_PHRASE_BREAK_SILENCE_MS
+            )
             isHeavyLocalModel(settings) -> CaptureProfile(
                 speechHoldMs = 450L,
                 maxSpeechSegmentMs = 1_800L,
@@ -2042,16 +2165,28 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             )
         }
 
-        if (!settings.development) {
-            return baseProfile
-        }
-
-        return baseProfile.copy(
+        val configuredProfile = if (!settings.development) {
+            baseProfile
+        } else {
+            baseProfile.copy(
             speechHoldMs = (settings.debugSpeechHoldMs?.takeIf { it > 0 } ?: baseProfile.speechHoldMs.toInt()).toLong(),
             maxSpeechSegmentMs = (settings.debugMaxSpeechSegmentMs?.takeIf { it > 0 } ?: baseProfile.maxSpeechSegmentMs.toInt()).toLong(),
             minTranscriptionMs = (settings.debugMinTranscriptionMs?.takeIf { it > 0 } ?: baseProfile.minTranscriptionMs.toInt()).toLong(),
             phraseBreakSilenceMs = (settings.debugPhraseBreakSilenceMs?.takeIf { it > 0 } ?: baseProfile.phraseBreakSilenceMs.toInt()).toLong()
         )
+        }
+        return if (settings.transcriptionMode == TranscriptionMode.COMPANION) {
+            configuredProfile.copy(
+                speechHoldMs = maxOf(configuredProfile.speechHoldMs, COMPANION_SPEECH_HOLD_MS),
+                maxSpeechSegmentMs = maxOf(configuredProfile.maxSpeechSegmentMs, COMPANION_MAX_SPEECH_SEGMENT_MS),
+                phraseBreakSilenceMs = maxOf(
+                    configuredProfile.phraseBreakSilenceMs,
+                    COMPANION_PHRASE_BREAK_SILENCE_MS
+                )
+            )
+        } else {
+            configuredProfile
+        }
     }
 
     private fun isFastLocalModel(settings: GatewaySettings): Boolean {
@@ -2253,6 +2388,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             val queuedAgeMs = now - queuedTask.enqueuedAtEpochMs
             if (clearBacklogBecauseActiveStalled || queuedAgeMs >= MAX_QUEUED_TRANSCRIPTION_AGE_MS) {
                 iterator.remove()
+                queuedTask.markDropped()
                 droppedCount += 1
             }
         }
@@ -2280,8 +2416,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     private class QueuedTranscriptionTask(
         val enqueuedAtEpochMs: Long,
+        private val onDropped: () -> Unit,
         private val block: () -> Unit
     ) : Runnable {
+        fun markDropped() = onDropped()
+
         override fun run() {
             block()
         }
@@ -2513,6 +2652,25 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
      * GESTURE_HOLD_VALIDITY_MS para tolerar a cadencia da camera.
      */
     private var lastIndexHoldLogAt = 0L
+
+    private fun buildTranscriptionPreviousText(messageCount: Int): String {
+        if (messageCount <= 0) return ""
+        val context = GatewayRuntime.chatMessages().value
+            .asSequence()
+            .filter { message ->
+                message.role != ChatRole.SYSTEM &&
+                    message.text.isNotBlank() &&
+                    message.audioState != ChatAudioState.ERROR &&
+                    message.audioState != ChatAudioState.TRANSCRIBING
+            }
+            .toList()
+            .takeLast(messageCount.coerceIn(1, MAX_TRANSCRIPTION_CONTEXT_MESSAGES))
+            .joinToString("\n") { message ->
+                val speaker = if (message.role == ChatRole.ASSISTANT) "Assistente" else "Usuario"
+                "$speaker: ${message.text.trim()}"
+            }
+        return context.takeLast(MAX_TRANSCRIPTION_CONTEXT_CHARS)
+    }
 
     private fun isIndexFingerHeld(now: Long): Boolean {
         val command = GatewayRuntime.gestureCommand().value ?: return false
@@ -3595,7 +3753,18 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // agendador — nao no despacho: o despacho acumula varias frases na
         // janela de envio e juntava tudo num unico balao com atraso.
         if (!TranscriptTextPipeline.isNeutralMarkerTranscript(normalizedPhrase)) {
-            GatewayRuntime.appendChatMessage(ChatRole.USER, normalizedPhrase)
+            var updatedAudio = false
+            while (true) {
+                val audio = completedTranscriptAudio.poll() ?: break
+                GatewayRuntime.updateChatAudioMessage(
+                    id = audio.messageId,
+                    state = ChatAudioState.SENDING
+                )
+                updatedAudio = true
+            }
+            if (!updatedAudio) {
+                GatewayRuntime.appendChatMessage(ChatRole.USER, normalizedPhrase)
+            }
         }
 
         val generation = pendingOpenClawDispatchGeneration.incrementAndGet()
@@ -3666,11 +3835,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun runOpenClawHandshakeIfNeeded() {
-        if (!selfTestExecuted.compareAndSet(false, true)) {
+        if (!openClawHandshakeStarted.compareAndSet(false, true)) {
             return
         }
         val executor = openClawExecutor ?: return
         executor.execute {
+            Log.i(TAG, "Iniciando handshake OpenClaw.")
             val store = settingsStore ?: GatewaySettingsStore(this)
             val settings = runCatching { store.load() }.getOrElse {
                 Log.w(TAG, "Falha ao carregar configuracao para handshake OpenClaw", it)
@@ -3682,6 +3852,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 settings.openClawDeviceToken.isBlank() ||
                 settings.openClawSessionKey.isBlank()
             ) {
+                Log.w(
+                    TAG,
+                    "Handshake OpenClaw ignorado: " +
+                        "url=${settings.openClawGatewayUrl.isNotBlank()}, " +
+                        "gatewayToken=${settings.openClawGatewayToken.isNotBlank()}, " +
+                        "deviceToken=${settings.openClawDeviceToken.isNotBlank()}, " +
+                        "sessionKey=${settings.openClawSessionKey.isNotBlank()}."
+                )
                 GatewayRuntime.update {
                     it.copy(openClawStatus = "OpenClaw desativado na configuracao.")
                 }
@@ -4853,6 +5031,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         )
 
         private const val TAG = "RoomAudioGateway"
+        private const val TRANSCRIPT_AUDIO_RETENTION_MS = 6L * 60L * 60L * 1_000L
         private const val CHANNEL_ID = "room-audio-gateway-v2"
         private const val WAKE_CHANNEL_ID = "room-audio-gateway-wake-v2"
         private const val NOTIFICATION_ID = 1001
@@ -4876,6 +5055,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         private const val OPENCLAW_REASONING_HOLD_MS = 2200L
         private const val ASSISTANT_BARGE_IN_STARTUP_BLOCK_MS = 900L
         private const val SAMPLE_RATE_HZ = 16_000
+        private const val PCM_16_BIT_BYTES = 2
+        private const val MAX_TRANSCRIPTION_CONTEXT_MESSAGES = 50
+        private const val MAX_TRANSCRIPTION_CONTEXT_CHARS = 4_000
 
         // Janela de gravacao da amostra da palavra de ativacao (2.2s a 16kHz).
         private const val WAKE_WORD_RECORD_SAMPLES = 35_200
@@ -4947,9 +5129,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         private const val DEFAULT_MIN_TRANSCRIPTION_MS = 180L
         private const val DEFAULT_PHRASE_BREAK_SILENCE_MS = 1_000L
         private val LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000L
-        private const val MAX_QUEUED_TRANSCRIPTION_AGE_MS = 25_000L
-        private const val ACTIVE_TRANSCRIPTION_STALL_BACKLOG_CLEAR_MS = 30_000L
-        private const val MAX_TRANSCRIPTION_QUEUE = 3
+        private const val COMPANION_SPEECH_HOLD_MS = 900L
+        private const val COMPANION_MAX_SPEECH_SEGMENT_MS = 8_000L
+        private const val COMPANION_MIN_TRANSCRIPTION_MS = 500L
+        private const val COMPANION_PHRASE_BREAK_SILENCE_MS = 1_800L
+        private const val MAX_QUEUED_TRANSCRIPTION_AGE_MS = 600_000L
+        private const val ACTIVE_TRANSCRIPTION_STALL_BACKLOG_CLEAR_MS = 210_000L
+        private const val MAX_TRANSCRIPTION_QUEUE = 12
         private const val MAX_TRANSCRIPT_CHARS = 1_200
         private const val MAX_WORD_OVERLAP = 8
         private const val SPECTRUM_SIZE = 48

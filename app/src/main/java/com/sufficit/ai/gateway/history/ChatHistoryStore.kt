@@ -2,6 +2,7 @@ package com.sufficit.ai.gateway.history
 
 import android.content.Context
 import com.sufficit.ai.gateway.runtime.ChatMessage
+import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,6 +33,18 @@ class ChatHistoryStore(context: Context) {
                     // Mantem a referencia mesmo se o arquivo sumiu: o card de
                     // midia mostra um placeholder "midia indisponivel" em vez de
                     // descartar silenciosamente para texto.
+                    val audioPath = o.optString("audioPath").takeIf { it.isNotBlank() }
+                    val audioExpiresAt = o.optLong("audioExpiresAtEpochMs").takeIf { it > 0L }
+                    val audioStillAvailable = audioPath != null && audioExpiresAt != null &&
+                        audioExpiresAt > System.currentTimeMillis() && File(audioPath).isFile
+                    if (audioPath != null && !audioStillAvailable) File(audioPath).delete()
+                    val storedAudioState = o.optString("audioState").takeIf { it.isNotBlank() }
+                        ?.let { runCatching { ChatAudioState.valueOf(it) }.getOrNull() }
+                    val restoredAudioState = if (storedAudioState == ChatAudioState.TRANSCRIBING) {
+                        ChatAudioState.ERROR
+                    } else {
+                        storedAudioState
+                    }
                     add(
                         ChatMessage(
                             id = o.optLong("id"),
@@ -39,7 +52,16 @@ class ChatHistoryStore(context: Context) {
                             text = text,
                             atEpochMs = o.optLong("atEpochMs"),
                             details = o.optString("details").takeIf { it.isNotBlank() },
-                            imagePath = imagePath
+                            imagePath = imagePath,
+                            audioPath = audioPath?.takeIf { audioStillAvailable },
+                            audioDurationMs = o.optLong("audioDurationMs").takeIf { it > 0L },
+                            audioExpiresAtEpochMs = audioExpiresAt?.takeIf { audioStillAvailable },
+                            audioState = restoredAudioState,
+                            audioError = if (storedAudioState == ChatAudioState.TRANSCRIBING) {
+                                "Transcrição interrompida pelo reinício do aplicativo"
+                            } else {
+                                o.optString("audioError").takeIf { it.isNotBlank() }
+                            }
                         )
                     )
                 }
@@ -63,6 +85,16 @@ class ChatHistoryStore(context: Context) {
                             .apply {
                                 m.details?.let { put("details", it) }
                                 m.imagePath?.let { put("imagePath", it) }
+                                val audioAvailable = m.audioPath != null &&
+                                    (m.audioExpiresAtEpochMs ?: 0L) > System.currentTimeMillis() &&
+                                    File(m.audioPath).isFile
+                                if (audioAvailable) {
+                                    put("audioPath", m.audioPath)
+                                    m.audioDurationMs?.let { put("audioDurationMs", it) }
+                                    m.audioExpiresAtEpochMs?.let { put("audioExpiresAtEpochMs", it) }
+                                }
+                                m.audioState?.let { put("audioState", it.name) }
+                                m.audioError?.let { put("audioError", it) }
                             }
                     )
                 }

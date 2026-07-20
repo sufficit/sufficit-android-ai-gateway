@@ -35,6 +35,14 @@ fun transcriptionModeLabel(mode: TranscriptionMode): String = when (mode) {
     TranscriptionMode.COMPANION -> "App no aparelho"
 }
 
+fun transcriptionModeDescription(mode: TranscriptionMode): String = when (mode) {
+    TranscriptionMode.LOCAL -> "Roda no proprio aparelho, sem internet nem token — mais " +
+        "privado, precisa baixar um modelo uma vez."
+    TranscriptionMode.REMOTE -> "Usa um servidor Whisper remoto — exige endereco e token."
+    TranscriptionMode.COMPANION -> "Usa o modelo ja rodando no app sufficit-mobile-ai-models, " +
+        "se instalado no mesmo aparelho — sem endereco nem token."
+}
+
 /** Transcription pipeline, capture, and local-model config section. */
 @Composable
 fun ConfigTranscriptionSectionPage(

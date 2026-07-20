@@ -122,8 +122,6 @@ fun DashboardPage(
             // Historico da conversa (mais novo embaixo, rente a barra).
             ChatMessagesList(
                 currentTranscript = state.currentTranscript,
-                transcribing = state.transcribing,
-                transcriptionBackendLabel = state.transcriptionBackendLabel,
                 assistantProcessing = state.assistantProcessing,
                 assistantProcessingLabel = state.assistantProcessingLabel,
                 lastError = state.lastError,

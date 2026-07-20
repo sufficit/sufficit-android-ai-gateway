@@ -20,6 +20,7 @@
     <ID>CyclomaticComplexMethod:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(lastError: String?, transcriptionBackendLabel: String, transcriptionModelLabel: String)</ID>
     <ID>CyclomaticComplexMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
     <ID>CyclomaticComplexMethod:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
+    <ID>CyclomaticComplexMethod:IdentityConfigSection.kt$@Composable fun IdentityConfigSection()</ID>
     <ID>CyclomaticComplexMethod:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$private fun classifyFromFeatures( pitches: List&lt;Double&gt;, energies: List&lt;Double&gt; ): LocalVoiceAnalysisResult</ID>
     <ID>CyclomaticComplexMethod:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
     <ID>CyclomaticComplexMethod:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun analyzeHandGesture(landmarks: NormalizedLandmarkList): GestureDebugAnalysis</ID>
@@ -74,6 +75,7 @@
     <ID>LongMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
     <ID>LongMethod:GestureDebugPage.kt$@Composable fun GestureDebugPage( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
     <ID>LongMethod:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
+    <ID>LongMethod:IdentityConfigSection.kt$@Composable fun IdentityConfigSection()</ID>
     <ID>LongMethod:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
     <ID>LongMethod:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$private fun analyzeHandGesture(landmarks: NormalizedLandmarkList): GestureDebugAnalysis</ID>
     <ID>LongMethod:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$override fun onMessage(webSocket: WebSocket, text: String)</ID>
@@ -755,6 +757,9 @@
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DYNAMIC_CONTRAST_MAX = 0.050 // Raised: 0.014 was too low and zeroed out the dynamic score for music/loud ambient</ID>
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_STABILITY_THRESHOLD = 0.35 // Lowered: gain reduction should trigger earlier for stable ambient environments</ID>
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_OVERRIDE_DYNAMIC_CONTRAST = 0.050 // Raised: 0.018 was firing on all music/noise, blocking gain reduction</ID>
+    <ID>MaxLineLength:SufficitOAuthManager.kt$SufficitOAuthManager$if (response != null) cont.resume(response) else cont.resumeWithException(ex ?: IllegalStateException("token exchange failed"))</ID>
+    <ID>MaxLineLength:SufficitOAuthManager.kt$SufficitOAuthManager$if (response != null) cont.resume(response) else cont.resumeWithException(ex ?: IllegalStateException("token refresh failed"))</ID>
+    <ID>MaxLineLength:SufficitOAuthManager.kt$SufficitOAuthManager$if (result != null) cont.resume(result) else cont.resumeWithException(ex ?: IllegalStateException("OIDC discovery failed"))</ID>
     <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$append(" Nao adicione fechamentos ou cortesias como \"obrigado\", \"obrigada\", \"tchau\", \"ate a proxima\" ou similares se nao estiverem claramente audiveis.")</ID>
     <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$val remainingWords = words.dropLast(suffixWords).joinToString(" ").trim().trimEnd(',', '.', ';', ':', '!', '?')</ID>
     <ID>MayBeConst:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private val LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000L</ID>
@@ -845,6 +850,7 @@
     <ID>ThrowsCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
     <ID>TooGenericExceptionCaught:GatewayApiServer.kt$GatewayApiServer$ex: Exception</ID>
     <ID>TooGenericExceptionCaught:GatewayApiServer.kt$GatewayApiServer.Companion$ex: Exception</ID>
+    <ID>TooGenericExceptionCaught:IdentityConfigSection.kt$ex: Exception</ID>
     <ID>TooGenericExceptionCaught:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$ex: Throwable</ID>
     <ID>TooGenericExceptionCaught:OpenClawGatewayClient.kt$OpenClawGatewayClient.&lt;no name provided&gt;$ex: Exception</ID>
     <ID>TooGenericExceptionCaught:OpenClawGatewayPersistentConnection.kt$OpenClawGatewayPersistentConnection.&lt;no name provided&gt;$ex: Exception</ID>
@@ -909,8 +915,11 @@
     <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_RMS = 0.008</ID>
     <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_MIN_SPEECH_ZERO_CROSSING_RATE = 0.008</ID>
     <ID>UnusedPrivateProperty:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val REMOTE_NOISE_GATE_MULTIPLIER = 1.45</ID>
+    <ID>UseCheckOrError:IdentityConfigSection.kt$throw IllegalStateException("resposta sem access_token")</ID>
     <ID>UseCheckOrError:LocalWhisperEngine.kt$LocalWhisperEngine$throw IllegalStateException( "Modelo parece incompleto (${modelFileSize} bytes). Rebaixe o arquivo ${modelFile.name}." )</ID>
     <ID>UseCheckOrError:OpenClawGatewayClient.kt$OpenClawGatewayClient$throw IllegalStateException("OpenClaw nao retornou resposta final.")</ID>
     <ID>UseCheckOrError:OpenClawGatewayClient.kt$OpenClawGatewayClient$throw IllegalStateException("Timeout aguardando resposta do canal Android do OpenClaw.")</ID>
+    <ID>UseCheckOrError:SufficitOAuthManager.kt$SufficitOAuthManager$throw IllegalStateException("issuer has no userinfo_endpoint")</ID>
+    <ID>UseCheckOrError:SufficitOAuthManager.kt$SufficitOAuthManager$throw authException ?: IllegalStateException("authorization was not successful")</ID>
   </CurrentIssues>
 </SmellBaseline>

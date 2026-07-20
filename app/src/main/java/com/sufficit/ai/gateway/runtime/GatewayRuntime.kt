@@ -251,6 +251,19 @@ object GatewayRuntime {
 
     fun chatMessages(): StateFlow<List<ChatMessage>> = GatewayChatRuntime.chatMessages()
 
+    fun pendingAudioCaptures(): StateFlow<List<PendingAudioCapture>> = GatewayChatRuntime.pendingAudioCaptures()
+
+    fun addPendingAudioCapture(
+        wavPath: String,
+        durationMs: Long,
+        waveform: List<Float>,
+        backendLabel: String
+    ): Long = GatewayChatRuntime.addPendingAudioCapture(wavPath, durationMs, waveform, backendLabel)
+
+    fun removePendingAudioCapture(id: Long) {
+        GatewayChatRuntime.removePendingAudioCapture(id)
+    }
+
     fun attachChatPersistence(initial: List<ChatMessage>, persister: (List<ChatMessage>) -> Unit) {
         GatewayChatRuntime.attachChatPersistence(initial, persister)
     }
@@ -259,8 +272,34 @@ object GatewayRuntime {
         GatewayChatRuntime.clearChat()
     }
 
-    fun appendChatMessage(role: ChatRole, text: String, details: String? = null) {
-        GatewayChatRuntime.appendChatMessage(role, text, details)
+    fun appendChatMessage(
+        role: ChatRole,
+        text: String,
+        details: String? = null,
+        audioPath: String? = null,
+        audioDurationMs: Long? = null,
+        audioExpiresAtEpochMs: Long? = null
+    ) {
+        GatewayChatRuntime.appendChatMessage(
+            role, text, details, audioPath, audioDurationMs, audioExpiresAtEpochMs
+        )
+    }
+
+    fun appendChatAudioMessage(
+        audioPath: String,
+        audioDurationMs: Long,
+        audioExpiresAtEpochMs: Long
+    ): Long = GatewayChatRuntime.appendChatAudioMessage(
+        audioPath, audioDurationMs, audioExpiresAtEpochMs
+    )
+
+    fun updateChatAudioMessage(
+        id: Long,
+        text: String? = null,
+        state: ChatAudioState,
+        error: String? = null
+    ) {
+        GatewayChatRuntime.updateChatAudioMessage(id, text, state, error)
     }
 
     fun appendChatImage(role: ChatRole, caption: String, imagePath: String) {

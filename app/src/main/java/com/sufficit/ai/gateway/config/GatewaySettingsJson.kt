@@ -34,6 +34,7 @@ fun GatewaySettings.toJson(): JSONObject {
             put("localExecution", localExecutionMode.persistedValue)
             put("terms", transcriptionTerms)
             put("dictionary", transcriptionDictionary)
+            put("contextMessageCount", transcriptionContextMessageCount)
             put("repeatSuppression", transcriptionRepeatSuppression)
             put("colloquialNormalization", colloquialNormalizationStrength)
         })

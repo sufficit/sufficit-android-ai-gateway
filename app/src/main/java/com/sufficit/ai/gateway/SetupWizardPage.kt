@@ -31,7 +31,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.config.GatewaySettingsStore
 import com.sufficit.ai.gateway.config.InstallationId
-import com.sufficit.ai.gateway.config.TranscriptionMode
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
 import kotlinx.coroutines.Dispatchers
@@ -43,12 +42,13 @@ import java.net.URL
 
 /**
  * Assistente guiado para quem esta configurando o app pela primeira vez:
- * passo 1 liga o aparelho ao sistema de IA (OpenClaw), passo 2 escolhe e
- * testa a transcricao de voz (Whisper local ou remoto). Reaproveita os
- * mesmos campos/acoes das telas "OpenClaw" e "Transcricao" — o assistente
- * so guia a ordem e explica cada campo, nao duplica a logica de estado.
+ * passo 1 liga o aparelho ao sistema de IA (OpenClaw), passo 2 escolhe o
+ * modo de transcricao de voz, passo 3 configura e testa o modo escolhido.
+ * Reaproveita os mesmos campos/acoes das telas "OpenClaw" e "Transcricao" —
+ * o assistente so guia a ordem e explica cada campo, nao duplica a logica
+ * de estado. Passos 2 e 3 ficam em WizardTranscriptionSteps.kt.
  */
-private const val WIZARD_STEP_COUNT = 2
+private const val WIZARD_STEP_COUNT = 3
 
 @Composable
 fun SetupWizardPage(
@@ -60,7 +60,11 @@ fun SetupWizardPage(
 
     ConfigSectionScaffold(
         title = "Assistente de configuracao",
-        subtitle = if (step == 1) "Passo 1 de 2 — Acesso ao sistema de IA" else "Passo 2 de 2 — Funcao Whisper",
+        subtitle = when (step) {
+            1 -> "Passo 1 de 3 — Acesso ao sistema de IA"
+            2 -> "Passo 2 de 3 — Escolher transcricao"
+            else -> "Passo 3 de 3 — Configurar transcricao"
+        },
         onBack = onBack
     ) {
         item {
@@ -76,17 +80,22 @@ fun SetupWizardPage(
                 // contrario do item{} do LazyColumn) — sem este Column, os
                 // ConfigSection/Row de cada passo ficam sobrepostos.
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (targetStep == 1) {
-                        WizardAiAccessStep(
+                    when (targetStep) {
+                        1 -> WizardAiAccessStep(
                             state = state,
                             actions = actions,
                             onNext = { step = 2 }
                         )
-                    } else {
-                        WizardWhisperStep(
+                        2 -> WizardTranscriptionModeStep(
                             state = state,
                             actions = actions,
                             onBackStep = { step = 1 },
+                            onNext = { step = 3 }
+                        )
+                        else -> WizardTranscriptionConfigStep(
+                            state = state,
+                            actions = actions,
+                            onBackStep = { step = 2 },
                             onFinish = onBack
                         )
                     }
@@ -115,6 +124,9 @@ private fun WizardAiAccessStep(
     var resultText by rememberSaveable { mutableStateOf<String?>(null) }
     var resultOk by rememberSaveable { mutableStateOf<Boolean?>(null) }
 
+    // Login com Sufficit primeiro — o resto do pareamento (OpenClaw) e mais
+    // facil de diagnosticar/associar depois de saber quem esta configurando.
+    IdentityConfigSection()
     ConfigSection(title = "1. Ligar ao sistema de IA") {
         Text(
             text = "Peca pro admin gerar um codigo no servidor " +
@@ -253,125 +265,11 @@ private fun WizardAiAccessStep(
             }
         }
     }
-    IdentityConfigSection()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End
     ) {
-        Button(onClick = onNext) { Text("Proximo: Whisper") }
-    }
-}
-
-@Composable
-private fun WizardWhisperStep(
-    state: ConfigPageState,
-    actions: ConfigPageActions,
-    onBackStep: () -> Unit,
-    onFinish: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var localModelDropdownExpanded by rememberSaveable { mutableStateOf(false) }
-    var testing by rememberSaveable { mutableStateOf(false) }
-    var resultText by rememberSaveable { mutableStateOf<String?>(null) }
-    var resultOk by rememberSaveable { mutableStateOf<Boolean?>(null) }
-
-    ConfigSection(title = "2. Escolher a transcricao de voz") {
-        Text(
-            text = "Local: roda no proprio aparelho, sem depender de internet nem token — mais " +
-                "privado, precisa baixar um modelo uma vez. Remoto: usa um servidor Whisper, " +
-                "exige endereco e token.",
-            style = MaterialTheme.typography.bodySmall,
-            color = ConfigTheme.TextSecondary
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TranscriptionMode.entries.forEach { option ->
-                OutlinedButton(
-                    onClick = { actions.onTranscriptionModeChange(option.persistedValue) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(transcriptionModeLabel(option))
-                }
-            }
-        }
-        MetadataChip(
-            "Modo escolhido",
-            transcriptionModeLabel(TranscriptionMode.fromPersistedValue(state.transcriptionMode))
-        )
-    }
-    ConfigSection(title = "Configuracao") {
-        when (TranscriptionMode.fromPersistedValue(state.transcriptionMode)) {
-        TranscriptionMode.COMPANION -> CompanionTranscriptionStatusSection()
-        TranscriptionMode.LOCAL -> LocalTranscriptionSection(
-            state = state,
-            actions = actions,
-            localModelDropdownExpanded = localModelDropdownExpanded,
-            onLocalModelDropdownExpandedChange = { localModelDropdownExpanded = it }
-        )
-        TranscriptionMode.REMOTE -> {
-            OutlinedTextField(
-                value = state.whisperUrl,
-                onValueChange = actions.onWhisperUrlChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Endpoint remoto") },
-                supportingText = { Text("Ex.: https://your-whisper-host.example.com/v1/audio/transcriptions") },
-                colors = configTextFieldColors()
-            )
-            OutlinedTextField(
-                value = state.remoteModel,
-                onValueChange = actions.onRemoteModelChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Modelo remoto") },
-                colors = configTextFieldColors()
-            )
-            OutlinedTextField(
-                value = state.whisperAuthToken,
-                onValueChange = actions.onWhisperAuthTokenChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Bearer token") },
-                colors = configTextFieldColors()
-            )
-            Button(
-                onClick = {
-                    testing = true
-                    resultText = null
-                    resultOk = null
-                    val url = state.whisperUrl
-                    val token = state.whisperAuthToken
-                    scope.launch {
-                        val outcome = testWhisperEndpoint(url, token)
-                        testing = false
-                        resultOk = outcome.isSuccess
-                        resultText = outcome.fold(
-                            onSuccess = { it },
-                            onFailure = { "Falhou: ${it.message ?: it.javaClass.simpleName}" }
-                        )
-                    }
-                },
-                enabled = !testing && state.whisperUrl.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (testing) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Testar endpoint")
-                }
-            }
-            resultText?.let {
-                Text(
-                    text = it,
-                    color = if (resultOk == true) ConfigTheme.Accent else ConfigTheme.Danger,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        }
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        OutlinedButton(onClick = onBackStep) { Text("Voltar") }
-        Button(onClick = onFinish) { Text("Concluir") }
+        Button(onClick = onNext) { Text("Proximo: transcricao") }
     }
 }
 
@@ -439,28 +337,3 @@ private suspend fun testOpenClawConnection(
         OpenClawGatewayClient().verifyConnection(config, timeoutMs = 8_000L)
     }
 }
-
-// Sem endpoint de health dedicado no servidor Whisper: qualquer resposta
-// HTTP (mesmo erro) ja prova que o endereco existe e esta alcancavel: o
-// que falha silenciosamente de verdade e nome errado/rede inacessivel.
-private suspend fun testWhisperEndpoint(url: String, token: String): Result<String> =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6_000
-                readTimeout = 6_000
-                if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
-            }
-            val code = try {
-                connection.responseCode
-            } finally {
-                connection.disconnect()
-            }
-            when {
-                code in 200..299 -> "Servidor respondeu OK ($code)."
-                code == 401 || code == 403 -> "Servidor alcancado, mas token invalido/ausente (HTTP $code)."
-                else -> "Servidor alcancado (HTTP $code) — normal se a rota so aceitar POST."
-            }
-        }
-    }

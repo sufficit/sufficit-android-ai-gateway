@@ -132,7 +132,7 @@ class CompanionTranscriptionClient(private val appContext: Context) {
         wavBytes: ByteArray,
         languageHint: String,
         bindTimeoutMs: Long = 5_000L,
-        resultTimeoutMs: Long = 30_000L
+        resultTimeoutMs: Long = 180_000L
     ): WhisperTranscriptionResult {
         if (!ensureBound(bindTimeoutMs)) {
             throw CompanionTranscriptionException(

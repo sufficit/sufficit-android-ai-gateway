@@ -43,26 +43,34 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.runtime.ChatMessage
+import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
+import com.sufficit.ai.gateway.runtime.PendingAudioCapture
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------------------
 // Chat estilo WhatsApp/Telegram para o dashboard:
@@ -75,71 +83,103 @@ private val UserBubble = Color(0xFF1F4D3D)
 private val AssistantBubble = Color(0xFF18293E)
 private val BubbleText = Color(0xFFF1F6FB)
 private val BubbleTime = Color(0xFF93A7BA)
+private val AudioErrorText = Color(0xFFFF8A80)
 // Midia capturada pelo agente/sistema (foto, screenshot): visual proprio,
 // distinto das bolhas de conversa — emoldurado, centralizado, com acento.
 private val MediaFrame = Color(0xFF101C2B)
 private val MediaBorder = Color(0xFF2C6E7F)
 private val MediaAccent = Color(0xFF55C2D8)
+private const val PENDING_AUDIO_WAVE_ALPHA = 0.8f
+private const val PENDING_AUDIO_MIN_BAR_LEVEL = 0.08f
+private const val MILLIS_PER_SECOND = 1_000L
+private const val SECONDS_PER_MINUTE = 60L
+private const val LATEST_MESSAGE_SCROLL_TOLERANCE_PX = 4
 private val InputSurface = Color(0xFF101E2E)
 
 private val ChatTimeFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH:mm", Locale.US).withZone(ZoneId.systemDefault())
 
 @Composable
+@Suppress("LongMethod") // Declaracao de itens do LazyColumn; extrair quebra o escopo DSL e nao reduz complexidade.
 fun ChatMessagesList(
     currentTranscript: String,
-    transcribing: Boolean,
-    transcriptionBackendLabel: String,
     assistantProcessing: Boolean,
     assistantProcessingLabel: String,
     lastError: String?,
     modifier: Modifier = Modifier
 ) {
     val messages by GatewayRuntime.chatMessages().collectAsState()
+    val pendingAudioCaptures by GatewayRuntime.pendingAudioCaptures().collectAsState()
     val partialTranscript = currentTranscript.trim()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    var autoScrollEnabled by rememberSaveable { mutableStateOf(true) }
+    val scrollScope = rememberCoroutineScope()
+    val isAtLatestMessage by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset <= LATEST_MESSAGE_SCROLL_TOLERANCE_PX
+        }
+    }
+    val manualScrollDetector = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                if (source == NestedScrollSource.UserInput && consumed.y != 0f) {
+                    val atLatest = listState.firstVisibleItemIndex == 0 &&
+                        listState.firstVisibleItemScrollOffset <= LATEST_MESSAGE_SCROLL_TOLERANCE_PX
+                    autoScrollEnabled = atLatest
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(isAtLatestMessage, listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress && isAtLatestMessage) autoScrollEnabled = true
+    }
 
     // Auto-scroll: mensagem nova rola a lista para o rodape — mas so se o
     // usuario ja estiver perto do fim (ler historico antigo nao pode ser
     // interrompido por puxao de scroll). Com reverseLayout, indice 0 = rodape.
     androidx.compose.runtime.LaunchedEffect(messages.size, partialTranscript.isNotBlank()) {
-        if (listState.firstVisibleItemIndex <= 1) {
-            listState.animateScrollToItem(0)
-        }
+        // Segmentos de voz são acompanhamento em tempo real: a bolha recém
+        // criada precisa ficar visível, inclusive quando várias entram na
+        // fila enquanto o primeiro áudio ainda está sendo transcrito.
+        if (autoScrollEnabled) listState.animateScrollToItem(0)
     }
 
-    // reverseLayout ancora o conteudo embaixo (estilo WhatsApp) e mantem a
-    // lista "grudada" na mensagem mais recente sem precisar de scroll manual.
-    LazyColumn(
-        modifier = modifier,
-        state = listState,
-        reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            horizontal = 12.dp,
-            vertical = 8.dp
-        )
-    ) {
+    Box(modifier = modifier) {
+        // reverseLayout ancora o conteudo embaixo (estilo WhatsApp) e mantem a
+        // lista "grudada" na mensagem mais recente sem precisar de scroll manual.
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(manualScrollDetector),
+            state = listState,
+            reverseLayout = true,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                top = 8.dp,
+                bottom = 72.dp
+            )
+        ) {
         // Com reverseLayout, o item de indice 0 fica NO RODAPE: a bolha
         // parcial (fala sendo transcrita) entra primeiro, depois o historico
         // do mais novo para o mais antigo.
-        if (partialTranscript.isNotBlank()) {
-            item(key = "partial") {
-                ChatBubble(
-                    text = partialTranscript,
-                    role = ChatRole.USER,
-                    timeLabel = "transcrevendo...",
-                    provisional = true
-                )
-            }
-        }
-        // Balao "transcrevendo": aparece enquanto o segmento de audio esta
-        // sendo processado (local ou remoto) e ainda nao ha texto parcial
-        // para mostrar — sem isso o usuario via silencio total durante o
-        // processamento (nada indicava que o app estava fazendo algo).
-        if (transcribing && partialTranscript.isBlank()) {
-            item(key = "transcribing") {
-                ProcessingBubble(title = "Transcrevendo", label = transcriptionBackendLabel)
+        // A transcrição parcial agora atualiza a própria bolha de áudio. Não
+        // criamos uma segunda bolha solta para o mesmo segmento.
+        // Cada segmento FECHADO e enviado ao Whisper ganha seu proprio WAV
+        // tocavel e uma forma de onda congelada. Nao e o espectro ao vivo da
+        // barra inferior: representa exatamente o bloco selecionado. O
+        // servico o remove quando o texto chega (ou quando falha/cancela).
+        pendingAudioCaptures.asReversed().forEach { capture ->
+            item(key = "pending-audio-${capture.id}") {
+                PendingAudioCaptureBubble(capture)
             }
         }
         // Balao do assistente "processando": aparece enquanto o agente trabalha
@@ -152,7 +192,7 @@ fun ChatMessagesList(
         // Erro tecnico da ultima transcricao (ex.: falha de rede, biblioteca
         // nativa, endpoint mal configurado): antes ficava so num icone de
         // status pequeno, sem nenhuma mensagem no fluxo da conversa.
-        if (!lastError.isNullOrBlank()) {
+        if (!lastError.isNullOrBlank() && messages.none { it.audioState == ChatAudioState.ERROR }) {
             item(key = "lastError") {
                 ErrorMarker(text = "Erro na transcricao: $lastError")
             }
@@ -176,7 +216,14 @@ fun ChatMessagesList(
                     text = message.text,
                     role = message.role,
                     timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs)),
-                    details = message.details
+                    details = message.details,
+                    audioPath = message.audioPath?.takeIf {
+                        (message.audioExpiresAtEpochMs ?: 0L) > System.currentTimeMillis() &&
+                            java.io.File(it).isFile
+                    },
+                    audioDurationMs = message.audioDurationMs,
+                    audioState = message.audioState,
+                    audioError = message.audioError
                 )
             }
         }
@@ -190,6 +237,40 @@ fun ChatMessagesList(
                         .fillMaxWidth()
                         .padding(vertical = 24.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+        }
+
+        AnimatedVisibility(
+            visible = !autoScrollEnabled && !isAtLatestMessage,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .background(AssistantBubble, CircleShape)
+                    .border(1.dp, MediaAccent, CircleShape)
+                    .clickable {
+                        autoScrollEnabled = true
+                        scrollScope.launch { listState.animateScrollToItem(0) }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Rolagem pausada • voltar ao fim",
+                    color = BubbleText,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Retomar rolagem automática e ir para a mensagem mais recente",
+                    tint = MediaAccent,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
@@ -269,7 +350,11 @@ private fun ChatBubble(
     role: ChatRole,
     timeLabel: String,
     provisional: Boolean = false,
-    details: String? = null
+    details: String? = null,
+    audioPath: String? = null,
+    audioDurationMs: Long? = null,
+    audioState: ChatAudioState? = null,
+    audioError: String? = null
 ) {
     val isUser = role == ChatRole.USER
     val shape = RoundedCornerShape(
@@ -282,11 +367,16 @@ private fun ChatBubble(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
+        val bubbleColor = if (isUser) UserBubble else AssistantBubble
         Column(
             modifier = Modifier
                 .widthIn(max = 300.dp)
                 .background(
-                    color = if (isUser) UserBubble else AssistantBubble,
+                    // Balao ainda pendente (fala sendo transcrita, texto vai
+                    // mudar): translucido, nao so o texto em italico — o
+                    // usuario pediu a bolha em si com transparencia diferente
+                    // para marcar "ainda nao e definitivo".
+                    color = if (provisional) bubbleColor.copy(alpha = 0.55f) else bubbleColor,
                     shape = shape
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -297,6 +387,41 @@ private fun ChatBubble(
                     color = if (provisional) BubbleText.copy(alpha = 0.75f) else BubbleText,
                     style = MaterialTheme.typography.bodyMedium,
                     fontStyle = if (provisional) FontStyle.Italic else FontStyle.Normal
+                )
+            }
+            if (audioPath != null) {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(onClick = { playPendingAudio(audioPath) }) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Reproduzir áudio desta transcrição",
+                            tint = BubbleText
+                        )
+                    }
+                    Text(
+                        text = "Ouvir áudio${audioDurationMs?.let { " • ${formatAudioDuration(it)}" }.orEmpty()}",
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+            if (audioState != null) {
+                val statusText = when (audioState) {
+                    ChatAudioState.TRANSCRIBING -> "Transcrevendo áudio…"
+                    ChatAudioState.TRANSCRIBED -> "Texto reconhecido"
+                    ChatAudioState.SENDING -> "Enviando para o sistema de IA…"
+                    ChatAudioState.ERROR -> "Falha na transcrição${audioError?.let { ": $it" }.orEmpty()}"
+                }
+                Text(
+                    text = statusText,
+                    color = if (audioState == ChatAudioState.ERROR) AudioErrorText else BubbleTime,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontStyle = FontStyle.Italic,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
             // Conteudo visual-apenas (details): painel expansivel — o que foi
@@ -596,6 +721,132 @@ private fun DocumentTile(fileName: String) {
  * Bolha provisoria do assistente enquanto o agente processa o pedido.
  * Pontos animados + o que esta sendo processado (label).
  */
+/**
+ * Cartao do WAV exato que foi fechado para transcricao. A forma de onda foi
+ * calculada uma unica vez do trecho, portanto permanece estatica e nao espelha
+ * o espectro de escuta continuo da barra inferior.
+ */
+@Composable
+private fun PendingAudioCaptureBubble(capture: PendingAudioCapture) {
+    val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp)
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .background(UserBubble.copy(alpha = 0.5f), shape)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { playPendingAudio(capture.wavPath) },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Reproduzir trecho de áudio pendente",
+                    tint = BubbleText,
+                    modifier = Modifier.size(32.dp)
+                )
+                FrozenWaveform(
+                    values = capture.waveform,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Text(
+                text = "Áudio • ${formatAudioDuration(capture.durationMs)} • transcrevendo via ${capture.backendLabel}",
+                color = BubbleTime,
+                style = MaterialTheme.typography.labelSmall,
+                fontStyle = FontStyle.Italic,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FrozenWaveform(values: List<Float>, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.height(28.dp)) {
+        if (values.isEmpty()) return@Canvas
+        val spacing = 3.dp.toPx()
+        val barWidth = (size.width - spacing * (values.size - 1)) / values.size
+        val baseLine = size.height / 2f
+        values.forEachIndexed { index, value ->
+            val barHeight = value.coerceIn(PENDING_AUDIO_MIN_BAR_LEVEL, 1f) * (size.height * 0.46f)
+            val x = index * (barWidth + spacing)
+            drawRoundRect(
+                color = BubbleText.copy(alpha = PENDING_AUDIO_WAVE_ALPHA),
+                topLeft = Offset(x, baseLine - barHeight),
+                size = androidx.compose.ui.geometry.Size(barWidth, barHeight * 2f),
+                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+            )
+        }
+    }
+}
+
+private fun playPendingAudio(wavPath: String) {
+    ChatAudioPlayer.play(wavPath)
+}
+
+/**
+ * Mantém uma referência forte ao player durante toda a reprodução. Antes o
+ * MediaPlayer existia apenas como variável local; qualquer recomposição/GC
+ * disparada por uma nova bolha podia finalizá-lo no meio do áudio.
+ */
+private object ChatAudioPlayer {
+    private var activePlayer: android.media.MediaPlayer? = null
+
+    @Synchronized
+    fun play(wavPath: String) {
+        val nextPlayer = android.media.MediaPlayer()
+        val prepared = runCatching {
+            nextPlayer.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            nextPlayer.setDataSource(wavPath)
+            nextPlayer.setOnCompletionListener { completed ->
+                android.util.Log.i("ChatAudioPlayer", "Reprodução concluída: ${java.io.File(wavPath).name}")
+                releaseIfActive(completed)
+            }
+            nextPlayer.setOnErrorListener { failed, what, extra ->
+                android.util.Log.w("ChatAudioPlayer", "Falha na reprodução: what=$what extra=$extra")
+                releaseIfActive(failed)
+                true
+            }
+            nextPlayer.prepare()
+        }.isSuccess
+        if (!prepared) {
+            nextPlayer.release()
+            return
+        }
+
+        activePlayer?.runCatching {
+            if (isPlaying) stop()
+            release()
+        }
+        activePlayer = nextPlayer
+        nextPlayer.start()
+        android.util.Log.i("ChatAudioPlayer", "Reprodução iniciada: ${java.io.File(wavPath).name}")
+    }
+
+    @Synchronized
+    private fun releaseIfActive(player: android.media.MediaPlayer) {
+        if (activePlayer === player) activePlayer = null
+        runCatching { player.release() }
+    }
+}
+
+private fun formatAudioDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / MILLIS_PER_SECOND).coerceAtLeast(1)
+    return "%d:%02d".format(Locale.US, totalSeconds / SECONDS_PER_MINUTE, totalSeconds % SECONDS_PER_MINUTE)
+}
+
 @Composable
 private fun ProcessingBubble(title: String = "Processando", label: String) {
     val transition = rememberInfiniteTransition(label = "processing")

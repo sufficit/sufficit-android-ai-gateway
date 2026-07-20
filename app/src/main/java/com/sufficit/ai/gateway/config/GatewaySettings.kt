@@ -106,6 +106,7 @@ data class GatewaySettings(
     val debugPhraseBreakSilenceMs: Int? = null,
     val transcriptionTerms: String = "",
     val transcriptionDictionary: String = "",
+    val transcriptionContextMessageCount: Int = GatewaySettingsStore.DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT,
     val screenMode: ScreenMode = GatewaySettingsStore.DEFAULT_SCREEN_MODE,
     val screenHoldSeconds: Int = GatewaySettingsStore.DEFAULT_SCREEN_HOLD_SECONDS,
     val transcriptClearTimeoutSecs: Int = GatewaySettingsStore.DEFAULT_TRANSCRIPT_CLEAR_TIMEOUT_SECS,
@@ -742,6 +743,7 @@ class GatewaySettingsStore(private val context: Context) {
         const val DEFAULT_API_PORT = 8765
         const val DEFAULT_API_BIND_ALL_INTERFACES = true
         const val DEFAULT_API_TOKEN = ""
+        const val DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT = 10
 
         private fun resolveTranscriptionMode(
             storedMode: TranscriptionMode,

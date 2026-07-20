@@ -20,6 +20,11 @@ android {
         }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // AppAuth generates its RedirectUriReceiverActivity manifest entry from this —
+        // must match the sufficit_mobile_apps client's RedirectUris in sufficit-identity
+        // exactly (registered 2026-07-19, see SufficitOAuthManager.kt kdoc).
+        manifestPlaceholders["appAuthRedirectScheme"] = "sufficitaigateway"
     }
 
     ndkVersion = "27.2.12479018"
@@ -83,6 +88,8 @@ dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("net.i2p.crypto:eddsa:0.3.0")
     implementation(files("libs/sherpa_onnx-nnapi-release.aar"))
+    implementation("net.openid:appauth:0.11.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

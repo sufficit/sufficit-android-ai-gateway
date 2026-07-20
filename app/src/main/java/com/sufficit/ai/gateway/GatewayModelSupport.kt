@@ -225,6 +225,8 @@ fun buildSettings(
         debugPhraseBreakSilenceMs = numbers.debugPhraseBreakSilenceMs,
         transcriptionTerms = input.transcriptionTermsInput.trim(),
         transcriptionDictionary = input.transcriptionDictionaryInput.trim(),
+        transcriptionContextMessageCount = runtimeCurrent?.transcriptionContextMessageCount
+            ?: GatewaySettingsStore.DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT,
         screenMode = ScreenMode.fromPersistedValue(input.screenModeValue),
         screenHoldSeconds = numbers.screenHoldSeconds,
         transcriptClearTimeoutSecs = numbers.transcriptClearTimeoutSecs,
@@ -241,4 +243,3 @@ fun buildSettings(
         openClawUserId = runtimeCurrent?.openClawUserId ?: GatewaySettingsStore.DEFAULT_OPENCLAW_USER_ID
     )
 }
-

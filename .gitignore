@@ -14,10 +14,10 @@ app/.cxx/
 
 # copilot chat compact
 .s*
-*.token
 
 # secrets-and-tokens (never commit real credentials)
-.elevenlabs.token
+**/*.token
+
 temp_*.xml
 fix_*.py
 app/src/main/assets/config.json

@@ -111,7 +111,7 @@ class WhisperApiClient {
      * Auth: header "xi-api-key" (a chave vai no mesmo campo de token da
      * configuracao). Modelo: model_id "scribe_v1" — se o campo de modelo da
      * configuracao nao for um modelo Scribe (ex.: sobrou "large-v3-turbo" do
-     * Whisper), usa scribe_v1 por padrao.
+     * Whisper), usa scribe_v2 por padrao.
      */
     private fun transcribeElevenLabs(
         wavBytes: ByteArray,
@@ -120,7 +120,9 @@ class WhisperApiClient {
         model: String
     ): WhisperTranscriptionResult {
         val boundary = "----OpenClaw${UUID.randomUUID()}"
-        val modelId = model.trim().takeIf { it.startsWith("scribe", ignoreCase = true) } ?: "scribe_v1"
+        val modelId = model.trim()
+            .takeIf { it.startsWith("scribe_v2", ignoreCase = true) && !it.contains("realtime") }
+            ?: "scribe_v2"
         val connection = (URL(whisperUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true

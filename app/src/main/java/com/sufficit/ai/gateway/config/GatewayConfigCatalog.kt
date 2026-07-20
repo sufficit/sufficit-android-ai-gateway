@@ -1,12 +1,14 @@
 package com.sufficit.ai.gateway.config
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
 
 object GatewayConfigCatalog {
     const val CONFIG_ASSET_NAME = "config.json"
     private const val CONFIG_FILE_NAME = "config.json"
+    private const val TAG = "GatewayConfigCatalog"
 
     @Volatile
     private var cachedSeed: GatewaySettings? = null
@@ -36,7 +38,17 @@ object GatewayConfigCatalog {
         val seed = ensureSeedLoaded(context)
         return runCatching {
             val parsed = JSONObject(file.readText())
-            importGatewaySettingsFromJson(seed, parsed).settings
+            importGatewaySettingsFromJson(seed, parsed).settings.also { settings ->
+                Log.i(
+                    TAG,
+                    "Runtime config: server=${settings.openClawServerAddress.isNotBlank()}, " +
+                        "gatewayToken=${settings.openClawGatewayToken.isNotBlank()}, " +
+                        "deviceToken=${settings.openClawDeviceToken.isNotBlank()}, " +
+                        "sessionKey=${settings.openClawSessionKey.isNotBlank()}."
+                )
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "Falha ao ler config runtime; usando preferencias legadas.", error)
         }.getOrNull()
     }
 
