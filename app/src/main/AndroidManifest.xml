@@ -12,6 +12,19 @@
     <!-- Acende a tela via full-screen intent quando chamado pela palavra de ativacao. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- Sufficit Transcription IPC contract v1 (aidl/com/sufficit/ipc/transcription/,
+         docs/ipc-transcription-contract.md): binds to sufficit-mobile-ai-models's
+         TranscriptionIpcService, if that app is installed, to run transcription through its
+         on-device Whisper model. -->
+    <uses-permission android:name="com.sufficit.ipc.transcription.permission.PROVIDE_TRANSCRIPTION" />
+
+    <!-- Android 11+ package visibility: without this, PackageManager can't see
+         com.sufficit.ai.mobiledevice is installed, and bindService's implicit-intent
+         resolution silently finds nothing. -->
+    <queries>
+        <package android:name="com.sufficit.ai.mobiledevice" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"

@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
-import com.sufficit.ai.gateway.runtime.GatewayUiState
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -88,11 +87,16 @@ private val ChatTimeFormatter: DateTimeFormatter =
 
 @Composable
 fun ChatMessagesList(
-    state: GatewayUiState,
+    currentTranscript: String,
+    transcribing: Boolean,
+    transcriptionBackendLabel: String,
+    assistantProcessing: Boolean,
+    assistantProcessingLabel: String,
+    lastError: String?,
     modifier: Modifier = Modifier
 ) {
     val messages by GatewayRuntime.chatMessages().collectAsState()
-    val partialTranscript = state.currentTranscript.trim()
+    val partialTranscript = currentTranscript.trim()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     // Auto-scroll: mensagem nova rola a lista para o rodape — mas so se o
@@ -133,24 +137,24 @@ fun ChatMessagesList(
         // sendo processado (local ou remoto) e ainda nao ha texto parcial
         // para mostrar — sem isso o usuario via silencio total durante o
         // processamento (nada indicava que o app estava fazendo algo).
-        if (state.transcribing && partialTranscript.isBlank()) {
+        if (transcribing && partialTranscript.isBlank()) {
             item(key = "transcribing") {
-                ProcessingBubble(title = "Transcrevendo", label = state.transcriptionBackendLabel)
+                ProcessingBubble(title = "Transcrevendo", label = transcriptionBackendLabel)
             }
         }
         // Balao do assistente "processando": aparece enquanto o agente trabalha
         // no pedido, com o que esta sendo processado.
-        if (state.assistantProcessing) {
+        if (assistantProcessing) {
             item(key = "processing") {
-                ProcessingBubble(label = state.assistantProcessingLabel)
+                ProcessingBubble(label = assistantProcessingLabel)
             }
         }
         // Erro tecnico da ultima transcricao (ex.: falha de rede, biblioteca
         // nativa, endpoint mal configurado): antes ficava so num icone de
         // status pequeno, sem nenhuma mensagem no fluxo da conversa.
-        if (!state.lastError.isNullOrBlank()) {
+        if (!lastError.isNullOrBlank()) {
             item(key = "lastError") {
-                ErrorMarker(text = "Erro na transcricao: ${state.lastError}")
+                ErrorMarker(text = "Erro na transcricao: $lastError")
             }
         }
         items(
@@ -339,6 +343,44 @@ private fun ChatBubble(
     }
 }
 
+/** Resultado do decode em background de [AgentMediaCard] — ver [decodeAgentMedia]. */
+private data class DecodedAgentMedia(val fileExists: Boolean, val bitmap: android.graphics.Bitmap?)
+
+/**
+ * File.exists() + BitmapFactory.decodeFile() + leitura de EXIF: I/O e decode
+ * de imagem sincronos, nunca na thread principal — chamado de dentro de
+ * withContext(Dispatchers.IO) em AgentMediaCard. Antes rodava inline num
+ * remember{} durante a composicao (subcomposicao do LazyColumn ao rolar ate
+ * a mensagem), travando a thread de UI a cada foto/screenshot que entrava
+ * na tela — achado real de performance (scroll do chat travando).
+ */
+private fun decodeAgentMedia(imagePath: String, isImage: Boolean): DecodedAgentMedia {
+    val fileExists = java.io.File(imagePath).exists()
+    if (!fileExists || !isImage) return DecodedAgentMedia(fileExists, null)
+    val bitmap = runCatching {
+        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+        val decoded = android.graphics.BitmapFactory.decodeFile(imagePath, opts)
+            ?: return@runCatching null
+        // Pixels ja sao gravados na orientacao correta (assada no servico);
+        // ainda assim honra EXIF caso algum arquivo antigo traga a tag.
+        val orientation = android.media.ExifInterface(imagePath).getAttributeInt(
+            android.media.ExifInterface.TAG_ORIENTATION,
+            android.media.ExifInterface.ORIENTATION_NORMAL
+        )
+        val degrees = when (orientation) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+        if (degrees == 0f) decoded else {
+            val m = android.graphics.Matrix().apply { postRotate(degrees) }
+            android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+        }
+    }.getOrNull()
+    return DecodedAgentMedia(fileExists, bitmap)
+}
+
 /**
  * Card de MIDIA capturada pelo agente/sistema (foto da camera ou screenshot).
  * Visual proprio — emoldurado, CENTRALIZADO, com etiqueta de origem e acento —
@@ -351,7 +393,6 @@ private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String
     val lower = imagePath.lowercase()
     val isImage = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp").any { lower.endsWith(it) }
     val isScreenshot = lower.endsWith(".png")
-    val fileExists = remember(imagePath) { java.io.File(imagePath).exists() }
     val kindLabel = when {
         !isImage -> "DOCUMENTO"
         isScreenshot -> "CAPTURA DE TELA"
@@ -363,32 +404,18 @@ private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String
         lower.endsWith(".pdf") -> "application/pdf"
         else -> "*/*"
     }
-    val bitmap = remember(imagePath, fileExists) {
-        if (!fileExists || !isImage) null
-        else runCatching {
-            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
-            val decoded = android.graphics.BitmapFactory.decodeFile(imagePath, opts)
-                ?: return@runCatching null
-            // Pixels ja sao gravados na orientacao correta (assada no servico);
-            // ainda assim honra EXIF caso algum arquivo antigo traga a tag.
-            val orientation = android.media.ExifInterface(imagePath).getAttributeInt(
-                android.media.ExifInterface.TAG_ORIENTATION,
-                android.media.ExifInterface.ORIENTATION_NORMAL
-            )
-            val degrees = when (orientation) {
-                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                else -> 0f
-            }
-            if (degrees == 0f) decoded else {
-                val m = android.graphics.Matrix().apply { postRotate(degrees) }
-                android.graphics.Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
-            }
-        }.getOrNull()
+    val media by androidx.compose.runtime.produceState<DecodedAgentMedia?>(initialValue = null, imagePath) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            decodeAgentMedia(imagePath, isImage)
+        }
     }
+    val loading = media == null
+    // Enquanto carrega, assume "existe" para nao piscar o placeholder de
+    // indisponivel e corrigir um instante depois.
+    val fileExists = media?.fileExists ?: true
+    val bitmap = media?.bitmap
     // Indisponivel: arquivo sumiu, ou e imagem que nao decodificou.
-    val unavailable = !fileExists || (isImage && bitmap == null)
+    val unavailable = !loading && (!fileExists || (isImage && bitmap == null))
     val openModifier = if (unavailable) Modifier else Modifier.clickable {
         runCatching {
             val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -437,6 +464,7 @@ private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String
             }
             // Conteudo: imagem, tile de documento, ou placeholder de indisponivel.
             when {
+                loading && isImage -> MediaLoadingPlaceholder()
                 unavailable -> MediaUnavailablePlaceholder(isImage)
                 isImage && bitmap != null -> Box(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
@@ -467,6 +495,31 @@ private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String
                 modifier = Modifier.padding(top = 4.dp, start = 2.dp)
             )
         }
+    }
+}
+
+/** Placeholder curto enquanto o decode em background (ver [decodeAgentMedia]) nao terminou. */
+@Composable
+private fun MediaLoadingPlaceholder() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MediaBorder.copy(alpha = 0.10f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        androidx.compose.material3.CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp,
+            color = MediaAccent
+        )
+        Text(
+            text = "Carregando...",
+            color = BubbleText.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(start = 10.dp)
+        )
     }
 }
 
@@ -593,7 +646,8 @@ private fun ProcessingBubble(title: String = "Processando", label: String) {
  */
 @Composable
 fun ChatInputBar(
-    state: GatewayUiState,
+    listening: Boolean,
+    currentMicrophoneGain: Double?,
     onSendText: (String) -> Unit,
     onStartListening: () -> Unit,
     onAttach: () -> Unit,
@@ -615,9 +669,9 @@ fun ChatInputBar(
             )
         }
 
-        if (state.listening) {
+        if (listening) {
             ListeningSpectrum(
-                state = state,
+                currentMicrophoneGain = currentMicrophoneGain,
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp)
@@ -667,12 +721,18 @@ fun ChatInputBar(
     }
 }
 
-/** Espectro compacto exibido no lugar do campo de texto enquanto ouve. */
+/**
+ * Espectro compacto exibido no lugar do campo de texto enquanto ouve. Coleta
+ * seu proprio flow de espectro (GatewayRuntime.spectrum(), ~2Hz durante a
+ * escuta) em vez de receber via GatewayUiState — isola a alta frequencia de
+ * atualizacao a este Canvas, sem recompor o resto da barra/chat a cada tick.
+ */
 @Composable
 private fun ListeningSpectrum(
-    state: GatewayUiState,
+    currentMicrophoneGain: Double?,
     modifier: Modifier = Modifier
 ) {
+    val values by GatewayRuntime.spectrum().collectAsState()
     Box(
         modifier = modifier.background(Color(0xFF16263A), RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.CenterStart
@@ -682,7 +742,6 @@ private fun ListeningSpectrum(
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            val values = state.spectrum
             if (values.isEmpty()) return@Canvas
             val spacing = 3.dp.toPx()
             val barWidth = (size.width - spacing * (values.size - 1)) / values.size
@@ -702,7 +761,7 @@ private fun ListeningSpectrum(
             }
         }
         // Ganho atual discreto sobre o espectro (regulagem automatica).
-        val gainLabel = state.currentMicrophoneGain
+        val gainLabel = currentMicrophoneGain
             ?.let { String.format(Locale.US, "%.1fx", it) }
         if (gainLabel != null) {
             Text(

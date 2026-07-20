@@ -107,7 +107,12 @@ fun DashboardPage(
                 }
 
                 StatusIcons(
-                    state = state,
+                    lastError = state.lastError,
+                    transcribing = state.transcribing,
+                    listening = state.listening,
+                    speakingBack = state.speakingBack,
+                    transcriptionBackendLabel = state.transcriptionBackendLabel,
+                    transcriptionModelLabel = state.transcriptionModelLabel,
                     onStart = onStart,
                     onStop = onStop,
                     onInterruptAssistant = onInterruptAssistant
@@ -116,7 +121,12 @@ fun DashboardPage(
 
             // Historico da conversa (mais novo embaixo, rente a barra).
             ChatMessagesList(
-                state = state,
+                currentTranscript = state.currentTranscript,
+                transcribing = state.transcribing,
+                transcriptionBackendLabel = state.transcriptionBackendLabel,
+                assistantProcessing = state.assistantProcessing,
+                assistantProcessingLabel = state.assistantProcessingLabel,
+                lastError = state.lastError,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -124,7 +134,8 @@ fun DashboardPage(
 
             // Barra de envio: espectro quando ouvindo; texto quando parado.
             ChatInputBar(
-                state = state,
+                listening = state.listening,
+                currentMicrophoneGain = state.currentMicrophoneGain,
                 onSendText = onSendText,
                 onStartListening = onStart,
                 onAttach = {
@@ -175,161 +186,8 @@ fun DashboardPage(
     }
 }
 
-@Composable
-fun SpectrumCard(state: GatewayUiState, development: Boolean) {
-    val nowEpochMs by produceState(
-        initialValue = System.currentTimeMillis(),
-        key1 = state.microphoneGainAdjustedUntilEpochMs
-    ) {
-        while (state.microphoneGainAdjustedUntilEpochMs > System.currentTimeMillis()) {
-            value = System.currentTimeMillis()
-            delay(220)
-        }
-        value = System.currentTimeMillis()
-    }
-    val showGainAdjustedWarning =
-        state.microphoneGainAdjustedUntilEpochMs > nowEpochMs &&
-            !state.microphoneGainAdjustedMessage.isNullOrBlank()
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(190.dp)
-            .background(
-                color = Color(0x221E3246),
-                shape = RoundedCornerShape(28.dp)
-            )
-            .padding(18.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val values = state.spectrum
-                if (values.isEmpty()) {
-                    return@Canvas
-                }
-
-                val spacing = 6.dp.toPx()
-                val barWidth = (size.width - spacing * (values.size - 1)) / values.size
-                val baseLine = size.height * 0.5f
-
-                drawRoundRect(
-                    color = Color(0x143A87E8),
-                    cornerRadius = CornerRadius(24f, 24f),
-                    style = Stroke(width = 2.dp.toPx())
-                )
-
-                values.forEachIndexed { index, value ->
-                    val normalized = value.coerceIn(0.05f, 1f)
-                    val barHeight = normalized * (size.height * 0.28f)
-                    val x = index * (barWidth + spacing)
-                    val top = baseLine - barHeight
-                    val bottom = baseLine + barHeight
-
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFFFF6B5A), Color(0xFFF6D365), Color(0xFF39D0FF))
-                        ),
-                        topLeft = Offset(x, top),
-                        size = androidx.compose.ui.geometry.Size(barWidth, bottom - top),
-                        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-                    )
-                }
-            }
-
-            if (state.ambientNoiseDetected) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = Color(0x223CCB9D),
-                                shape = RoundedCornerShape(99.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = when (state.ambientNoiseKind?.lowercase()) {
-                                "music" -> "Musica ambiente"
-                                else -> "Ruido ambiente"
-                            },
-                            color = Color(0xFFB9F6E8),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            if (development) {
-                Spacer(modifier = Modifier.height(10.dp))
-                val micGainLabel = state.currentMicrophoneGain?.let { String.format(java.util.Locale.US, "%.2fx", it) } ?: "-"
-                val noiseFloorLabel = state.estimatedNoiseFloorRms?.let { String.format(java.util.Locale.US, "%.4f", it) } ?: "-"
-                val noiseScoreLabel = state.ambientNoiseScore?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "-"
-                Text(
-                    text = "Mic atual: $micGainLabel | Ruido base RMS: $noiseFloorLabel | Estabilidade: $noiseScoreLabel",
-                    color = Color(0xFFA9BBCB),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-
-        // Gain level — always visible, bottom-left
-        val gainOverlayLabel = state.currentMicrophoneGain
-            ?.let { String.format(java.util.Locale.US, "%.2fx", it) } ?: "-"
-        Box(
-            modifier = Modifier.align(Alignment.BottomStart)
-        ) {
-            Text(
-                text = gainOverlayLabel,
-                color = Color(0xFF8AAFCC),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier
-                    .background(Color(0x33000000), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 7.dp, vertical = 4.dp)
-            )
-        }
-
-        if (showGainAdjustedWarning) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomEnd),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Row(
-                    modifier = Modifier
-                        .background(
-                            color = Color(0xA8B47B1D),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = "Ajuste de ganho aplicado",
-                        tint = Color(0xFFFFE5A8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = state.microphoneGainAdjustedMessage.orEmpty(),
-                        color = Color(0xFFFFF3D5),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-// TranscriptCard, TranscriptCardHint, OpenClawResponseCard, estimateResponseVisibilityMillis,
-// BlockingAnnouncementBanner, InfoAnnouncementBanner, formatProbabilityPercent,
-// ListeningDotsPlaceholder, ActionStrip — extracted to dedicated files.
-// See GatewayTranscriptCard.kt, GatewayOpenClawResponseCard.kt, GatewayDashboardBanners.kt
+// OpenClawResponseCard, estimateResponseVisibilityMillis, BlockingAnnouncementBanner,
+// InfoAnnouncementBanner, formatProbabilityPercent, ListeningDotsPlaceholder, ActionStrip —
+// extracted to dedicated files.
+// See GatewayOpenClawResponseCard.kt, GatewayDashboardBanners.kt

@@ -29,6 +29,12 @@ import com.sufficit.ai.gateway.config.LocalExecutionMode
 import com.sufficit.ai.gateway.config.TranscriptionMode
 import java.util.Locale
 
+fun transcriptionModeLabel(mode: TranscriptionMode): String = when (mode) {
+    TranscriptionMode.REMOTE -> "Remoto"
+    TranscriptionMode.LOCAL -> "Local"
+    TranscriptionMode.COMPANION -> "App no aparelho"
+}
+
 /** Transcription pipeline, capture, and local-model config section. */
 @Composable
 fun ConfigTranscriptionSectionPage(
@@ -47,62 +53,66 @@ fun ConfigTranscriptionSectionPage(
                             onClick = { actions.onTranscriptionModeChange(option.persistedValue) },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(if (option == TranscriptionMode.REMOTE) "Remoto" else "Local")
+                            Text(transcriptionModeLabel(option))
                         }
                     }
                 }
                 MetadataChip(
                     "Modo atual",
-                    if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"
+                    transcriptionModeLabel(TranscriptionMode.fromPersistedValue(state.transcriptionMode))
                 )
             }
         }
         item {
             ConfigSection(title = "Pipeline") {
-                if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) {
-                    OutlinedTextField(
-                        value = state.whisperUrl,
-                        onValueChange = actions.onWhisperUrlChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Endpoint remoto") },
-                        supportingText = { Text("Ex.: https://your-whisper-host.example.com/v1/audio/transcriptions") },
-                        colors = configTextFieldColors()
-                    )
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = state.remoteModel,
-                            onValueChange = actions.onRemoteModelChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Modelo remoto") },
-                            supportingText = { Text("Ex.: large-v3-turbo") },
-                            colors = configTextFieldColors()
-                        )
-                        resolveFieldGuideTooltip(
-                            deviceGuide = state.deviceGuide,
-                            transcriptionMode = state.transcriptionMode,
-                            localModelName = state.localModelName,
-                            localExecutionMode = state.localExecutionMode,
-                            remoteModel = state.remoteModel,
-                            field = "remote_model"
-                        )?.let { tooltip ->
-                            FieldGuideInfoIcon(tooltip = tooltip, modifier = Modifier.align(Alignment.TopEnd))
-                        }
-                    }
-                    OutlinedTextField(
-                        value = state.whisperAuthToken,
-                        onValueChange = actions.onWhisperAuthTokenChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Bearer token") },
-                        supportingText = { Text("Opcional quando o endpoint remoto nao exige autenticacao.") },
-                        colors = configTextFieldColors()
-                    )
-                } else {
-                    LocalTranscriptionSection(
+                when (TranscriptionMode.fromPersistedValue(state.transcriptionMode)) {
+                    TranscriptionMode.COMPANION -> CompanionTranscriptionStatusSection()
+                    TranscriptionMode.LOCAL -> LocalTranscriptionSection(
                         state = state,
                         actions = actions,
                         localModelDropdownExpanded = localModelDropdownExpanded,
                         onLocalModelDropdownExpandedChange = { localModelDropdownExpanded = it }
                     )
+                    TranscriptionMode.REMOTE -> {
+                        OutlinedTextField(
+                            value = state.whisperUrl,
+                            onValueChange = actions.onWhisperUrlChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Endpoint remoto") },
+                            supportingText = {
+                                Text("Ex.: https://your-whisper-host.example.com/v1/audio/transcriptions")
+                            },
+                            colors = configTextFieldColors()
+                        )
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = state.remoteModel,
+                                onValueChange = actions.onRemoteModelChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Modelo remoto") },
+                                supportingText = { Text("Ex.: large-v3-turbo") },
+                                colors = configTextFieldColors()
+                            )
+                            resolveFieldGuideTooltip(
+                                deviceGuide = state.deviceGuide,
+                                transcriptionMode = state.transcriptionMode,
+                                localModelName = state.localModelName,
+                                localExecutionMode = state.localExecutionMode,
+                                remoteModel = state.remoteModel,
+                                field = "remote_model"
+                            )?.let { tooltip ->
+                                FieldGuideInfoIcon(tooltip = tooltip, modifier = Modifier.align(Alignment.TopEnd))
+                            }
+                        }
+                        OutlinedTextField(
+                            value = state.whisperAuthToken,
+                            onValueChange = actions.onWhisperAuthTokenChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Bearer token") },
+                            supportingText = { Text("Opcional quando o endpoint remoto nao exige autenticacao.") },
+                            colors = configTextFieldColors()
+                        )
+                    }
                 }
             }
         }

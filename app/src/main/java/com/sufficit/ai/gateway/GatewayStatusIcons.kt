@@ -32,24 +32,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import com.sufficit.ai.gateway.runtime.GatewayUiState
 import java.util.Locale
 
 /** Row containing service status, backend status, and the start/stop control icon. */
 @Composable
 fun StatusIcons(
-    state: GatewayUiState,
+    lastError: String?,
+    transcribing: Boolean,
+    listening: Boolean,
+    speakingBack: Boolean,
+    transcriptionBackendLabel: String,
+    transcriptionModelLabel: String,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onInterruptAssistant: () -> Unit
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ServiceStatusIcon(state)
-        BackendStatusIcon(state)
+        ServiceStatusIcon(lastError = lastError, transcribing = transcribing, listening = listening)
+        BackendStatusIcon(
+            lastError = lastError,
+            transcriptionBackendLabel = transcriptionBackendLabel,
+            transcriptionModelLabel = transcriptionModelLabel
+        )
         GatewayControlIcon(
-            listening = state.listening,
-            transcribing = state.transcribing,
-            speakingBack = state.speakingBack,
+            listening = listening,
+            transcribing = transcribing,
+            speakingBack = speakingBack,
             onStart = onStart,
             onStop = onStop,
             onInterruptAssistant = onInterruptAssistant
@@ -59,11 +67,11 @@ fun StatusIcons(
 
 /** Microphone / service state badge with tooltip. */
 @Composable
-fun ServiceStatusIcon(state: GatewayUiState) {
+fun ServiceStatusIcon(lastError: String?, transcribing: Boolean, listening: Boolean) {
     val (color, text) = when {
-        !state.lastError.isNullOrBlank() -> Color(0xFFD32F2F) to "Servico: erro"
-        state.transcribing -> Color(0xFFFFA726) to "Servico: transcrevendo"
-        state.listening -> Color(0xFF42D392) to "Servico: ativo"
+        !lastError.isNullOrBlank() -> Color(0xFFD32F2F) to "Servico: erro"
+        transcribing -> Color(0xFFFFA726) to "Servico: transcrevendo"
+        listening -> Color(0xFF42D392) to "Servico: ativo"
         else -> Color(0xFF6C7A89) to "Servico: parado"
     }
     TooltipBadgeIcon(
@@ -82,13 +90,13 @@ fun ServiceStatusIcon(state: GatewayUiState) {
 
 /** Transcription backend (local / remote) badge with model detail tooltip. */
 @Composable
-fun BackendStatusIcon(state: GatewayUiState) {
-    val backend = state.transcriptionBackendLabel
-    val model = state.transcriptionModelLabel.trim()
+fun BackendStatusIcon(lastError: String?, transcriptionBackendLabel: String, transcriptionModelLabel: String) {
+    val backend = transcriptionBackendLabel
+    val model = transcriptionModelLabel.trim()
     val normalized = backend.lowercase(Locale.ROOT)
     val isLocal = normalized.contains("local") || normalized.contains("nnapi") || normalized.contains("cpu")
-    val hasModelProblem = !state.lastError.isNullOrBlank() && run {
-        val error = state.lastError.orEmpty().lowercase(Locale.ROOT)
+    val hasModelProblem = !lastError.isNullOrBlank() && run {
+        val error = lastError.orEmpty().lowercase(Locale.ROOT)
         error.contains("modelo") ||
             error.contains("model") ||
             error.contains("nnapi") ||

@@ -20,7 +20,12 @@ enum class ScreenMode(val persistedValue: String) {
 
 enum class TranscriptionMode(val persistedValue: String) {
     REMOTE("remote"),
-    LOCAL("local");
+    LOCAL("local"),
+    // Transcribes through sufficit-mobile-ai-models's on-device Whisper model via the
+    // Sufficit Transcription IPC contract (aidl/com/sufficit/ipc/transcription/,
+    // docs/ipc-transcription-contract.md) instead of this app's own local engine or a
+    // configured remote server.
+    COMPANION("companion");
 
     companion object {
         fun fromPersistedValue(value: String?): TranscriptionMode {

@@ -51,6 +51,8 @@ import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.runtime.GatewayUiState
 import com.sufficit.ai.gateway.transcription.local.LocalSherpaOnnxEngine
 import com.sufficit.ai.gateway.transcription.local.LocalWhisperEngine
+import com.sufficit.ai.gateway.transcription.CompanionTranscriptionClient
+import com.sufficit.ai.gateway.transcription.CompanionTranscriptionException
 import com.sufficit.ai.gateway.transcription.WhisperApiClient
 import com.sufficit.ai.gateway.transcription.WhisperConfigurationCheck
 import com.sufficit.ai.gateway.transcription.WhisperHttpException
@@ -105,6 +107,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     // agente uma unica vez (consumido em handleOpenClawReply).
     @Volatile private var suppressNextReplySpeech = false
     private val whisperApiClient = WhisperApiClient()
+    private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
     private var persistentOpenClawConnection: OpenClawGatewayPersistentConnection? = null
     private val selfTestExecuted = AtomicBoolean(false)
@@ -681,10 +684,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                                 LocalExecutionMode.NNAPI -> "Local NNAPI"
                             }
                         }
+                        TranscriptionMode.COMPANION -> "App no aparelho"
                     },
                     transcriptionModelLabel = when (settings.transcriptionMode) {
                         TranscriptionMode.REMOTE -> settings.remoteModel.trim()
                         TranscriptionMode.LOCAL -> File(settings.localModelPath).name.trim()
+                        TranscriptionMode.COMPANION -> "sufficit-mobile-ai-models"
                     }
                 )
             }
@@ -897,11 +902,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         speechBuffer.reset()
                         segmentPreRollBytes = 0
                     }
+                    // Microfone suprimido durante a fala do assistente:
+                    // espectro zerado para nao parecer que ha captura.
+                    GatewayRuntime.setSpectrum(FLAT_SPECTRUM)
                     GatewayRuntime.update {
                         it.copy(
-                            // Microfone suprimido durante a fala do assistente:
-                            // espectro zerado para nao parecer que ha captura.
-                            spectrum = FLAT_SPECTRUM,
                             speechDetected = false,
                             statusText = if (assistantSpeaking) {
                                 "Assistente falando. Toque para interromper."
@@ -934,12 +939,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         speechBuffer.reset()
                         segmentPreRollBytes = 0
                     }
+                    // Espectro zerado: o microfone segue aberto (so para a
+                    // palavra de ativacao), mas nada esta sendo aproveitado —
+                    // o visual deve refletir "mudo".
+                    GatewayRuntime.setSpectrum(FLAT_SPECTRUM)
                     GatewayRuntime.update {
                         it.copy(
-                            // Espectro zerado: o microfone segue aberto (so
-                            // para a palavra de ativacao), mas nada esta sendo
-                            // aproveitado — o visual deve refletir "mudo".
-                            spectrum = FLAT_SPECTRUM,
                             speechDetected = false,
                             listening = false,
                             statusText = "Em espera. Diga a palavra de ativacao para retomar."
@@ -1030,7 +1035,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 val speechDetected = speechLikeFrame || speechActive
                 val minimumSpeechCandidateFrames = when (settings.transcriptionMode) {
                     TranscriptionMode.REMOTE -> maxOf(1, settings.minSpeechCandidateFrames - 1)
-                    TranscriptionMode.LOCAL -> settings.minSpeechCandidateFrames
+                    // On-device like LOCAL (no network round trip to account for), even though
+                    // it runs in another app's process rather than in-process.
+                    TranscriptionMode.LOCAL, TranscriptionMode.COMPANION -> settings.minSpeechCandidateFrames
                 }
 
                 // Correlacao audio/labios: enquanto o segmento esta vivo,
@@ -1064,9 +1071,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (speechDetected) {
                     if (!speechActive) {
                         if (speechCandidateFrames < minimumSpeechCandidateFrames) {
+                            GatewayRuntime.setSpectrum(uiSpectrum.toList())
                             GatewayRuntime.update {
                                 it.copy(
-                                    spectrum = uiSpectrum.toList(),
                                     speechDetected = false,
                                     ambientNoiseDetected = ambientNoiseDetected,
                                     ambientNoiseKind = ambientNoiseKind,
@@ -1240,9 +1247,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     speechActive = true
                 }
 
+                GatewayRuntime.setSpectrum(uiSpectrum.toList())
                 GatewayRuntime.update {
                     it.copy(
-                        spectrum = uiSpectrum.toList(),
                         speechDetected = speechActive,
                         currentMicrophoneGain = dynamicMicrophoneGain,
                         estimatedNoiseFloorRms = noiseFloorRms,
@@ -1506,6 +1513,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                                     LocalExecutionMode.NNAPI -> "Transcrevendo localmente via NNAPI..."
                                 }
                             }
+                            TranscriptionMode.COMPANION -> "Transcrevendo via app no aparelho..."
                         }
                     )
                 }
@@ -1519,6 +1527,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                                 LocalExecutionMode.NNAPI -> "Transcrevendo localmente via NNAPI..."
                             }
                         }
+                        TranscriptionMode.COMPANION -> "Transcrevendo via app no aparelho..."
                     }
                 )
 
@@ -1546,6 +1555,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
                     TranscriptionMode.LOCAL -> {
                         transcribeLocalWithTimeout(settings, pcmBytes)
+                    }
+
+                    TranscriptionMode.COMPANION -> {
+                        // Throws CompanionTranscriptionException on failure — handled as a
+                        // dedicated, non-fatal branch in the catch block below (isNotReady vs.
+                        // other IPC failures), same treatment as WhisperHttpException for REMOTE.
+                        companionTranscriptionClient.transcribe(
+                            wavBytes = wavBytes,
+                            languageHint = "pt"
+                        )
                     }
                 }
 
@@ -1776,6 +1795,18 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         )
                     }
                     refreshNotification("Whisper: token invalido.")
+                } else if (ex is CompanionTranscriptionException) {
+                    // App no aparelho ausente/sem modelo ativo/timeout de IPC: transitorio,
+                    // igual ao ramo HTTP 4xx/5xx abaixo — nao derruba a escuta.
+                    val statusText = if (ex.isNotReady) {
+                        "App no aparelho sem modelo de transcricao ativo."
+                    } else {
+                        "App no aparelho indisponivel: ${msg.take(80)}"
+                    }
+                    GatewayRuntime.update {
+                        it.copy(transcribing = false, lastError = msg.take(120), statusText = statusText)
+                    }
+                    refreshNotification(statusText)
                 } else if (ex is IllegalStateException && (msg.contains("HTTP 4") || msg.contains("HTTP 5"))) {
                     // HTTP 4xx/5xx are transient (e.g. 429 capacity, 503 unavailable) — don't kill the service
                     GatewayRuntime.update {
@@ -2977,7 +3008,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val voiceSignature = localVoiceAnalysis.voiceSignature
         val minSegmentRms = when (settings.transcriptionMode) {
             TranscriptionMode.REMOTE -> 0.012
-            TranscriptionMode.LOCAL -> 0.015
+            TranscriptionMode.LOCAL, TranscriptionMode.COMPANION -> 0.015
         }
         val hasVoicedSignature = voiceSignature != null &&
             voiceSignature.voicedRatio >= 0.10 &&

@@ -289,17 +289,25 @@ private fun WizardWhisperStep(
                     onClick = { actions.onTranscriptionModeChange(option.persistedValue) },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(if (option == TranscriptionMode.REMOTE) "Remoto" else "Local")
+                    Text(transcriptionModeLabel(option))
                 }
             }
         }
         MetadataChip(
             "Modo escolhido",
-            if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"
+            transcriptionModeLabel(TranscriptionMode.fromPersistedValue(state.transcriptionMode))
         )
     }
     ConfigSection(title = "Configuracao") {
-        if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) {
+        when (TranscriptionMode.fromPersistedValue(state.transcriptionMode)) {
+        TranscriptionMode.COMPANION -> CompanionTranscriptionStatusSection()
+        TranscriptionMode.LOCAL -> LocalTranscriptionSection(
+            state = state,
+            actions = actions,
+            localModelDropdownExpanded = localModelDropdownExpanded,
+            onLocalModelDropdownExpandedChange = { localModelDropdownExpanded = it }
+        )
+        TranscriptionMode.REMOTE -> {
             OutlinedTextField(
                 value = state.whisperUrl,
                 onValueChange = actions.onWhisperUrlChange,
@@ -355,13 +363,7 @@ private fun WizardWhisperStep(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-        } else {
-            LocalTranscriptionSection(
-                state = state,
-                actions = actions,
-                localModelDropdownExpanded = localModelDropdownExpanded,
-                onLocalModelDropdownExpandedChange = { localModelDropdownExpanded = it }
-            )
+        }
         }
     }
     Row(

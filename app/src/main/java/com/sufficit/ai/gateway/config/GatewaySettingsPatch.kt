@@ -267,6 +267,7 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
         return when (normalized) {
             "remote" -> TranscriptionMode.REMOTE
             "local", "local_experimental" -> TranscriptionMode.LOCAL
+            "companion" -> TranscriptionMode.COMPANION
             else -> null
         }
     }

@@ -7,18 +7,17 @@
     <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$commitRequestedAt &gt; 0L &amp;&amp; System.currentTimeMillis() - commitRequestedAt &lt;= COMMIT_REQUEST_TTL_MS &amp;&amp; transcriptionExecutor?.let { reconcileTranscriptionQueue(it) == 0 } != false &amp;&amp; GatewayRuntime.state().value.currentTranscript.isNotBlank()</ID>
     <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$reply.shouldSpeak &amp;&amp; !reply.isSystemInfo &amp;&amp; spokenReply.isNotBlank() &amp;&amp; !speechSuppressedByApi</ID>
     <ID>ComplexCondition:RoomAudioForegroundService.kt$RoomAudioForegroundService$settings.openClawGatewayUrl.isBlank() || settings.openClawGatewayToken.isBlank() || settings.openClawDeviceToken.isBlank() || settings.openClawSessionKey.isBlank()</ID>
+    <ID>CyclomaticComplexMethod:CompanionTranscriptionStatusSection.kt$@Composable fun CompanionTranscriptionStatusSection()</ID>
     <ID>CyclomaticComplexMethod:GatewayApiServer.kt$GatewayApiServer$private fun route(session: IHTTPSession): Response</ID>
     <ID>CyclomaticComplexMethod:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
     <ID>CyclomaticComplexMethod:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
     <ID>CyclomaticComplexMethod:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
-    <ID>CyclomaticComplexMethod:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
     <ID>CyclomaticComplexMethod:GatewayDeviceGuideSupport.kt$fun resolveFieldGuideTooltip( deviceGuide: DeviceModelGuide?, transcriptionMode: String, localModelName: String, localExecutionMode: String, remoteModel: String, field: String ): String?</ID>
     <ID>CyclomaticComplexMethod:GatewayModelDownloadSupport.kt$fun downloadModelFromHuggingFace( context: Context, modelName: String, onProgress: (downloadedBytes: Long, totalBytes: Long) -&gt; Unit = { _, _ -&gt; } ): Result&lt;String&gt;</ID>
     <ID>CyclomaticComplexMethod:GatewaySettings.kt$GatewaySettingsStore$private fun loadFromLegacyPreferences(): GatewaySettings</ID>
     <ID>CyclomaticComplexMethod:GatewaySettingsJson.kt$fun GatewaySettings.toJson(): JSONObject</ID>
     <ID>CyclomaticComplexMethod:GatewaySettingsPatch.kt$fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySettingsPatchResult</ID>
-    <ID>CyclomaticComplexMethod:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(state: GatewayUiState)</ID>
-    <ID>CyclomaticComplexMethod:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
+    <ID>CyclomaticComplexMethod:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(lastError: String?, transcriptionBackendLabel: String, transcriptionModelLabel: String)</ID>
     <ID>CyclomaticComplexMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
     <ID>CyclomaticComplexMethod:HandGloveOverlay.kt$private fun DrawScope.drawCartoonGlove(hand: TrackedHand, frame: HandTrackingFrame)</ID>
     <ID>CyclomaticComplexMethod:LocalVoiceAnalyzer.kt$LocalVoiceAnalyzer$private fun classifyFromFeatures( pitches: List&lt;Double&gt;, energies: List&lt;Double&gt; ): LocalVoiceAnalysisResult</ID>
@@ -37,83 +36,9 @@
     <ID>CyclomaticComplexMethod:SpeakerContinuityTracker.kt$SpeakerContinuityTracker$fun updateWithComputation( currentState: SpeakerContinuityState?, signature: VoiceSignature? ): SpeakerContinuityUpdateResult</ID>
     <ID>CyclomaticComplexMethod:SpeakerVoiceConfigSection.kt$@Composable fun SpeakerVoiceConfigSection()</ID>
     <ID>EmptyElseBlock:RoomAudioForegroundService.kt$RoomAudioForegroundService${ }</ID>
-    <ID>FunctionNaming:ApiConfigSection.kt$@Composable fun ApiConfigSection()</ID>
-    <ID>FunctionNaming:FistCountdownOverlay.kt$@Composable fun FistCountdownOverlay(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:FistCountdownOverlay.kt$@Composable private fun PunchDigit(digit: Int, exitAlpha: Float)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable fun ChatInputBar( state: GatewayUiState, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable fun ChatMessagesList( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ChatBubble( text: String, role: ChatRole, timeLabel: String, provisional: Boolean = false, details: String? = null )</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun DocumentTile(fileName: String)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ErrorMarker(text: String)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ListeningSpectrum( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun MediaUnavailablePlaceholder(wasImage: Boolean)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun ProcessingBubble(title: String = "Processando", label: String)</ID>
-    <ID>FunctionNaming:GatewayChatUi.kt$@Composable private fun SystemMarker(text: String)</ID>
-    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun ConfigSection( title: String, subtitle: String? = null, content: @Composable () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun MetadataChip(label: String, value: String)</ID>
-    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun OptionalSliderSettingRow( title: String, rawValue: String, effectiveValue: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun SettingToggleRow( title: String, supportingText: String, checked: Boolean, onCheckedChange: (Boolean) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigComponents.kt$@Composable fun SliderSettingRow( title: String, value: Float, valueText: String, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable fun ConfigHubPage( state: ConfigPageState, onOpenSection: (ConfigSectionDestination) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable fun ConfigSectionScaffold( title: String, subtitle: String, onBack: () -&gt; Unit, content: androidx.compose.foundation.lazy.LazyListScope.() -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigNavigation.kt$@Composable private fun ConfigHubCard( state: ConfigSectionCardState, onClick: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigPage.kt$@Composable fun ConfigPage( state: ConfigPageState, actions: ConfigPageActions, destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigPageHost.kt$@Composable internal fun GatewayConfigPageHost( // Grouped settings state holder settingsState: GatewaySettingsState, // Permission state hasPermission: Boolean, hasCameraPermission: Boolean, // Runtime-derived cameraGestureStatus: String, // Aggregated state holders downloadState: GatewayDownloadState, modelState: GatewayModelState, historyState: GatewayHistoryState, // Derived/computed state localModelOptions: List&lt;LocalModelOption&gt;, selectedModelInvalid: Boolean, shouldOfferDownload: Boolean, localSystemInfo: String, deviceGuide: DeviceModelGuide?, historySnapshot: TranscriptHistorySnapshot, // Factory dependencies context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, // Side-effect launchers (owned by MainActivity) launchSettingsImport: ActivityResultLauncher&lt;Array&lt;String&gt;&gt;, requestMicrophonePermission: () -&gt; Unit, requestCameraPermission: () -&gt; Unit, openGestureDebug: () -&gt; Unit, // State updaters updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, // Navigation destination: ConfigSectionDestination, onDestinationChange: (ConfigSectionDestination) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigGeneralSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsPrimary.kt$@Composable fun ConfigOpenClawSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigAssistantVoiceSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigDebugSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigHistorySectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigSectionsSecondary.kt$@Composable fun ConfigScreenSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigTranscriptionSection.kt$@Composable fun ConfigTranscriptionSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun ActionStrip( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun BlockingAnnouncementBanner( message: String, modifier: Modifier = Modifier, confidence: Double? = null, overlap: Boolean = false, tags: List&lt;String&gt; = emptyList() )</ID>
-    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun InfoAnnouncementBanner( message: String, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayDashboardBanners.kt$@Composable fun ListeningDotsPlaceholder( active: Boolean, color: Color, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
-    <ID>FunctionNaming:GatewayDeviceGuideSupport.kt$@Composable fun DeviceGuideCard( deviceModelLabel: String, guide: DeviceModelGuide, currentRecommendation: DeviceModelRecommendation? )</ID>
-    <ID>FunctionNaming:GatewayDictionaryPage.kt$@Composable fun DictionaryPage( colloquialNormalizationStrengthInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayModelAvailabilityEffects.kt$@Composable fun HandleModelAvailabilityEffects( context: Context, settingsState: GatewaySettingsState, transcriptionModelLabel: String, optionsRefreshTick: Int, currentModelState: () -&gt; GatewayModelState, updateModelState: (GatewayModelState) -&gt; Unit, updateLocalModelOptions: (List&lt;LocalModelOption&gt;) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayNavigationEffects.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun GatewayBackHandler( activity: ComponentActivity, context: Context, uiScope: CoroutineScope, pagerState: PagerState, initialPage: Int, configPageIndex: Int, exitConfirmationWindowMs: Long, currentUiState: () -&gt; GatewayUiState, updateUiState: (GatewayUiState) -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayNavigationEffects.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun HandleConfigScreenActiveEffect( activity: ComponentActivity, pagerState: PagerState, configPageIndex: Int )</ID>
-    <ID>FunctionNaming:GatewayOpenClawResponseCard.kt$@Composable fun OpenClawResponseCard(state: GatewayUiState)</ID>
-    <ID>FunctionNaming:GatewayScreenBehavior.kt$@Composable fun HandleScreenBehavior( activity: ComponentActivity, screenMode: ScreenMode, keepScreenOn: Boolean, wakeRequested: Boolean )</ID>
-    <ID>FunctionNaming:GatewaySettingsPersistenceEffect.kt$@Composable fun HandleSettingsPersistenceEffect( context: Context, settingsStore: GatewaySettingsStore, settingsInputSnapshot: GatewaySettingsInputSnapshot )</ID>
-    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun BackendStatusIcon(state: GatewayUiState)</ID>
-    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun GatewayControlIcon( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun ServiceStatusIcon(state: GatewayUiState)</ID>
-    <ID>FunctionNaming:GatewayStatusIcons.kt$@Composable fun StatusIcons( state: GatewayUiState, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
-    <ID>FunctionNaming:GatewayUiCommandHandler.kt$@Composable fun HandleGatewayUiCommands( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:GestureCommandFooter.kt$@Composable fun GestureCommandFooter(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:GestureDebugPage.kt$@Composable fun GestureDebugPage( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun DebugActionChip( label: String, icon: ImageVector, onClick: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayBooleanChip(label: String, value: Boolean)</ID>
-    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayBooleanGrid( indexExtended: Boolean, middleFolded: Boolean, ringFolded: Boolean, pinkyFolded: Boolean, thumbFolded: Boolean )</ID>
-    <ID>FunctionNaming:GestureDebugPage.kt$@Composable private fun OverlayMetricRow(label: String, value: String)</ID>
-    <ID>FunctionNaming:HandGloveOverlay.kt$@Composable fun HandGloveOverlay(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:HandSkinConfigSection.kt$@Composable fun HandSkinConfigSection()</ID>
-    <ID>FunctionNaming:IdentityConfigSection.kt$@Composable fun IdentityConfigSection()</ID>
     <ID>FunctionNaming:MainActivity.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun GatewayScreen()</ID>
-    <ID>FunctionNaming:ScreenEffectOverlay.kt$@Composable fun ScreenEffectOverlay(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:SetupWizardPage.kt$@Composable fun SetupWizardPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:SetupWizardPage.kt$@Composable private fun WizardAiAccessStep( state: ConfigPageState, actions: ConfigPageActions, onNext: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:SetupWizardPage.kt$@Composable private fun WizardWhisperStep( state: ConfigPageState, actions: ConfigPageActions, onBackStep: () -&gt; Unit, onFinish: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:SpeakerVoiceConfigSection.kt$@Composable fun SpeakerVoiceConfigSection()</ID>
-    <ID>FunctionNaming:Theme.kt$@Composable fun SufficitOpenClawGatewayTheme(content: @Composable () -&gt; Unit)</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun CompactMetricBadge( tint: Color, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier, content: @Composable () -&gt; Unit )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun FieldGuideInfoIcon( tooltip: String, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun ListeningBadgeIcon( listening: Boolean, speechDetected: Boolean, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun OpenClawDispatchBadgeIcon( queueCount: Int, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun QueueBadgeIcon( queueCount: Int, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, onToggle: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun TooltipBadgeIcon( icon: @Composable () -&gt; Unit, tooltip: String, color: Color, outerSize: androidx.compose.ui.unit.Dp = 36.dp, innerSize: androidx.compose.ui.unit.Dp = 28.dp, tooltipWidth: androidx.compose.ui.unit.Dp = 188.dp, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun TranscriptTopBadge( onToggle: () -&gt; Unit, active: Boolean, tooltip: String, onDismiss: () -&gt; Unit, modifier: Modifier = Modifier, accentColor: Color = Color(0xFF8A939F), content: @Composable () -&gt; Unit )</ID>
-    <ID>FunctionNaming:TooltipIcons.kt$@Composable fun UnifiedTooltipBubble( visible: Boolean, text: String, width: androidx.compose.ui.unit.Dp, anchorType: TooltipAnchorType, onDismiss: () -&gt; Unit )</ID>
-    <ID>FunctionNaming:WakeWordConfigSection.kt$@Composable fun WakeWordConfigSection()</ID>
     <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is CancellationException</ID>
+    <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is CompanionTranscriptionException</ID>
     <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is IllegalStateException</ID>
     <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is InterruptedException</ID>
     <ID>InstanceOfCheckForException:RoomAudioForegroundService.kt$RoomAudioForegroundService$ex is WhisperHttpException</ID>
@@ -121,8 +46,8 @@
     <ID>LargeClass:RoomAudioForegroundService.kt$RoomAudioForegroundService : ServiceOnInitListenerGatewayApiActions</ID>
     <ID>LongMethod:ApiConfigSection.kt$@Composable fun ApiConfigSection()</ID>
     <ID>LongMethod:GatewayCameraGestureSupport.kt$fun startCameraGestureCapture( previewVisible: Boolean, cameraGestureEnabled: Boolean, hasCameraPermission: Boolean, captureCoordinator: CameraCaptureCoordinator, requestCameraGestureStart: () -&gt; Unit, clearPendingCameraGestureStart: () -&gt; Unit, launchCameraPermission: () -&gt; Unit, screenHoldMillis: Long, startForegroundListening: () -&gt; Unit, interruptAssistant: () -&gt; Unit, finalizeSpeechSegment: () -&gt; Unit, stopListening: () -&gt; Unit, markDirectAddress: () -&gt; Unit, logStart: (String) -&gt; Unit )</ID>
-    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatInputBar( state: GatewayUiState, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatMessagesList( state: GatewayUiState, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatInputBar( listening: Boolean, currentMicrophoneGain: Double?, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:GatewayChatUi.kt$@Composable fun ChatMessagesList( currentTranscript: String, transcribing: Boolean, transcriptionBackendLabel: String, assistantProcessing: Boolean, assistantProcessingLabel: String, lastError: String?, modifier: Modifier = Modifier )</ID>
     <ID>LongMethod:GatewayChatUi.kt$@Composable private fun AgentMediaCard(imagePath: String, caption: String, timeLabel: String)</ID>
     <ID>LongMethod:GatewayChatUi.kt$@Composable private fun ChatBubble( text: String, role: ChatRole, timeLabel: String, provisional: Boolean = false, details: String? = null )</ID>
     <ID>LongMethod:GatewayConfigActionsFactory.kt$fun buildConfigPageActions( context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, currentLocalModelName: () -&gt; String, currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot, sideEffectActions: ConfigPageSideEffectActions, updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, updateLocalEndpointUrl: (String) -&gt; Unit, updateOpenClawServerAddress: (String) -&gt; Unit, updateOpenClawGatewayToken: (String) -&gt; Unit, updateOpenClawDeviceToken: (String) -&gt; Unit, updateOpenClawSessionKey: (String) -&gt; Unit, updateWhisperUrl: (String) -&gt; Unit, updateRemoteModel: (String) -&gt; Unit, updateWhisperAuthToken: (String) -&gt; Unit, updateAutoStartEnabled: (Boolean) -&gt; Unit, updateCameraGestureEnabled: (Boolean) -&gt; Unit, updateDevelopment: (Boolean) -&gt; Unit, updateVoiceChannelSkillEnabled: (Boolean) -&gt; Unit, updateVoiceChannelWakeTerms: (String) -&gt; Unit, updateVoiceChannelFollowUpSeconds: (String) -&gt; Unit, updateVoiceChannelIdlePromptSeconds: (String) -&gt; Unit, updateOpenClawAccumulationWindowSecs: (String) -&gt; Unit, updateAssistantVoiceEnabled: (Boolean) -&gt; Unit, updateAssistantVoiceStyle: (String) -&gt; Unit, updateAssistantSpeechRate: (String) -&gt; Unit, updateAssistantPitch: (String) -&gt; Unit, updateTranscriptionMode: (String) -&gt; Unit, updateLocalModelName: (String) -&gt; Unit, resetDownloadState: () -&gt; Unit, updateLocalExecutionMode: (String) -&gt; Unit, updateMicrophoneAutoSensitivityEnabled: (Boolean) -&gt; Unit, updateMicrophoneGain: (String) -&gt; Unit, updateTranscriptionRepeatSuppression: (String) -&gt; Unit, updateColloquialNormalizationStrength: (String) -&gt; Unit, updateVadThreshold: (String) -&gt; Unit, updateDebugSpeechHoldMs: (String) -&gt; Unit, updateDebugMaxSpeechSegmentMs: (String) -&gt; Unit, updateDebugMinTranscriptionMs: (String) -&gt; Unit, updateDebugPhraseBreakSilenceMs: (String) -&gt; Unit, updateScreenMode: (String) -&gt; Unit, updateScreenHoldSeconds: (String) -&gt; Unit, updateTranscriptClearTimeoutSecs: (String) -&gt; Unit ): ConfigPageActions</ID>
@@ -136,7 +61,6 @@
     <ID>LongMethod:GatewayConfigTranscriptionSection.kt$@Composable fun ConfigTranscriptionSectionPage( state: ConfigPageState, actions: ConfigPageActions, onBack: () -&gt; Unit )</ID>
     <ID>LongMethod:GatewayConfigTranscriptionSection.kt$@Composable fun LocalTranscriptionSection( state: ConfigPageState, actions: ConfigPageActions, localModelDropdownExpanded: Boolean, onLocalModelDropdownExpandedChange: (Boolean) -&gt; Unit )</ID>
     <ID>LongMethod:GatewayDashboardUi.kt$@Composable fun DashboardPage( state: GatewayUiState, development: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, onSendText: (String) -&gt; Unit )</ID>
-    <ID>LongMethod:GatewayDashboardUi.kt$@Composable fun SpectrumCard(state: GatewayUiState, development: Boolean)</ID>
     <ID>LongMethod:GatewayDictionaryPage.kt$@Composable fun DictionaryPage( colloquialNormalizationStrengthInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, onColloquialNormalizationStrengthChange: (String) -&gt; Unit, onTranscriptionTermsChange: (String) -&gt; Unit, onTranscriptionDictionaryChange: (String) -&gt; Unit )</ID>
     <ID>LongMethod:GatewayModelDownloadSupport.kt$fun downloadModelFromHuggingFace( context: Context, modelName: String, onProgress: (downloadedBytes: Long, totalBytes: Long) -&gt; Unit = { _, _ -&gt; } ): Result&lt;String&gt;</ID>
     <ID>LongMethod:GatewayModelSupport.kt$fun buildSettings( context: Context, input: GatewaySettingsInputSnapshot ): GatewaySettings</ID>
@@ -146,7 +70,6 @@
     <ID>LongMethod:GatewaySettingsPatch.kt$fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySettingsPatchResult</ID>
     <ID>LongMethod:GatewaySettingsPatch.kt$fun flattenSectionedJson(root: JSONObject): JSONObject</ID>
     <ID>LongMethod:GatewayStatusIcons.kt$@Composable fun GatewayControlIcon( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
-    <ID>LongMethod:GatewayTranscriptCard.kt$@Composable fun TranscriptCard(state: GatewayUiState)</ID>
     <ID>LongMethod:GatewayUiCommandHandler.kt$@Composable fun HandleGatewayUiCommands( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
     <ID>LongMethod:GatewayViewModel.kt$GatewayViewModel$fun onEvent(event: GatewayUiEvent)</ID>
     <ID>LongMethod:GestureDebugPage.kt$@Composable fun GestureDebugPage( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
@@ -177,6 +100,8 @@
     <ID>LongParameterList:GatewayCameraGestureEffects.kt$( context: Context, settingsState: GatewaySettingsState, hasCameraPermission: Boolean, gestureRecognizer: MediaPipeCameraGestureRecognizer, gatewayViewModel: GatewayViewModel, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, requestStartForegroundListening: () -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayCameraGestureSupport.kt$( granted: Boolean, cameraGestureEnabled: Boolean, pendingCameraGestureStart: Boolean, isGestureDebugPageVisible: Boolean, gestureRecognizer: MediaPipeCameraGestureRecognizer, clearPendingCameraGestureStart: () -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayCameraGestureSupport.kt$( previewVisible: Boolean, cameraGestureEnabled: Boolean, hasCameraPermission: Boolean, captureCoordinator: CameraCaptureCoordinator, requestCameraGestureStart: () -&gt; Unit, clearPendingCameraGestureStart: () -&gt; Unit, launchCameraPermission: () -&gt; Unit, screenHoldMillis: Long, startForegroundListening: () -&gt; Unit, interruptAssistant: () -&gt; Unit, finalizeSpeechSegment: () -&gt; Unit, stopListening: () -&gt; Unit, markDirectAddress: () -&gt; Unit, logStart: (String) -&gt; Unit )</ID>
+    <ID>LongParameterList:GatewayChatUi.kt$( currentTranscript: String, transcribing: Boolean, transcriptionBackendLabel: String, assistantProcessing: Boolean, assistantProcessingLabel: String, lastError: String?, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:GatewayChatUi.kt$( listening: Boolean, currentMicrophoneGain: Double?, onSendText: (String) -&gt; Unit, onStartListening: () -&gt; Unit, onAttach: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
     <ID>LongParameterList:GatewayConfigActionsFactory.kt$( context: Context, uiScope: CoroutineScope, currentDownloadState: () -&gt; GatewayDownloadState, currentModelState: () -&gt; GatewayModelState, currentHistoryState: () -&gt; GatewayHistoryState, currentLocalModelName: () -&gt; String, currentSettingsInputSnapshot: () -&gt; GatewaySettingsInputSnapshot, sideEffectActions: ConfigPageSideEffectActions, updateDownloadState: (GatewayDownloadState) -&gt; Unit, updateModelState: (GatewayModelState) -&gt; Unit, updateHistoryState: (GatewayHistoryState) -&gt; Unit, updateLocalEndpointUrl: (String) -&gt; Unit, updateOpenClawServerAddress: (String) -&gt; Unit, updateOpenClawGatewayToken: (String) -&gt; Unit, updateOpenClawDeviceToken: (String) -&gt; Unit, updateOpenClawSessionKey: (String) -&gt; Unit, updateWhisperUrl: (String) -&gt; Unit, updateRemoteModel: (String) -&gt; Unit, updateWhisperAuthToken: (String) -&gt; Unit, updateAutoStartEnabled: (Boolean) -&gt; Unit, updateCameraGestureEnabled: (Boolean) -&gt; Unit, updateDevelopment: (Boolean) -&gt; Unit, updateVoiceChannelSkillEnabled: (Boolean) -&gt; Unit, updateVoiceChannelWakeTerms: (String) -&gt; Unit, updateVoiceChannelFollowUpSeconds: (String) -&gt; Unit, updateVoiceChannelIdlePromptSeconds: (String) -&gt; Unit, updateOpenClawAccumulationWindowSecs: (String) -&gt; Unit, updateAssistantVoiceEnabled: (Boolean) -&gt; Unit, updateAssistantVoiceStyle: (String) -&gt; Unit, updateAssistantSpeechRate: (String) -&gt; Unit, updateAssistantPitch: (String) -&gt; Unit, updateTranscriptionMode: (String) -&gt; Unit, updateLocalModelName: (String) -&gt; Unit, resetDownloadState: () -&gt; Unit, updateLocalExecutionMode: (String) -&gt; Unit, updateMicrophoneAutoSensitivityEnabled: (Boolean) -&gt; Unit, updateMicrophoneGain: (String) -&gt; Unit, updateTranscriptionRepeatSuppression: (String) -&gt; Unit, updateColloquialNormalizationStrength: (String) -&gt; Unit, updateVadThreshold: (String) -&gt; Unit, updateDebugSpeechHoldMs: (String) -&gt; Unit, updateDebugMaxSpeechSegmentMs: (String) -&gt; Unit, updateDebugMinTranscriptionMs: (String) -&gt; Unit, updateDebugPhraseBreakSilenceMs: (String) -&gt; Unit, updateScreenMode: (String) -&gt; Unit, updateScreenHoldSeconds: (String) -&gt; Unit, updateTranscriptClearTimeoutSecs: (String) -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayConfigComponents.kt$( title: String, rawValue: String, effectiveValue: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayConfigComponents.kt$( title: String, value: Float, valueText: String, valueRange: ClosedFloatingPointRange&lt;Float&gt;, steps: Int, supportingText: String, onValueChange: (Float) -&gt; Unit )</ID>
@@ -196,6 +121,7 @@
     <ID>LongParameterList:GatewayPermissionSupport.kt$( settings: GatewaySettings, appliedKeys: List&lt;String&gt;, ignoredKeys: List&lt;String&gt;, saveSettings: (GatewaySettings) -&gt; Unit, reapplyImportedSettings: (GatewaySettings) -&gt; Unit, updateStatus: (String) -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayRuntime.kt$GatewayRuntime$( detectedLabel: String?, matched: Boolean, reason: String, handedness: String? = null, landmarkCount: Int = 0, indexExtended: Boolean = false, middleFolded: Boolean = false, ringFolded: Boolean = false, pinkyFolded: Boolean = false, thumbFolded: Boolean = false, active: Boolean = false )</ID>
     <ID>LongParameterList:GatewaySettingsState.kt$GatewaySettingsState$( localEndpointUrl: String, openClawServerAddress: String, openClawGatewayToken: String, openClawDeviceToken: String, openClawSessionKey: String, whisperUrl: String, remoteModel: String, whisperAuthToken: String, autoStartEnabled: Boolean, cameraGestureEnabled: Boolean, voiceChannelSkillEnabled: Boolean, voiceChannelWakeTermsInput: String, voiceChannelFollowUpSecondsInput: String, voiceChannelIdlePromptSecondsInput: String, assistantVoiceEnabled: Boolean, assistantVoiceStyle: String, assistantSpeechRateInput: String, assistantPitchInput: String, transcriptionMode: String, localModelName: String, localExecutionMode: String, development: Boolean, microphoneAutoSensitivityEnabled: Boolean, microphoneGainInput: String, transcriptionRepeatSuppressionInput: String, colloquialNormalizationStrengthInput: String, vadThresholdInput: String, debugSpeechHoldMsInput: String, debugMaxSpeechSegmentMsInput: String, debugMinTranscriptionMsInput: String, debugPhraseBreakSilenceMsInput: String, transcriptionTermsInput: String, transcriptionDictionaryInput: String, screenMode: String, screenHoldSecondsInput: String, transcriptClearTimeoutSecsInput: String, openClawAccumulationWindowSecsInput: String )</ID>
+    <ID>LongParameterList:GatewayStatusIcons.kt$( lastError: String?, transcribing: Boolean, listening: Boolean, speakingBack: Boolean, transcriptionBackendLabel: String, transcriptionModelLabel: String, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit )</ID>
     <ID>LongParameterList:GatewayStatusIcons.kt$( listening: Boolean, transcribing: Boolean, speakingBack: Boolean, onStart: () -&gt; Unit, onStop: () -&gt; Unit, onInterruptAssistant: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
     <ID>LongParameterList:GatewayUiCommandHandler.kt$( gatewayViewModel: GatewayViewModel, permissionLauncher: ActivityResultLauncher&lt;String&gt;, notificationPermissionLauncher: ActivityResultLauncher&lt;String&gt;, cameraPermissionLauncher: ActivityResultLauncher&lt;String&gt;, gestureRecognizer: MediaPipeCameraGestureRecognizer, onStartListening: (String) -&gt; Unit, onStartCameraGestureCapture: (Boolean) -&gt; Unit, onStopGestureDebugCamera: () -&gt; Unit, )</ID>
     <ID>LongParameterList:GestureDebugPage.kt$( state: GatewayUiState, previewView: PreviewView, onOpenConfig: () -&gt; Unit, onOpenDashboard: () -&gt; Unit, onStartCameraDebug: () -&gt; Unit, onStopCameraDebug: () -&gt; Unit )</ID>
@@ -309,29 +235,12 @@
     <ID>MagicNumber:GatewayDashboardBanners.kt$0xFFFCE7C8</ID>
     <ID>MagicNumber:GatewayDashboardBanners.kt$100.0</ID>
     <ID>MagicNumber:GatewayDashboardBanners.kt$320</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0.05f</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0.28f</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0.5f</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0x143A87E8</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0x221E3246</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0x223CCB9D</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0x33000000</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xA8B47B1D</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFF08111C</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFF13283A</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF39D0FF</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFF6E8398</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFF8AAFCC</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFF90C7FF</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFA9BBCB</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFB9F6E8</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFFF2EFE8</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFF6D365</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFF6B5A</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFFE5A8</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$0xFFFFF3D5</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$220</ID>
-    <ID>MagicNumber:GatewayDashboardUi.kt$24f</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$3f</ID>
     <ID>MagicNumber:GatewayDashboardUi.kt$500</ID>
     <ID>MagicNumber:GatewayDeviceGuideSupport.kt$0x140B1520</ID>
@@ -358,7 +267,8 @@
     <ID>MagicNumber:GatewayOpenClawResponseCard.kt$22_000L</ID>
     <ID>MagicNumber:GatewayOpenClawResponseCard.kt$430L</ID>
     <ID>MagicNumber:GatewayOpenClawResponseCard.kt$48L</ID>
-    <ID>MagicNumber:GatewayRuntime.kt$GatewayUiState$48</ID>
+    <ID>MagicNumber:GatewayRuntime.kt$GatewayRuntime$48</ID>
+    <ID>MagicNumber:GatewayScreenBehavior.kt$500</ID>
     <ID>MagicNumber:GatewaySettings.kt$GatewaySettingsStore$4</ID>
     <ID>MagicNumber:GatewaySettings.kt$GatewaySettingsStore$5.0</ID>
     <ID>MagicNumber:GatewaySettingsNormalizer.kt$0.001</ID>
@@ -416,17 +326,6 @@
     <ID>MagicNumber:GatewayStatusIcons.kt$0xFFD32F2F</ID>
     <ID>MagicNumber:GatewayStatusIcons.kt$0xFFD94B4B</ID>
     <ID>MagicNumber:GatewayStatusIcons.kt$0xFFFFA726</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0.14f</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0.18f</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0.62f</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF102030</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF3A4A58</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF6B5A3A</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF6C7A86</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFF7A1F1F</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$0xFFF3EBDD</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$1800</ID>
-    <ID>MagicNumber:GatewayTranscriptCard.kt$4</ID>
     <ID>MagicNumber:GestureCommandFooter.kt$0xB3040A12</ID>
     <ID>MagicNumber:GestureCommandFooter.kt$0xFF35D08C</ID>
     <ID>MagicNumber:GestureCommandFooter.kt$0xFF5EA8FF</ID>
@@ -532,7 +431,6 @@
     <ID>MagicNumber:LocalWhisperEngine.kt$LocalWhisperEngine$8</ID>
     <ID>MagicNumber:MainActivity.kt$1200</ID>
     <ID>MagicNumber:MainActivity.kt$2000</ID>
-    <ID>MagicNumber:MainActivity.kt$500</ID>
     <ID>MagicNumber:MainActivity.kt$MainActivity.Companion$90</ID>
     <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$0.01f</ID>
     <ID>MagicNumber:MediaPipeCameraGestureRecognizer.kt$MediaPipeCameraGestureRecognizer$0.02f</ID>
@@ -703,10 +601,10 @@
     <ID>MagicNumber:WhisperApiClient.kt$WhisperApiClient$299</ID>
     <ID>MagicNumber:WhisperApiClient.kt$WhisperHttpException$401</ID>
     <ID>MagicNumber:WhisperApiClient.kt$WhisperHttpException$403</ID>
+    <ID>MagicNumber:WizardMotion.kt$0.2f</ID>
     <ID>MatchingDeclarationName:GatewayCameraGestureEffects.kt$GatewayCameraGestureCallbacks</ID>
     <ID>MatchingDeclarationName:GatewaySettingsNormalizer.kt$GatewaySettingsNormalizedNumbers</ID>
     <ID>MatchingDeclarationName:GatewaySettingsPatch.kt$GatewaySettingsPatchResult</ID>
-    <ID>MatchingDeclarationName:GatewayTranscriptCard.kt$TranscriptCardHint</ID>
     <ID>MatchingDeclarationName:WhisperConfigurationGuard.kt$WhisperConfigurationCheck</ID>
     <ID>MaxLineLength:DeviceModelGuideCatalog.kt$DeviceModelGuide$recommendation.localExecutionMode.orEmpty().equals(normalizedLocalExecution, ignoreCase = true)</ID>
     <ID>MaxLineLength:GatewayApiServer.kt$GatewayApiServer$(method == Method.POST || method == Method.PATCH || method == Method.PUT) &amp;&amp; uri == "/api/config" -&gt; applyConfig(session)</ID>
@@ -732,13 +630,10 @@
     <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$.</ID>
     <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$Text(if (state.localModelOptionsLoading) "Carregando modelos locais..." else "Selecionar da pasta local (${state.localModelOptions.size})")</ID>
     <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$if (LocalExecutionMode.fromPersistedValue(state.localExecutionMode) == LocalExecutionMode.CPU) "CPU" else "NNAPI"</ID>
-    <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"</ID>
     <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$supportingText = "Reduz ganho no ruido de fundo e libera o ganho maximo ao detectar fala. Padrao: habilitado."</ID>
     <ID>MaxLineLength:GatewayConfigTranscriptionSection.kt$title = if (state.microphoneAutoSensitivityEnabled) "Ganho maximo da fala" else "Ganho do microfone"</ID>
-    <ID>MaxLineLength:GatewayDashboardUi.kt$text = "Mic atual: $micGainLabel | Ruido base RMS: $noiseFloorLabel | Estabilidade: $noiseScoreLabel"</ID>
     <ID>MaxLineLength:GatewayDashboardUi.kt$val micGainLabel = state.currentMicrophoneGain?.let { String.format(java.util.Locale.US, "%.2fx", it) } ?: "-"</ID>
     <ID>MaxLineLength:GatewayDashboardUi.kt$val noiseFloorLabel = state.estimatedNoiseFloorRms?.let { String.format(java.util.Locale.US, "%.4f", it) } ?: "-"</ID>
-    <ID>MaxLineLength:GatewayDashboardUi.kt$val noiseScoreLabel = state.ambientNoiseScore?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "-"</ID>
     <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"${translateGuideStatus(recommendation.status)} | experiencia ${translateExperienceLevel(recommendation.experienceLevel)}"</ID>
     <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"Neste aparelho, o modelo local mais validado foi ${bestLocal.localModelId} com ${bestLocal.localExecutionMode}. ${bestLocal.summary}"</ID>
     <ID>MaxLineLength:GatewayDeviceGuideSupport.kt$"Neste aparelho, o runtime local mais validado foi ${bestLocal.localExecutionMode} usando ${bestLocal.localModelId}. ${bestLocal.summary}"</ID>
@@ -813,12 +708,6 @@
     <ID>MaxLineLength:GatewaySettingsState.kt$GatewaySettingsState$colloquialNormalizationStrengthInput = String.format(Locale.US, "%.2f", settings.colloquialNormalizationStrength)</ID>
     <ID>MaxLineLength:GatewaySettingsState.kt$colloquialNormalizationStrengthInput = String.format(Locale.US, "%.2f", initial.colloquialNormalizationStrength)</ID>
     <ID>MaxLineLength:GatewaySettingsState.kt$transcriptionRepeatSuppressionInput = String.format(Locale.US, "%.2f", initial.transcriptionRepeatSuppression)</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Emotion) null else TranscriptCardHint.Emotion</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Learning) null else TranscriptCardHint.Learning</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.Listening) null else TranscriptCardHint.Listening</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.OpenClawDispatch) null else TranscriptCardHint.OpenClawDispatch</ID>
-    <ID>MaxLineLength:GatewayTranscriptCard.kt$val next = if (activeHint == TranscriptCardHint.SameVoice) null else TranscriptCardHint.SameVoice</ID>
     <ID>MaxLineLength:GestureDebugPage.kt$.</ID>
     <ID>MaxLineLength:LocalSherpaOnnxEngine.kt$LocalSherpaOnnxEngine$"Pacote local incompleto para ${bundle.id}. Arquivos obrigatorios: ${bundle.requiredFiles.joinToString(", ")}"</ID>
     <ID>MaxLineLength:MainActivity.kt$LaunchedEffect</ID>
@@ -866,7 +755,6 @@
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_DYNAMIC_CONTRAST_MAX = 0.050 // Raised: 0.014 was too low and zeroed out the dynamic score for music/loud ambient</ID>
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_GAIN_STABILITY_THRESHOLD = 0.35 // Lowered: gain reduction should trigger earlier for stable ambient environments</ID>
     <ID>MaxLineLength:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private const val AMBIENT_SPEECH_OVERRIDE_DYNAMIC_CONTRAST = 0.050 // Raised: 0.018 was firing on all music/noise, blocking gain reduction</ID>
-    <ID>MaxLineLength:SetupWizardPage.kt$if (TranscriptionMode.fromPersistedValue(state.transcriptionMode) == TranscriptionMode.REMOTE) "Remoto" else "Local"</ID>
     <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$append(" Nao adicione fechamentos ou cortesias como \"obrigado\", \"obrigada\", \"tchau\", \"ate a proxima\" ou similares se nao estiverem claramente audiveis.")</ID>
     <ID>MaxLineLength:TranscriptTextPipeline.kt$TranscriptTextPipeline$val remainingWords = words.dropLast(suffixWords).joinToString(" ").trim().trimEnd(',', '.', ';', ':', '!', '?')</ID>
     <ID>MayBeConst:RoomAudioForegroundService.kt$RoomAudioForegroundService.Companion$private val LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000L</ID>
@@ -883,6 +771,7 @@
     <ID>NewLineAtEndOfFile:SpectrumDiagnosticsLogger.kt$com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger.kt</ID>
     <ID>NewLineAtEndOfFile:TranscriptHistoryLogger.kt$com.sufficit.ai.gateway.history.TranscriptHistoryLogger.kt</ID>
     <ID>ReturnCount:ColloquialNormalizationCatalog.kt$ColloquialNormalizationCatalog$private fun parseRule(line: String): ColloquialNormalizationRule?</ID>
+    <ID>ReturnCount:CompanionTranscriptionClient.kt$CompanionTranscriptionClient$private fun ensureBound(timeoutMs: Long): Boolean</ID>
     <ID>ReturnCount:FistCountdownOverlay.kt$@Composable fun FistCountdownOverlay(modifier: Modifier = Modifier)</ID>
     <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun conversation(session: IHTTPSession): Response</ID>
     <ID>ReturnCount:GatewayApiServer.kt$GatewayApiServer$private fun gesture(session: IHTTPSession): Response</ID>
@@ -951,6 +840,7 @@
     <ID>ReturnCount:WakeWordDetector.kt$WakeWordDetector$fun suggestedThreshold(): Double?</ID>
     <ID>ReturnCount:WakeWordDetector.kt$WakeWordDetector$private fun prepareTemplate(samples: ShortArray): Template?</ID>
     <ID>ReturnCount:WhisperConfigurationGuard.kt$fun checkWhisperConfiguration(whisperUrl: String, authToken: String): WhisperConfigurationCheck</ID>
+    <ID>ThrowsCount:CompanionTranscriptionClient.kt$CompanionTranscriptionClient$fun transcribe( wavBytes: ByteArray, languageHint: String, bindTimeoutMs: Long = 5_000L, resultTimeoutMs: Long = 30_000L ): WhisperTranscriptionResult</ID>
     <ID>ThrowsCount:OpenClawGatewayClient.kt$OpenClawGatewayClient$private fun executeGatewayFlow( config: OpenClawGatewayConfig, transcript: String?, timeoutMs: Long ): OpenClawGatewayReply</ID>
     <ID>ThrowsCount:RoomAudioForegroundService.kt$RoomAudioForegroundService$private fun downloadModel(url: String, targetFile: File)</ID>
     <ID>TooGenericExceptionCaught:GatewayApiServer.kt$GatewayApiServer$ex: Exception</ID>
@@ -962,6 +852,7 @@
     <ID>TooGenericExceptionCaught:SpeakerVerifier.kt$SpeakerVerifier$ex: Throwable</ID>
     <ID>TooManyFunctions:GatewayApiActions.kt$GatewayApiActions</ID>
     <ID>TooManyFunctions:GatewayApiServer.kt$GatewayApiServer : NanoHTTPD</ID>
+    <ID>TooManyFunctions:GatewayChatUi.kt$com.sufficit.ai.gateway.GatewayChatUi.kt</ID>
     <ID>TooManyFunctions:GatewayPermissionSupport.kt$com.sufficit.ai.gateway.GatewayPermissionSupport.kt</ID>
     <ID>TooManyFunctions:GatewayRuntime.kt$GatewayRuntime</ID>
     <ID>TooManyFunctions:GatewaySettings.kt$GatewaySettingsStore</ID>

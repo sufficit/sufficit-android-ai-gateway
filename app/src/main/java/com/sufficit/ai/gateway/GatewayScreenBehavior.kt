@@ -7,7 +7,53 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import com.sufficit.ai.gateway.config.ScreenMode
+import kotlinx.coroutines.delay
+
+/**
+ * Deriva keepScreenOn/wakeRequested a partir de [screenAttentionUntilEpochMs]
+ * e chama [HandleScreenBehavior] — isolado num composable proprio de
+ * proposito: o timer de 500ms so precisa recompor ESTE leaf, nao a arvore
+ * inteira (HorizontalPager/DashboardPage/chat) que o chamava antes. Achado
+ * real de performance: um produceState incondicional vivendo no mesmo escopo
+ * do resto da tela recompunha tudo a cada 500ms, mesmo parado/ocioso.
+ *
+ * O timer so tickeia ENQUANTO a janela de atencao de tela estiver no futuro
+ * (mesmo padrao do nowForSystemInfo em GatewayDashboardUi.kt) — parado/ocioso
+ * nao gera nenhuma recomposicao daqui.
+ */
+@Composable
+fun HandleScreenAttentionBehavior(
+    activity: ComponentActivity,
+    effectiveScreenMode: ScreenMode,
+    screenAttentionUntilEpochMs: Long
+) {
+    val now by produceState(
+        initialValue = System.currentTimeMillis(),
+        key1 = screenAttentionUntilEpochMs
+    ) {
+        while (screenAttentionUntilEpochMs > System.currentTimeMillis()) {
+            value = System.currentTimeMillis()
+            delay(500)
+        }
+        value = System.currentTimeMillis()
+    }
+    val screenAttentionActive = screenAttentionUntilEpochMs > now
+    val keepScreenOn = when (effectiveScreenMode) {
+        ScreenMode.ALWAYS_ON -> true
+        ScreenMode.ALWAYS_OFF -> false
+        ScreenMode.ACTIVITY -> screenAttentionActive
+    }
+
+    HandleScreenBehavior(
+        activity = activity,
+        screenMode = effectiveScreenMode,
+        keepScreenOn = keepScreenOn,
+        wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY && screenAttentionActive
+    )
+}
 
 @Composable
 fun HandleScreenBehavior(

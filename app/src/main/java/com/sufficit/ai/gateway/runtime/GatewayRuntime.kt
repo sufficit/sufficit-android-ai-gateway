@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class GatewayUiState(
-    val spectrum: List<Float> = List(48) { 0f },
     val listening: Boolean = false,
     val speechDetected: Boolean = false,
     val transcribing: Boolean = false,
@@ -89,6 +88,14 @@ object GatewayRuntime {
     // ativacao. O microfone segue ativo para capturar amostras.
     private val configScreenActiveFlow = MutableStateFlow(false)
 
+    // Espectro do microfone: flow PROPRIO, fora de GatewayUiState de proposito.
+    // Atualiza a ~2Hz enquanto ouvindo; se fosse mais um campo do state
+    // principal, cada tick emitiria uma GatewayUiState inteira nova e
+    // recomporia TUDO que le runtimeState (chat, status, etc) so por causa
+    // do espectro — achado real de performance (scroll do chat travando).
+    // So o Canvas do espectro (ListeningSpectrum) deve coletar isto.
+    private val spectrumFlow = MutableStateFlow<List<Float>>(List(48) { 0f })
+
     fun configScreenActive(): StateFlow<Boolean> = configScreenActiveFlow.asStateFlow()
 
     fun setConfigScreenActive(active: Boolean) {
@@ -97,6 +104,12 @@ object GatewayRuntime {
 
     fun state(): StateFlow<GatewayUiState> = state.asStateFlow()
     fun cameraGestureGate(): StateFlow<Boolean> = cameraGestureGateFlow.asStateFlow()
+
+    fun spectrum(): StateFlow<List<Float>> = spectrumFlow.asStateFlow()
+
+    fun setSpectrum(value: List<Float>) {
+        spectrumFlow.value = value
+    }
 
     fun update(transform: (GatewayUiState) -> GatewayUiState) {
         state.value = transform(state.value)

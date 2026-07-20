@@ -226,15 +226,7 @@ private fun GatewayScreen() {
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { PAGE_COUNT })
 
 
-    val now by produceState(initialValue = System.currentTimeMillis()) {
-        while (true) {
-            value = System.currentTimeMillis()
-            delay(500)
-        }
-    }
-
     val effectiveScreenMode = ScreenMode.fromPersistedValue(settingsState.screenMode)
-    val screenAttentionActive = runtimeState.screenAttentionUntilEpochMs > now
     val deviceGuide = remember(context) { DeviceModelGuideCatalog.matchCurrentDevice(context) }
     val localSystemInfo = remember(context, settingsState.localExecutionMode, settingsState.localModelName) {
         val executionMode = LocalExecutionMode.fromPersistedValue(settingsState.localExecutionMode)
@@ -266,12 +258,6 @@ private fun GatewayScreen() {
             )
         )
     }
-    val keepScreenOn = when (effectiveScreenMode) {
-        ScreenMode.ALWAYS_ON -> true
-        ScreenMode.ALWAYS_OFF -> false
-        ScreenMode.ACTIVITY -> screenAttentionActive
-    }
-
     HandleModelAvailabilityEffects(
         context = context,
         settingsState = settingsState,
@@ -312,11 +298,10 @@ private fun GatewayScreen() {
         }
     }
 
-    HandleScreenBehavior(
+    HandleScreenAttentionBehavior(
         activity = activity,
-        screenMode = effectiveScreenMode,
-        keepScreenOn = keepScreenOn,
-        wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY && screenAttentionActive
+        effectiveScreenMode = effectiveScreenMode,
+        screenAttentionUntilEpochMs = runtimeState.screenAttentionUntilEpochMs
     )
 
     HandleConfigScreenActiveEffect(
