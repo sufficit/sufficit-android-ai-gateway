@@ -11,23 +11,19 @@ package com.sufficit.ai.gateway.vision
  *
  * 2. [IndexRaised] — dedo indicador levantado (indicando "1") OU apontando
  *    para a tela: "vou falar". Abre a gravacao de audio (gate do microfone +
- *    tela acesa). Enquanto o indicador PERMANECER levantado/apontado a
- *    gravacao NAO e finalizada por silencio; ao abaixar o dedo, o fluxo
- *    normal de deteccao de silencio volta a valer.
+ *    tela acesa) somente quando a escuta ambiente de nivel 2 esta parada.
+ *    Enquanto ela ja estiver ativa, o reconhecedor ignora esta pose.
  *
- * 3. [FistClosed] — mao fechada (punho): "terminei de falar". Finaliza o
- *    segmento de fala em andamento na hora e envia para processamento
- *    (transcricao), sem esperar o tempo de silencio.
+ * 3. [FistClosed] — mao fechada (punho): interrompe a deteccao de voz na
+ *    hora. Equivale ao botao de parar o microfone: com palavra de ativacao
+ *    configurada, o servico entra em espera; caso contrario, para de vez.
  *
- * 4. [FistHeldStop] — punho fechado MANTIDO por 5 segundos: "pare de ouvir".
- *    Equivale ao botao de parar o microfone: com palavra de ativacao
- *    configurada o servico entra em espera (standby), senao para de vez.
- *    Dispara uma unica vez por pose; e preciso soltar o punho e fechar de
- *    novo para repetir. Nota: o punho curto (FistClosed) ja disparou no
- *    inicio da pose — a sequencia "enviar e depois parar" e intencional.
+ * 4. [FistHeldStop] — compatibilidade para clientes antigos que ainda
+ *    aguardam o punho mantido. O punho curto ja interrompe a escuta.
  *
  * Cada gesto reconhecido tambem acende uma linha colorida no rodape da tela
- * (ver GestureCommandFooter): laranja = calma, verde = gravar, azul = enviar.
+ * (ver GestureCommandFooter): laranja = calma, verde = retomar a escuta,
+ * azul = parar a escuta.
  */
 sealed interface CameraGestureEvent {
     val debugLabel: String
@@ -42,12 +38,12 @@ sealed interface CameraGestureEvent {
         override val debugLabel: String = "Indicador levantado"
     }
 
-    /** Punho fechado: terminei, envie para processamento. */
+    /** Punho fechado: interrompa a escuta/deteccao de voz. */
     data object FistClosed : CameraGestureEvent {
         override val debugLabel: String = "Punho fechado"
     }
 
-    /** Punho mantido por 5s: pare de ouvir (standby/parada do microfone). */
+    /** Compatibilidade: punho mantido tambem para a escuta. */
     data object FistHeldStop : CameraGestureEvent {
         override val debugLabel: String = "Punho mantido (parar escuta)"
     }
@@ -72,4 +68,27 @@ object GestureCommandIds {
 
     /** Janela final do hold em que a contagem regressiva aparece na tela. */
     const val FIST_COUNTDOWN_WINDOW_MS = 3_000L
+}
+
+/**
+ * Politica unica dos comandos gestuais por estado da interface.
+ *
+ * O nivel 1 (wake word local) nao aparece como [listening]: nele o indicador
+ * ainda pode retomar o nivel 2. Com [listening] ativo, liberar a fala seria
+ * redundante. Fora do Chat ou durante digitacao, nenhum comando de camera
+ * deve atravessar.
+ */
+object GestureCommandPolicy {
+    fun filter(
+        gestureId: String?,
+        listening: Boolean,
+        textInputModeActive: Boolean,
+        interactionActive: Boolean
+    ): String? = when {
+        !interactionActive -> null
+        textInputModeActive -> null
+        gestureId == GestureCommandIds.FIST && !listening -> null
+        gestureId == GestureCommandIds.INDEX_UP && listening -> null
+        else -> gestureId
+    }
 }

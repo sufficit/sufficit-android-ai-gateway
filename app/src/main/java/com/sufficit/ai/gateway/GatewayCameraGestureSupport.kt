@@ -95,27 +95,54 @@ fun stopGestureDebugCamera(
  gestureRecognizer: MediaPipeCameraGestureRecognizer,
  clearPendingCameraGestureStart: () -> Unit
 ) {
+ stopCameraGestureCapture(
+ gestureRecognizer = gestureRecognizer,
+ clearPendingCameraGestureStart = clearPendingCameraGestureStart,
+ statusText = "Camera parada para depuracao.",
+ reason = "Analise da camera pausada manualmente."
+ )
+}
+
+fun stopCameraGesturesOutsideChat(
+ gestureRecognizer: MediaPipeCameraGestureRecognizer,
+ clearPendingCameraGestureStart: () -> Unit
+) {
+ android.util.Log.i("MainActivity", "Stopping camera gesture recognition outside chat.")
+ stopCameraGestureCapture(
+ gestureRecognizer = gestureRecognizer,
+ clearPendingCameraGestureStart = clearPendingCameraGestureStart,
+ statusText = "Gestos pausados fora do chat.",
+ reason = "A camera de gestos funciona automaticamente somente na tela de chat."
+ )
+}
+
+private fun stopCameraGestureCapture(
+ gestureRecognizer: MediaPipeCameraGestureRecognizer,
+ clearPendingCameraGestureStart: () -> Unit,
+ statusText: String,
+ reason: String
+) {
  clearPendingCameraGestureStart()
  gestureRecognizer.stop()
+ GatewayRuntime.setCameraGestureInteractionActive(false)
  GatewayRuntime.setGestureDebugActive(false)
  // Camera parada nao pode trancar o microfone: gate fica aberto (sem
  // camera nao haveria gesto para reabrir).
  GatewayRuntime.setCameraGestureGateOpen(true)
- GatewayRuntime.setCameraGestureStatus("Camera parada para depuracao.")
+ GatewayRuntime.setCameraGestureStatus(statusText)
  GatewayRuntime.setGestureDebugState(
  detectedLabel = null,
  matched = false,
- reason = "Analise da camera pausada manualmente.",
+ reason = reason,
  active = false
  )
 }
 
 /**
  * Gesto 2 — dedo indicador levantado ("vou falar"):
- * abre o gate do microfone, acende a tela e inicia a escuta em primeiro
- * plano. A partir daqui a captura segue o fluxo normal de deteccao de
- * silencio; enquanto o usuario MANTIVER o indicador levantado, o servico de
- * audio nao finaliza por silencio (ver isIndexFingerHeld no servico).
+ * quando o nivel 2 esta parado, abre o gate do microfone, acende a tela e
+ * inicia a escuta em primeiro plano. Com a escuta ambiente ja ativa, o
+ * indicador e redundante e deve ser ignorado desde o reconhecedor.
  */
 fun handleIndexRaisedEvent(
  event: CameraGestureEvent.IndexRaised,
@@ -149,7 +176,6 @@ fun startCameraGestureCapture(
  screenHoldMillis: Long,
  startForegroundListening: () -> Unit,
  interruptAssistant: () -> Unit,
- finalizeSpeechSegment: () -> Unit,
  stopListening: () -> Unit,
  markDirectAddress: () -> Unit,
  logStart: (String) -> Unit
@@ -194,13 +220,31 @@ fun startCameraGestureCapture(
  logStart("Starting camera capture. previewVisible=$previewVisible hasCameraPermission=$hasCameraPermission")
  // Roteamento dos gestos de comando (contrato em CameraGestureEvent):
  //  1. Mao aberta  -> interrompe a fala do assistente imediatamente.
- //  2. Indicador   -> abre a gravacao ("vou falar").
- //  3. Punho       -> finaliza o segmento e envia para processamento.
+ //  2. Indicador   -> abre a gravacao somente se o nivel 2 estiver parado.
+ //  3. Punho       -> para a deteccao de voz/entra em espera.
  // Cada evento tambem acende a linha colorida do rodape via o estado
  // continuo publicado pelo reconhecedor (GatewayRuntime.gestureCommand).
- captureCoordinator.start(previewVisible) { event ->
+ captureCoordinator.start(previewVisible) eventHandler@{ event ->
+ // A camera pode continuar aberta para retomar rapidamente, mas nenhum
+ // comando de gesto atravessa o modo de digitacao. Isso impede que mao
+ // aberta/punho/indicador interrompam o usuario enquanto usa o teclado.
+ if (GatewayRuntime.state().value.textInputModeActive) {
+ OpenHandInterruptDebounce.cancel()
+ GatewayRuntime.setGestureCommand(null)
+ GatewayRuntime.setCameraGestureStatus("Gestos pausados durante a digitacao.")
+ GatewayRuntime.setGestureDebugState(
+ detectedLabel = null,
+ matched = false,
+ reason = "Comando ignorado porque a entrada por texto esta ativa.",
+ active = true
+ )
+ return@eventHandler
+ }
  when (event) {
  is CameraGestureEvent.IndexRaised -> {
+ // Defesa adicional contra evento atrasado: a pose pode ter estabilizado
+ // exatamente durante a transicao do standby para a escuta ambiente.
+ if (GatewayRuntime.state().value.listening) return@eventHandler
  handleIndexRaisedEvent(
  event = event,
  screenHoldMillis = screenHoldMillis,
@@ -221,18 +265,14 @@ fun startCameraGestureCapture(
  // O punho cancela uma interrupcao de fala pendente: fechar a mao
  // ("parar de ouvir") nao deve mexer na fala do assistente.
  OpenHandInterruptDebounce.cancel()
- GatewayRuntime.setCameraGestureStatus("Punho fechado: enviando fala para processamento.")
- // Punho = "terminei, ENVIE": intencao explicita de falar com o
- // assistente — marca enderecamento direto para o pre-agente nao
- // reter a frase pedindo confirmacao de wake.
- markDirectAddress()
- finalizeSpeechSegment()
+ GatewayRuntime.setCameraGestureStatus("Punho fechado: parando a escuta.")
+ stopListening()
  }
- // Punho mantido por 5s: parar a escuta (standby com palavra de
- // ativacao configurada; parada completa caso contrario).
+ // Compatibilidade: se chegar de um reconhecedor antigo, mantem a mesma
+ // acao do punho curto.
  is CameraGestureEvent.FistHeldStop -> {
  OpenHandInterruptDebounce.cancel()
- GatewayRuntime.setCameraGestureStatus("Punho mantido: parando a escuta.")
+ GatewayRuntime.setCameraGestureStatus("Punho mantido: escuta ja foi parada.")
  stopListening()
  }
  }

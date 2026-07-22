@@ -121,6 +121,7 @@ data class ConfigPageSideEffectActions(
 enum class ConfigSectionDestination {
     HOME,
     WIZARD,
+    WAKE_WORD,
     GENERAL,
     OPENCLAW,
     TRANSCRIPTION,
@@ -263,10 +264,14 @@ fun ConfigPage(
             actions = actions,
             onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
         )
+        ConfigSectionDestination.WAKE_WORD -> WakeWordWizardPage(
+            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+        )
         ConfigSectionDestination.GENERAL -> ConfigGeneralSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.HOME) },
+            onOpenWakeWord = { onDestinationChange(ConfigSectionDestination.WAKE_WORD) }
         )
         ConfigSectionDestination.OPENCLAW -> ConfigOpenClawSectionPage(
             state = state,

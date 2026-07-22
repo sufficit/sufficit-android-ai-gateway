@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import androidx.activity.result.ActivityResultLauncher
 import com.sufficit.ai.gateway.audio.RoomAudioForegroundService
+import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.state.GatewayUiEvent
 import com.sufficit.ai.gateway.state.GatewayViewModel
 import com.sufficit.ai.gateway.vision.CameraCaptureCoordinator
@@ -12,7 +13,8 @@ import com.sufficit.ai.gateway.vision.MediaPipeCameraGestureRecognizer
 data class GatewayCameraGestureCallbacks(
     val startCapture: (Boolean) -> Unit,
     val startDebugCamera: () -> Unit,
-    val stopDebugCamera: () -> Unit
+    val stopDebugCamera: () -> Unit,
+    val stopOutsideChat: () -> Unit
 )
 
 fun buildCameraGestureCallbacks(
@@ -25,6 +27,9 @@ fun buildCameraGestureCallbacks(
     requestStartForegroundListening: () -> Unit
 ): GatewayCameraGestureCallbacks {
     val startCapture: (Boolean) -> Unit = { previewVisible ->
+        GatewayRuntime.setCameraGestureInteractionActive(
+            settingsState.cameraGestureEnabled && hasCameraPermission
+        )
         startCameraGestureCapture(
             previewVisible = previewVisible,
             cameraGestureEnabled = settingsState.cameraGestureEnabled,
@@ -49,9 +54,7 @@ fun buildCameraGestureCallbacks(
             startForegroundListening = requestStartForegroundListening,
             // Gesto 1 (mao aberta): corta a fala do assistente na hora.
             interruptAssistant = { RoomAudioForegroundService.interruptAssistant(context) },
-            // Gesto 3 (punho fechado): finaliza o segmento e envia.
-            finalizeSpeechSegment = { RoomAudioForegroundService.finalizeSegment(context) },
-            // Gesto 4 (punho mantido 5s): para a escuta como o botao de parar.
+            // Gesto 3 (punho fechado): para a escuta como o botao de parar.
             stopListening = { RoomAudioForegroundService.stop(context) },
             // Indicador/apontar = "vou falar": fala seguinte e enderecada ao
             // assistente (nao deve ser retida como conversa ambiente).
@@ -81,9 +84,23 @@ fun buildCameraGestureCallbacks(
         )
     }
 
+    val stopOutsideChat: () -> Unit = {
+        stopCameraGesturesOutsideChat(
+            gestureRecognizer = gestureRecognizer,
+            clearPendingCameraGestureStart = {
+                gatewayViewModel.onEvent(
+                    GatewayUiEvent.PendingCameraGestureStartChanged(
+                        value = false
+                    )
+                )
+            }
+        )
+    }
+
     return GatewayCameraGestureCallbacks(
         startCapture = startCapture,
         startDebugCamera = startDebugCamera,
-        stopDebugCamera = stopDebugCamera
+        stopDebugCamera = stopDebugCamera,
+        stopOutsideChat = stopOutsideChat
     )
 }

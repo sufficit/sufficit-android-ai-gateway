@@ -25,7 +25,7 @@ fun persistSettingsAndStartListening(
  )
  settingsStore.save(settings)
  GatewayRuntime.clearError(statusText)
- RoomAudioForegroundService.start(context)
+ RoomAudioForegroundService.resumeAmbientListening(context)
 }
 
 fun handleNotificationPermissionResult(

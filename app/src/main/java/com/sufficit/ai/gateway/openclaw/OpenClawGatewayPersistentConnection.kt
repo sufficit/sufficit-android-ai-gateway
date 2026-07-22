@@ -14,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 class OpenClawGatewayPersistentConnection(
@@ -35,12 +36,15 @@ class OpenClawGatewayPersistentConnection(
     private val helper = OpenClawGatewayClient()
     private val socketRef = AtomicReference<WebSocket?>()
     private val connected = AtomicBoolean(false)
+    private val connecting = AtomicBoolean(false)
+    private val connectionGeneration = AtomicLong(0)
     private val manualCloseRequested = AtomicBoolean(false)
     private val pendingMessages = ConcurrentLinkedQueue<JSONObject>()
     private val currentConfig = AtomicReference<OpenClawGatewayConfig?>()
     private val currentIdentity = AtomicReference<ConnectionIdentity?>()
     private var heartbeatExecutor: ScheduledExecutorService? = null
 
+    @Synchronized
     fun connect(config: OpenClawGatewayConfig) {
         val normalized = config.copy(
             gatewayUrl = config.gatewayUrl.trim(),
@@ -56,7 +60,7 @@ class OpenClawGatewayPersistentConnection(
             return
         }
         val existingIdentity = currentIdentity.get()
-        if (connected.get() && existingIdentity == identity) {
+        if ((connected.get() || connecting.get()) && existingIdentity == identity) {
             currentConfig.set(normalized)
             return
         }
@@ -64,18 +68,23 @@ class OpenClawGatewayPersistentConnection(
         currentConfig.set(normalized)
         currentIdentity.set(identity)
         manualCloseRequested.set(false)
+        connecting.set(true)
+        val generation = connectionGeneration.incrementAndGet()
         Log.i(TAG, "Abrindo websocket persistente OpenClaw Android em ${normalized.gatewayUrl}")
         val webSocket = httpClient.newWebSocket(
             Request.Builder().url(normalized.gatewayUrl).build(),
-            buildListener()
+            buildListener(generation)
         )
         socketRef.set(webSocket)
     }
 
+    @Synchronized
     fun disconnect() {
+        connectionGeneration.incrementAndGet()
         heartbeatExecutor?.shutdownNow()
         heartbeatExecutor = null
         connected.set(false)
+        connecting.set(false)
         pendingMessages.clear()
         currentIdentity.set(null)
         manualCloseRequested.set(true)
@@ -92,9 +101,13 @@ class OpenClawGatewayPersistentConnection(
         return segmentId
     }
 
-    private fun buildListener(): WebSocketListener {
+    private fun buildListener(generation: Long): WebSocketListener {
         return object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (connectionGeneration.get() != generation) {
+                    webSocket.close(1000, "superseded")
+                    return
+                }
                 val config = currentConfig.get() ?: return
                 try {
                     webSocket.send(buildHelloPayload(config).toString())
@@ -104,11 +117,19 @@ class OpenClawGatewayPersistentConnection(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (connectionGeneration.get() != generation) {
+                    Log.i(TAG, "Ignorando mensagem de websocket substituido.")
+                    return
+                }
                 try {
                     val message = JSONObject(text)
                     when (message.optString("type")) {
                         // Server may send hello_ack (underscore) or hello.ack (dot) depending on version.
                         "hello_ack", "hello.ack" -> {
+                            if (connectionGeneration.get() != generation) {
+                                return
+                            }
+                            connecting.set(false)
                             connected.set(true)
                             startHeartbeat()
                             flushPendingMessages()
@@ -144,7 +165,13 @@ class OpenClawGatewayPersistentConnection(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (connectionGeneration.get() != generation) {
+                    Log.i(TAG, "Ignorando falha de websocket substituido.")
+                    return
+                }
+                connecting.set(false)
                 connected.set(false)
+                socketRef.compareAndSet(webSocket, null)
                 if (
                     manualCloseRequested.get() &&
                     t is SocketException &&
@@ -157,7 +184,13 @@ class OpenClawGatewayPersistentConnection(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (connectionGeneration.get() != generation) {
+                    Log.i(TAG, "Ignorando fechamento de websocket substituido.")
+                    return
+                }
+                connecting.set(false)
                 connected.set(false)
+                socketRef.compareAndSet(webSocket, null)
                 heartbeatExecutor?.shutdownNow()
                 heartbeatExecutor = null
                 listener.onDisconnected("Websocket Android fechado ($code): ${reason.ifBlank { "sem motivo" }}")
@@ -263,8 +296,13 @@ class OpenClawGatewayPersistentConnection(
             confidence = envelope.confidence,
             overlap = envelope.overlap,
             settingsPatch = envelope.settingsPatch,
+            transcript = envelope.transcript,
+            preAgentAction = envelope.preAgentAction,
+            preAgentReason = envelope.preAgentReason,
+            shouldForwardToFinalAgent = envelope.shouldForwardToFinalAgent,
             errorText = envelope.errorText,
-            detailsText = envelope.detailsText
+            detailsText = envelope.detailsText,
+            actions = envelope.actions
         )
     }
 

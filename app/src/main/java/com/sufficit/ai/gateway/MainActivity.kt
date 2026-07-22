@@ -293,6 +293,7 @@ private fun GatewayScreen() {
 
     DisposableEffect(gestureRecognizer) {
         onDispose {
+            GatewayRuntime.setCameraGestureInteractionActive(false)
             gestureRecognizer.stop()
             gestureRecognizer.close()
         }
@@ -444,14 +445,21 @@ private fun GatewayScreen() {
         }
     }
 
-    LaunchedEffect(settingsState.cameraGestureEnabled, hasCameraPermission, isGestureDebugPageVisible) {
-        gatewayViewModel.onEvent(
-            GatewayUiEvent.CameraPolicyChanged(
-                cameraGestureEnabled = settingsState.cameraGestureEnabled,
-                hasCameraPermission = hasCameraPermission,
-                isGestureDebugPageVisible = isGestureDebugPageVisible
+    LaunchedEffect(settingsState.cameraGestureEnabled, hasCameraPermission, pagerState.currentPage) {
+        if (pagerState.currentPage == DASHBOARD_PAGE_INDEX) {
+            GatewayRuntime.setCameraGestureInteractionActive(
+                settingsState.cameraGestureEnabled && hasCameraPermission
             )
-        )
+            gatewayViewModel.onEvent(
+                GatewayUiEvent.CameraPolicyChanged(
+                    cameraGestureEnabled = settingsState.cameraGestureEnabled,
+                    hasCameraPermission = hasCameraPermission,
+                    isGestureDebugPageVisible = false
+                )
+            )
+        } else {
+            cameraGestureCallbacks.stopOutsideChat()
+        }
     }
 
     LaunchedEffect(hasPermission, hasNotificationPermission, settingsState.autoStartEnabled, startupState.autoStartAttempted) {
@@ -481,6 +489,7 @@ private fun GatewayScreen() {
         when (page) {
             DASHBOARD_PAGE_INDEX -> DashboardPage(
                 state = runtimeState,
+                isActivePage = pagerState.currentPage == DASHBOARD_PAGE_INDEX,
                 development = settingsState.development,
                 onStart = {
                     requestStartForegroundListening()
@@ -563,15 +572,15 @@ private fun GatewayScreen() {
     }
     // Luvas sobre o chat e a depuracao quando maos forem detectadas;
     // telas de configuracao ficam livres do overlay.
-    if (pagerState.currentPage == DASHBOARD_PAGE_INDEX ||
-        pagerState.currentPage == GESTURE_DEBUG_PAGE_INDEX
-    ) {
+    val showGestureOverlay = when (pagerState.currentPage) {
+        GESTURE_DEBUG_PAGE_INDEX -> true
+        DASHBOARD_PAGE_INDEX -> !runtimeState.textInputModeActive
+        else -> false
+    }
+    if (showGestureOverlay) {
         HandGloveOverlay(modifier = Modifier.fillMaxSize())
-        // Punho mantido: contagem 3..2..1 estilo jogo de luta no centro da
-        // tela nos ultimos 3s antes de parar a escuta.
-        FistCountdownOverlay(modifier = Modifier.fillMaxSize())
         // Linha colorida no rodape para cada gesto de comando reconhecido
-        // (laranja = parar fala, verde = gravando, azul = enviar).
+        // (laranja = parar fala, verde = gravando, azul = parar escuta).
         GestureCommandFooter(
             modifier = androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
         )

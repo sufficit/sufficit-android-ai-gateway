@@ -30,10 +30,9 @@ import kotlinx.coroutines.delay
  *
  * Cores (uma por gesto, ver contrato em CameraGestureEvent):
  *  - LARANJA: mao aberta — "calma", interrompendo a fala do assistente;
- *  - VERDE:   indicador levantado — "vou falar", gravacao aberta (a linha
- *             permanece acesa enquanto o dedo ficar levantado, espelhando a
- *             regra de manter a gravacao aberta);
- *  - AZUL:    punho fechado — "terminei", enviando para processamento.
+ *  - VERDE:   indicador levantado — "vou falar", exibido somente para
+ *             retomar a escuta ambiente quando o nivel 2 estiver parado;
+ *  - AZUL:    punho fechado — parando a escuta.
  *
  * A linha acende enquanto o gesto esta ativo e permanece por um curto
  * tempo apos soltar (linger), para o feedback nao piscar.
@@ -41,12 +40,21 @@ import kotlinx.coroutines.delay
 @Composable
 fun GestureCommandFooter(modifier: Modifier = Modifier) {
     val command by GatewayRuntime.gestureCommand().collectAsState()
+    val runtimeState by GatewayRuntime.state().collectAsState()
 
     // Guarda o ultimo gesto para o linger apos o usuario soltar a pose.
     var lastGestureId by remember { mutableStateOf<String?>(null) }
     var visible by remember { mutableStateOf(false) }
 
-    val current = command
+    // Defesa visual: ao entrar no nivel 2, remove inclusive o linger do
+    // indicador usado para acordar a escuta. Mao aberta e punho permanecem.
+    if (runtimeState.listening && lastGestureId == GestureCommandIds.INDEX_UP) {
+        lastGestureId = null
+        visible = false
+    }
+    val current = command?.takeUnless {
+        runtimeState.listening && it.gestureId == GestureCommandIds.INDEX_UP
+    }
     if (current != null) {
         lastGestureId = current.gestureId
         visible = true
@@ -64,7 +72,7 @@ fun GestureCommandFooter(modifier: Modifier = Modifier) {
     val (color, label) = when (gestureId) {
         GestureCommandIds.OPEN_HAND -> Color(0xFFFF8A50) to "Mao aberta — parando a fala"
         GestureCommandIds.INDEX_UP -> Color(0xFF35D08C) to "Indicador — gravando, pode falar"
-        GestureCommandIds.FIST -> Color(0xFF5EA8FF) to "Punho — enviando para processamento"
+        GestureCommandIds.FIST -> Color(0xFF5EA8FF) to "Punho — parando a escuta"
         else -> return
     }
 

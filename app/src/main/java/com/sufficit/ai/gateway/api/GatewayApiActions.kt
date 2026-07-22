@@ -2,6 +2,8 @@ package com.sufficit.ai.gateway.api
 
 import com.sufficit.ai.gateway.config.GatewaySettings
 import com.sufficit.ai.gateway.config.GatewaySettingsPatchResult
+import com.sufficit.ai.gateway.network.WakeOnLanDiscoveryResult
+import com.sufficit.ai.gateway.network.WakeOnLanResult
 import org.json.JSONObject
 
 /**
@@ -78,4 +80,21 @@ interface GatewayApiActions {
      * acordar a tela antes, ou usar a tool wake).
      */
     fun takePhoto(useBackCamera: Boolean, label: String)
+
+    /** Envia magic packets Wake-on-LAN pela rede local atual do telefone. */
+    fun wakeOnLan(
+        macAddress: String,
+        broadcastAddress: String = "",
+        port: Int = 9,
+        repeat: Int = 3
+    ): WakeOnLanResult
+
+    /**
+     * Descobre vizinhos IPv4 atualmente visiveis na LAN do telefone.
+     *
+     * O resultado identifica MAC/IP ativos pela tabela ARP. A capacidade
+     * efetiva de Wake-on-LAN do destino continua dependendo da NIC/BIOS e e
+     * retornada como "unknown" ate ser confirmada por um teste real.
+     */
+    fun discoverWakeOnLanDevices(activeProbe: Boolean = true): WakeOnLanDiscoveryResult
 }

@@ -14,6 +14,13 @@ data class OpenClawReplyEnvelope(
     val confidence: Double?,
     val overlap: Boolean,
     val settingsPatch: JSONObject?,
+    /** Texto do turno que o gateway efetivamente avaliou. */
+    val transcript: String? = null,
+    /** Decisão do pré-agente Android (forward/discard/hold/review/ignore). */
+    val preAgentAction: String? = null,
+    /** Código auditável da decisão (ex.: ambient_not_directed_to_agent). */
+    val preAgentReason: String? = null,
+    val shouldForwardToFinalAgent: Boolean? = null,
     /**
      * Falha do agente no servidor (campo "error" do envelope). Detalhe cru
      * para log/status — NUNCA vira bolha de chat nem é lido pelo TTS.
@@ -90,6 +97,10 @@ internal object OpenClawReplyEnvelopeParser {
                 parsedJson.optJSONObject("settingsPatch")
                     ?: parsedJson.optJSONObject("settings")
                     ?: parsedJson.optJSONObject("androidSettings")
+            val transcript = parsedJson.optString("transcript").trim().ifBlank { null }
+            val preAgentAction = parsedJson.optString("action").trim().ifBlank { null }
+            val preAgentReason = parsedJson.optString("reason").trim().ifBlank { null }
+            val shouldForwardToFinalAgent = parsedJson.booleanOrNull("shouldForwardToFinalAgent")
             val errorText = parsedJson.optString("error").trim()
                 .ifBlank { parsedJson.optString("errorText").trim() }
                 .ifBlank { null }
@@ -126,6 +137,10 @@ internal object OpenClawReplyEnvelopeParser {
                 confidence = confidence,
                 overlap = overlap,
                 settingsPatch = settingsPatch,
+                transcript = transcript,
+                preAgentAction = preAgentAction,
+                preAgentReason = preAgentReason,
+                shouldForwardToFinalAgent = shouldForwardToFinalAgent,
                 errorText = errorText,
                 detailsText = detailsText,
                 actions = actions

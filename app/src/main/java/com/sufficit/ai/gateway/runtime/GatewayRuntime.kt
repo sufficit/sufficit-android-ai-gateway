@@ -7,6 +7,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class GatewayUiState(
     val listening: Boolean = false,
+    // AudioRecord pode permanecer aberto em espera pela palavra de ativacao.
+    // Diferente de `listening`, isto representa captura fisica e permite que
+    // a UI mantenha o monitor visual sem habilitar a transcricao.
+    val microphoneCaptureActive: Boolean = false,
     val speechDetected: Boolean = false,
     val transcribing: Boolean = false,
     val speakingBack: Boolean = false,
@@ -15,6 +19,9 @@ data class GatewayUiState(
     val transcriptionBackendLabel: String = "Remoto",
     val transcriptionModelLabel: String = "",
     val statusText: String = "Pronto para iniciar.",
+    // Quando o campo de texto substitui o espectro, comandos reconhecidos
+    // pela camera ficam suspensos para nao interromper a digitacao.
+    val textInputModeActive: Boolean = false,
     val cameraGestureStatus: String = "Gesto por camera desativado.",
     val gestureDebugActive: Boolean = false,
     val gestureDebugPreviewAvailable: Boolean = false,
@@ -58,7 +65,10 @@ data class GatewayUiState(
     // Agente processando um pedido: bolha provisoria no chat enquanto aguarda
     // a resposta. Label = o que esta sendo processado (o pedido do usuario).
     val assistantProcessing: Boolean = false,
-    val assistantProcessingLabel: String = ""
+    val assistantProcessingLabel: String = "",
+    // Permite que o toque em Enviar crie a bolha antes de iniciar o Service;
+    // uma instancia nova adota esse handoff em vez de trata-lo como obsoleto.
+    val assistantProcessingStartedAtEpochMs: Long = 0L
 )
 
 /**
@@ -88,6 +98,11 @@ object GatewayRuntime {
     // ativacao. O microfone segue ativo para capturar amostras.
     private val configScreenActiveFlow = MutableStateFlow(false)
 
+    // Comandos de camera pertencem ao Chat. Fora dele a camera e parada e
+    // este gate impede que um quadro/evento atrasado atravesse a navegacao.
+    // A tela tecnica de depuracao pode reabri-lo explicitamente pelo botao.
+    private val cameraGestureInteractionActiveFlow = MutableStateFlow(false)
+
     // Espectro do microfone: flow PROPRIO, fora de GatewayUiState de proposito.
     // Atualiza a ~2Hz enquanto ouvindo; se fosse mais um campo do state
     // principal, cada tick emitiria uma GatewayUiState inteira nova e
@@ -100,6 +115,16 @@ object GatewayRuntime {
 
     fun setConfigScreenActive(active: Boolean) {
         configScreenActiveFlow.value = active
+    }
+
+    fun cameraGestureInteractionActive(): StateFlow<Boolean> =
+        cameraGestureInteractionActiveFlow.asStateFlow()
+
+    fun setCameraGestureInteractionActive(active: Boolean) {
+        cameraGestureInteractionActiveFlow.value = active
+        if (!active) {
+            setGestureCommand(null)
+        }
     }
 
     fun state(): StateFlow<GatewayUiState> = state.asStateFlow()
@@ -121,6 +146,27 @@ object GatewayRuntime {
 
     fun setCameraGestureGateOpen(open: Boolean) {
         cameraGestureGateFlow.value = open
+    }
+
+    fun setTextInputModeActive(active: Boolean) {
+        update { current ->
+            if (current.textInputModeActive == active) current else current.copy(textInputModeActive = active)
+        }
+        if (active) {
+            setGestureCommand(null)
+        }
+    }
+
+    fun beginAssistantProcessing(label: String) {
+        val normalized = label.trim()
+        if (normalized.isBlank()) return
+        update {
+            it.copy(
+                assistantProcessing = true,
+                assistantProcessingLabel = normalized,
+                assistantProcessingStartedAtEpochMs = System.currentTimeMillis()
+            )
+        }
     }
 
     fun setGestureDebugState(
@@ -279,11 +325,52 @@ object GatewayRuntime {
         audioPath: String? = null,
         audioDurationMs: Long? = null,
         audioExpiresAtEpochMs: Long? = null
-    ) {
-        GatewayChatRuntime.appendChatMessage(
+    ): Long {
+        return GatewayChatRuntime.appendChatMessage(
             role, text, details, audioPath, audioDurationMs, audioExpiresAtEpochMs
         )
     }
+
+    fun attachChatMessageAudio(
+        id: Long,
+        audioPath: String,
+        audioDurationMs: Long,
+        audioExpiresAtEpochMs: Long
+    ) {
+        GatewayChatRuntime.attachChatMessageAudio(id, audioPath, audioDurationMs, audioExpiresAtEpochMs)
+    }
+
+    fun hasRecentUserAudioCovering(text: String): Boolean =
+        GatewayChatRuntime.hasRecentUserAudioCovering(text)
+
+    fun markRecentTranscribedUserAudioAsSending(text: String): Boolean =
+        GatewayChatRuntime.markRecentTranscribedUserAudioAsSending(text)
+
+    fun updateRecentUserDelivery(
+        dispatchedText: String,
+        state: ChatDeliveryState,
+        reason: String? = null,
+        tags: List<String> = emptyList()
+    ): Boolean = GatewayChatRuntime.updateRecentUserDelivery(
+        dispatchedText = dispatchedText,
+        state = state,
+        reason = reason,
+        tags = tags
+    )
+
+    fun appendDeliveryAuditMessage(
+        dispatchedText: String,
+        state: ChatDeliveryState,
+        reason: String? = null,
+        tags: List<String> = emptyList(),
+        decisionText: String
+    ): Long = GatewayChatRuntime.appendDeliveryAuditMessage(
+        dispatchedText = dispatchedText,
+        state = state,
+        reason = reason,
+        tags = tags,
+        decisionText = decisionText
+    )
 
     fun appendChatAudioMessage(
         audioPath: String,
@@ -340,9 +427,9 @@ object GatewayRuntime {
         GatewayWakeWordRuntime.bumpWakeWordConfigVersion()
     }
 
-    fun requestWakeWordRecording() {
-        GatewayWakeWordRuntime.requestWakeWordRecording()
+    fun requestWakeWordRecording(profileId: String) {
+        GatewayWakeWordRuntime.requestWakeWordRecording(profileId)
     }
 
-    fun takeWakeWordRecordingRequest(): Boolean = GatewayWakeWordRuntime.takeWakeWordRecordingRequest()
+    fun takeWakeWordRecordingRequest(): String? = GatewayWakeWordRuntime.takeWakeWordRecordingRequest()
 }

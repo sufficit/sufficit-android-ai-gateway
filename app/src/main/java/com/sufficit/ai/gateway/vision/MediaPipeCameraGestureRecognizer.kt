@@ -568,31 +568,44 @@ class MediaPipeCameraGestureRecognizer(
         }
 
         // Analise por mao. Com duas maos visiveis, vale a de maior prioridade:
-        // OPEN_HAND (parar a fala do assistente = emergencia) > FIST (enviar) >
+        // OPEN_HAND (parar a fala do assistente = emergencia) > FIST (parar
+        // escuta) >
         // INDEX_UP (abrir gravacao).
         val analyses = allLandmarks.mapIndexed { index, landmarks ->
             lastHandednessLabel = handednessLabels.getOrNull(index)
             analyzeHandGesture(landmarks)
         }
-        val gestureId = analyses
+        val rawGestureId = analyses
             .mapNotNull { it.gestureId }
             .minByOrNull { gesturePriority(it) }
-        val analysis = analyses.firstOrNull { it.gestureId == gestureId } ?: analyses.first()
+        val gestureId = analyses
+            .mapNotNull { filterGestureForCurrentState(it.gestureId) }
+            .minByOrNull { gesturePriority(it) }
+        val analysis = analyses.firstOrNull { it.gestureId == (gestureId ?: rawGestureId) }
+            ?: analyses.first()
+        val debugAnalysis = if (rawGestureId != null && gestureId == null) {
+            analysis.copy(
+                gestureId = null,
+                reason = suppressedGestureReason(rawGestureId)
+            )
+        } else {
+            analysis
+        }
         GatewayRuntime.setGestureDebugState(
             detectedLabel = gestureId?.let { gestureEventFor(it).debugLabel },
             matched = gestureId != null,
-            reason = analysis.reason,
-            handedness = analysis.handedness,
-            landmarkCount = analysis.landmarkCount,
-            indexExtended = analysis.indexExtended,
-            middleFolded = analysis.middleFolded,
-            ringFolded = analysis.ringFolded,
-            pinkyFolded = analysis.pinkyFolded,
-            thumbFolded = analysis.thumbFolded,
+            reason = debugAnalysis.reason,
+            handedness = debugAnalysis.handedness,
+            landmarkCount = debugAnalysis.landmarkCount,
+            indexExtended = debugAnalysis.indexExtended,
+            middleFolded = debugAnalysis.middleFolded,
+            ringFolded = debugAnalysis.ringFolded,
+            pinkyFolded = debugAnalysis.pinkyFolded,
+            thumbFolded = debugAnalysis.thumbFolded,
             active = true
         )
         updateGestureStability(gestureId)
-        logGestureDiagnostics(analysis, gestureId, allLandmarks.firstOrNull())
+        logGestureDiagnostics(debugAnalysis, gestureId, allLandmarks.firstOrNull())
     }
 
     // Diagnostico em logcat (rate-limited): permite ver POR QUE uma pose nao
@@ -641,32 +654,61 @@ class MediaPipeCameraGestureRecognizer(
     //    consecutivos iguais — um unico quadro ruidoso durante a transicao da
     //    mao nao dispara comando.
     //  - O gesto estavel e publicado CONTINUAMENTE no GatewayRuntime (com
-    //    timestamp renovado a cada quadro). E esse estado continuo que o
-    //    servico de audio usa para a regra "indicador mantido levantado nao
-    //    deixa a gravacao fechar por silencio".
+    //    timestamp renovado a cada quadro). O indicador so participa quando
+    //    a escuta ambiente esta parada: com o nivel 2 ativo ele seria um
+    //    comando redundante e, portanto, nem vira gesto candidato.
     //  - O callback de evento dispara apenas na TRANSICAO para um novo gesto
     //    (borda de subida). Manter a pose nao repete o evento; soltar a mao e
     //    refazer o gesto dispara de novo.
     // ------------------------------------------------------------------
     private var gestureCandidateId: String? = null
     private var gestureCandidateFrames = 0
+    private var gestureCandidateLastDetectedAtMs = 0L
     private var stableGestureId: String? = null
     private var stableGestureSinceMs = 0L
     private var fistHoldStopEmitted = false
 
+    private fun filterGestureForCurrentState(rawGestureId: String?): String? {
+        val runtimeState = GatewayRuntime.state().value
+        return GestureCommandPolicy.filter(
+            gestureId = rawGestureId,
+            listening = runtimeState.listening,
+            textInputModeActive = runtimeState.textInputModeActive,
+            interactionActive = GatewayRuntime.cameraGestureInteractionActive().value
+        )
+    }
+
+    private fun suppressedGestureReason(rawGestureId: String): String {
+        val runtimeState = GatewayRuntime.state().value
+        return when {
+            !GatewayRuntime.cameraGestureInteractionActive().value ->
+                "Comandos de gesto disponiveis somente no chat."
+            runtimeState.textInputModeActive ->
+                "Comandos de gesto pausados durante a digitacao."
+            rawGestureId == GestureCommandIds.INDEX_UP && runtimeState.listening ->
+                "Escuta ambiente ativa; nao e necessario liberar a fala."
+            rawGestureId == GestureCommandIds.FIST && !runtimeState.listening ->
+                "Escuta ambiente parada; punho sem acao neste estado."
+            else -> "Pose sem comando associado neste estado."
+        }
+    }
+
     private fun updateGestureStability(rawGestureId: String?) {
-        // Punho fechado so e COMANDO com a escuta ativa: parado/standby nao
-        // ha nada para "parar" — sem aviso no rodape, sem countdown, sem
-        // FistHeldStop. O slot do gesto fica livre para futuras funcoes com
-        // o app parado. INDEX_UP segue valendo sem escuta (e o gesto que
-        // ACORDA o app) e OPEN_HAND tambem (interrompe a fala do assistente).
-        val gestureId = if (
-            rawGestureId == GestureCommandIds.FIST &&
-            !GatewayRuntime.state().value.listening
+        // A linguagem de gestos depende do estado real do nivel 2:
+        //  - ouvindo: punho e mao aberta continuam uteis; indicador nao faz
+        //    nada porque a fala ja esta liberada;
+        //  - standby: indicador continua disponivel para acordar o nivel 2;
+        //    punho nao tem o que interromper.
+        val gestureId = filterGestureForCurrentState(rawGestureId)
+        val now = System.currentTimeMillis()
+        // MediaPipe pode perder um ou dois quadros mesmo com a mao parada.
+        // Antes isso zerava o candidato e o punho nunca chegava a estavel.
+        if (
+            gestureId == null &&
+            gestureCandidateId != null &&
+            now - gestureCandidateLastDetectedAtMs <= GESTURE_DROPOUT_GRACE_MS
         ) {
-            null
-        } else {
-            rawGestureId
+            return
         }
         if (gestureId == gestureCandidateId) {
             gestureCandidateFrames += 1
@@ -674,13 +716,15 @@ class MediaPipeCameraGestureRecognizer(
             gestureCandidateId = gestureId
             gestureCandidateFrames = 1
         }
+        if (gestureId != null) {
+            gestureCandidateLastDetectedAtMs = now
+        }
         if (gestureCandidateFrames < GESTURE_STABLE_FRAMES) {
             return
         }
-        val now = System.currentTimeMillis()
         if (gestureCandidateId == stableGestureId) {
-            // Pose mantida: renova o timestamp do estado continuo para o
-            // servico saber que o gesto ainda esta valido neste instante.
+            // Pose mantida: renova o timestamp do estado continuo para os
+            // overlays saberem que o gesto ainda esta valido neste instante.
             GatewayRuntime.setGestureCommand(stableGestureId)
             // Punho MANTIDO por FIST_HOLD_STOP_MS: comando de parar a escuta.
             // Dispara uma unica vez por pose (fistHoldStopEmitted); soltar o
@@ -718,6 +762,7 @@ class MediaPipeCameraGestureRecognizer(
     private fun resetGestureStability() {
         gestureCandidateId = null
         gestureCandidateFrames = 0
+        gestureCandidateLastDetectedAtMs = 0L
         stableGestureId = null
         stableGestureSinceMs = 0L
         fistHoldStopEmitted = false
@@ -781,7 +826,7 @@ class MediaPipeCameraGestureRecognizer(
      *  - OPEN_HAND ("calma, pare de falar"): os quatro dedos estendidos.
      *    O polegar fica livre: a deteccao dele e instavel com a mao espalmada
      *    e nao muda a semantica do gesto.
-     *  - FIST ("terminei, envie"): os quatro dedos recolhidos com as pontas
+     *  - FIST ("pare de ouvir"): os quatro dedos recolhidos com as pontas
      *    proximas a palma. Polegar livre — pode ficar por fora do punho.
      *
      * Retorna gestureId = null quando a pose nao corresponde a nenhum comando
@@ -819,8 +864,8 @@ class MediaPipeCameraGestureRecognizer(
         // INDEX_UP de meio-termo: o criterio totalmente estrito (3 dedos
         // recolhidos + polegar) falhava com a mao natural; o totalmente
         // relaxado (so "nao estendidos") dava falso positivo com a mao
-        // parada no quadro — e um indicador "mantido" falso bloqueia o corte
-        // por silencio e trava o envio ao OpenClaw. Meio-termo: o dedo MEDIO
+        // parada no quadro — e um indicador falso gerava comando visual sem
+        // intencao. Meio-termo: o dedo MEDIO
         // precisa estar claramente recolhido (e o vizinho do indicador, o
         // mais discriminativo), anelar/mindinho apenas nao-estendidos e
         // polegar livre.
@@ -879,7 +924,7 @@ class MediaPipeCameraGestureRecognizer(
                 "Apontando para a tela: abrir gravacao."
             gestureId == GestureCommandIds.INDEX_UP -> "Indicador levantado: abrir gravacao."
             gestureId == GestureCommandIds.OPEN_HAND -> "Mao aberta: interromper fala do assistente."
-            gestureId == GestureCommandIds.FIST -> "Punho fechado: enviar para processamento."
+            gestureId == GestureCommandIds.FIST -> "Punho fechado: parar a escuta."
             else -> "Pose sem comando associado."
         }
 
@@ -981,8 +1026,9 @@ class MediaPipeCameraGestureRecognizer(
         private const val TAG = "MediaPipeGesture"
         private const val MAX_HANDS = 2
 
-        // Quadros consecutivos iguais para um gesto virar "ativo" (debounce).
-        private const val GESTURE_STABLE_FRAMES = 3
+        // Dois quadros confirmados, tolerando uma lacuna curta da camera.
+        private const val GESTURE_STABLE_FRAMES = 2
+        private const val GESTURE_DROPOUT_GRACE_MS = 900L
 
         // Apontar para a tela: indicador encurtado em 2D abaixo desta fracao
         // do tamanho da mao (ao quadrado) + ponta mais proxima da camera que

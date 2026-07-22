@@ -47,6 +47,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun DashboardPage(
     state: GatewayUiState,
+    isActivePage: Boolean,
     development: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -130,12 +131,16 @@ fun DashboardPage(
                     .weight(1f)
             )
 
-            // Barra de envio: espectro quando ouvindo; texto quando parado.
+            // O espectro representa somente a escuta ambiente (nivel 2).
+            // No modo texto, o nivel 1 continua monitorando a wake word sem
+            // disputar espaco com o campo de digitacao.
             ChatInputBar(
-                listening = state.listening,
+                ambientListening = state.listening,
+                isActivePage = isActivePage,
                 currentMicrophoneGain = state.currentMicrophoneGain,
                 onSendText = onSendText,
                 onStartListening = onStart,
+                onSwitchToTextInput = onStop,
                 onAttach = {
                     GatewayRuntime.update {
                         it.copy(

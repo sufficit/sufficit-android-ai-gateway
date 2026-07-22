@@ -2,6 +2,7 @@ package com.sufficit.ai.gateway.api
 
 import android.util.Log
 import com.sufficit.ai.gateway.config.toConfigJson
+import com.sufficit.ai.gateway.network.WakeOnLanDiscoveryResult
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.vision.GestureCommandIds
@@ -70,6 +71,8 @@ class GatewayApiServer(
             (method == Method.GET || method == Method.POST) && uri == "/api/screenshot" -> screenshot(session)
             method == Method.POST && uri == "/api/effect" -> effect(session)
             method == Method.POST && uri == "/api/photo" -> photo(session)
+            method == Method.POST && uri == "/api/wakeonlan" -> wakeOnLan(session)
+            method == Method.POST && uri == "/api/wakeonlan/discover" -> discoverWakeOnLan(session)
             else -> json(Response.Status.NOT_FOUND, errorBody("not_found", "$method $uri"))
         }
     }
@@ -147,6 +150,87 @@ class GatewayApiServer(
             JSONObject().put("accepted", true).put("camera", if (useBack) "back" else "front")
         )
     }
+
+    private fun wakeOnLan(session: IHTTPSession): Response {
+        val body = readJsonBody(session) ?: return badRequest("corpo JSON obrigatorio")
+        val macAddress = body.optString("mac").trim()
+            .ifBlank { body.optString("macAddress").trim() }
+            .ifBlank { body.optString("targetMac").trim() }
+        if (macAddress.isBlank()) return badRequest("campo 'mac' obrigatorio")
+        val broadcastAddress = body.optString("broadcast").trim()
+            .ifBlank { body.optString("broadcastAddress").trim() }
+        val port = body.optInt("port", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_PORT)
+        val repeat = if (body.has("repeat")) {
+            body.optInt("repeat", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT)
+        } else {
+            body.optInt("repetitions", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT)
+        }
+        return runCatching {
+            actions.wakeOnLan(macAddress, broadcastAddress, port, repeat)
+        }.fold(
+            onSuccess = { result ->
+                json(
+                    Response.Status.OK,
+                    JSONObject()
+                        .put("ok", true)
+                        .put("mac", result.macAddress)
+                        .put("port", result.port)
+                        .put("packetsSent", result.packetsSent)
+                        .put("destinations", JSONArray(result.destinations))
+                )
+            },
+            onFailure = { error -> badRequest(error.message ?: "falha ao enviar Wake-on-LAN") }
+        )
+    }
+
+    private fun discoverWakeOnLan(session: IHTTPSession): Response {
+        val body = readJsonBody(session) ?: JSONObject()
+        val activeProbe = when {
+            body.has("probe") -> body.optBoolean("probe", true)
+            body.has("activeProbe") -> body.optBoolean("activeProbe", true)
+            else -> true
+        }
+        return runCatching {
+            actions.discoverWakeOnLanDevices(activeProbe)
+        }.fold(
+            onSuccess = { result ->
+                json(
+                    Response.Status.OK,
+                    wakeOnLanDiscoveryJson(result).put("ok", true)
+                )
+            },
+            onFailure = { error -> badRequest(error.message ?: "falha ao descobrir dispositivos Wake-on-LAN") }
+        )
+    }
+
+    private fun wakeOnLanDiscoveryJson(result: WakeOnLanDiscoveryResult): JSONObject = JSONObject()
+        .put("probeExecuted", result.probeExecuted)
+        .put("scannedHostCount", result.scannedHostCount)
+        .put("networks", JSONArray().apply {
+            result.networks.forEach { network ->
+                put(JSONObject()
+                    .put("interface", network.interfaceName)
+                    .put("localAddress", network.localAddress)
+                    .put("prefixLength", network.prefixLength)
+                    .put("broadcast", network.broadcastAddress)
+                    .put("scannedRange", network.scannedRange)
+                )
+            }
+        })
+        .put("devices", JSONArray().apply {
+            result.devices.forEach { device ->
+                put(JSONObject()
+                    .put("ip", device.ipAddress)
+                    .put("mac", device.macAddress)
+                    .put("interface", device.interfaceName)
+                    .put("localAddress", device.localAddress)
+                    .put("broadcast", device.broadcastAddress)
+                    .put("source", device.discoverySource)
+                    .put("wakeOnLanStatus", device.wakeOnLanStatus)
+                )
+            }
+        })
+        .put("warnings", JSONArray(result.warnings))
 
     private fun gesture(session: IHTTPSession): Response {
         val body = readJsonBody(session) ?: return badRequest("corpo JSON obrigatorio")

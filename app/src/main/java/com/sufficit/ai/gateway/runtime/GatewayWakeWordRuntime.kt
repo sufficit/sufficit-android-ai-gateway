@@ -3,15 +3,20 @@ package com.sufficit.ai.gateway.runtime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 data class WakeWordUiState(
     val enabled: Boolean = true,
     val sampleCount: Int = 0,
+    val profileCount: Int = 0,
+    val readyProfileCount: Int = 0,
     val recording: Boolean = false,
-    val status: String = "Grave ao menos uma amostra da palavra.",
+    val recordingProfileId: String? = null,
+    val status: String = "Cadastre uma wake word no Wake Lab.",
     val lastDistance: Double? = null,
     val lastMatchAtEpochMs: Long = 0L,
+    val lastMatchedProfileId: String? = null,
+    val lastMatchedPhraseLabel: String? = null,
     val threshold: Double = 0.18
 )
 
@@ -25,7 +30,7 @@ internal object GatewayWakeWordRuntime {
     // Incrementado quando templates/config mudam em disco; o servico de
     // audio observa e recarrega o detector.
     private val wakeWordConfigVersionFlow = MutableStateFlow(0)
-    private val wakeWordRecordingRequested = AtomicBoolean(false)
+    private val wakeWordRecordingRequested = AtomicReference<String?>(null)
 
     fun wakeWord(): StateFlow<WakeWordUiState> = wakeWordFlow.asStateFlow()
 
@@ -39,9 +44,9 @@ internal object GatewayWakeWordRuntime {
         wakeWordConfigVersionFlow.value += 1
     }
 
-    fun requestWakeWordRecording() {
-        wakeWordRecordingRequested.set(true)
+    fun requestWakeWordRecording(profileId: String) {
+        wakeWordRecordingRequested.set(profileId)
     }
 
-    fun takeWakeWordRecordingRequest(): Boolean = wakeWordRecordingRequested.getAndSet(false)
+    fun takeWakeWordRecordingRequest(): String? = wakeWordRecordingRequested.getAndSet(null)
 }

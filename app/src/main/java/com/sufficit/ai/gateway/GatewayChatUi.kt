@@ -59,10 +59,15 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatAudioState
+import com.sufficit.ai.gateway.runtime.ChatDeliveryState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.runtime.PendingAudioCapture
@@ -84,6 +89,10 @@ private val AssistantBubble = Color(0xFF18293E)
 private val BubbleText = Color(0xFFF1F6FB)
 private val BubbleTime = Color(0xFF93A7BA)
 private val AudioErrorText = Color(0xFFFF8A80)
+private val AuditInfoText = Color(0xFF8FCBFF)
+private val AuditSuccessText = Color(0xFF83E6B7)
+private val AuditWarningText = Color(0xFFFFCD7A)
+private val AuditHoldText = Color(0xFFD6B8FF)
 // Midia capturada pelo agente/sistema (foto, screenshot): visual proprio,
 // distinto das bolhas de conversa — emoldurado, centralizado, com acento.
 private val MediaFrame = Color(0xFF101C2B)
@@ -98,6 +107,8 @@ private val InputSurface = Color(0xFF101E2E)
 
 private val ChatTimeFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH:mm", Locale.US).withZone(ZoneId.systemDefault())
+private val AuditTimeFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("dd/MM HH:mm:ss", Locale.US).withZone(ZoneId.systemDefault())
 
 @Composable
 @Suppress("LongMethod") // Declaracao de itens do LazyColumn; extrair quebra o escopo DSL e nao reduz complexidade.
@@ -144,7 +155,12 @@ fun ChatMessagesList(
     // Auto-scroll: mensagem nova rola a lista para o rodape — mas so se o
     // usuario ja estiver perto do fim (ler historico antigo nao pode ser
     // interrompido por puxao de scroll). Com reverseLayout, indice 0 = rodape.
-    androidx.compose.runtime.LaunchedEffect(messages.size, partialTranscript.isNotBlank()) {
+    androidx.compose.runtime.LaunchedEffect(
+        messages.size,
+        partialTranscript.isNotBlank(),
+        pendingAudioCaptures.size,
+        assistantProcessing
+    ) {
         // Segmentos de voz são acompanhamento em tempo real: a bolha recém
         // criada precisa ficar visível, inclusive quando várias entram na
         // fila enquanto o primeiro áudio ainda está sendo transcrito.
@@ -211,6 +227,15 @@ fun ChatMessagesList(
                 )
             } else if (message.role == ChatRole.SYSTEM) {
                 SystemMarker(text = message.text)
+            } else if (
+                message.role == ChatRole.ASSISTANT &&
+                    message.deliveryState != null &&
+                    message.deliverySourceTexts.isNotEmpty()
+            ) {
+                AgentDeliveryAuditMessage(
+                    message = message,
+                    timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
+                )
             } else {
                 ChatBubble(
                     text = message.text,
@@ -344,6 +369,213 @@ private fun ErrorMarker(text: String) {
     }
 }
 
+private data class DeliveryAuditPresentation(
+    val title: String,
+    val color: Color
+)
+
+private fun deliveryAuditPresentation(
+    state: ChatDeliveryState,
+    reason: String?
+): DeliveryAuditPresentation = when (state) {
+    ChatDeliveryState.TRANSCRIBING ->
+        DeliveryAuditPresentation("Transcrevendo áudio", AuditInfoText)
+    ChatDeliveryState.TRANSCRIBED ->
+        DeliveryAuditPresentation("Transcrito · aguardando pausa para envio", AuditInfoText)
+    ChatDeliveryState.SENT_TO_AGENT ->
+        DeliveryAuditPresentation("Enviado ao agente · aguardando decisão", AuditInfoText)
+    ChatDeliveryState.IGNORED ->
+        DeliveryAuditPresentation("Ignorado · ${deliveryReasonLabel(reason)}", AuditWarningText)
+    ChatDeliveryState.HELD_FOR_REVIEW ->
+        DeliveryAuditPresentation("Retido · ${deliveryReasonLabel(reason)}", AuditHoldText)
+    ChatDeliveryState.AGENT_REPLIED ->
+        DeliveryAuditPresentation("Respondido pelo agente", AuditSuccessText)
+    ChatDeliveryState.ACTION_EXECUTED ->
+        DeliveryAuditPresentation("Ação local solicitada pelo agente", AuditSuccessText)
+    ChatDeliveryState.NO_AGENT_REPLY ->
+        DeliveryAuditPresentation("Enviado, mas sem resposta do agente", AuditWarningText)
+    ChatDeliveryState.FAILED ->
+        DeliveryAuditPresentation("Falha no processamento", AudioErrorText)
+}
+
+private fun deliveryReasonLabel(reason: String?): String = when (reason?.trim()?.lowercase()) {
+    "ambient_not_directed_to_agent" -> "sem chamada direta"
+    "ambient_conversation" -> "conversa ambiente"
+    "different_speaker" -> "voz não confirmada"
+    "multi_voice_overlap" -> "sobreposição de vozes"
+    "wake_confirmation_required", "idle_confirmation_window" -> "aguardando confirmação"
+    "neutral_marker_only" -> "trecho sem fala útil"
+    "empty_transcript" -> "sem texto reconhecido"
+    "final_agent_empty" -> "modelo não gerou texto"
+    "agent_error" -> "erro do agente"
+    "transcription_failed" -> "falha na transcrição"
+    "transcription_interrupted" -> "transcrição interrompida"
+    "wake_term" -> "chamada reconhecida"
+    "follow_up_window" -> "continuação da conversa"
+    "accepted" -> "chamada aceita"
+    else -> reason?.trim()?.replace('_', ' ')?.ifBlank { null } ?: "sem motivo informado"
+}
+
+private fun deliveryReasonDetail(reason: String?): String = when (reason?.trim()?.lowercase()) {
+    "ambient_not_directed_to_agent" ->
+        "O trecho não trouxe uma chamada direta válida ao assistente; foi mantido apenas como histórico da sala."
+    "ambient_conversation" ->
+        "O pré-agente classificou a fala como conversa ambiente, não como pedido ao assistente."
+    "different_speaker" ->
+        "A verificação de voz não associou o trecho com segurança ao perfil configurado."
+    "multi_voice_overlap" ->
+        "Havia mais de uma voz no mesmo trecho; o envio foi retido para evitar uma resposta fora de contexto."
+    "wake_confirmation_required", "idle_confirmation_window" ->
+        "A fala chegou fora da janela de continuidade e precisa de uma chamada explícita, como “xuxu”."
+    "final_agent_empty" ->
+        "O pré-agente encaminhou a fala, mas o modelo não devolveu texto nem uma ação executável."
+    "agent_error" ->
+        "O gateway recebeu uma falha do agente. O detalhe técnico fica registrado no status do aplicativo."
+    "transcription_failed" ->
+        "A transcrição falhou antes de chegar ao OpenClaw."
+    "transcription_interrupted" ->
+        "O aplicativo foi reiniciado ou a captura foi interrompida durante a transcrição."
+    "wake_term" -> "A chamada explícita foi reconhecida e o trecho foi encaminhado ao agente."
+    "follow_up_window" -> "O trecho foi aceito como continuação de uma chamada recente ao agente."
+    "accepted" -> "O pré-agente aceitou o trecho e o encaminhou ao agente final."
+    else -> "A decisão foi registrada pelo gateway para auditoria."
+}
+
+/** Registro único do agente, inserido logo depois das bolhas que formaram o turno. */
+@Composable
+private fun AgentDeliveryAuditMessage(
+    message: ChatMessage,
+    timeLabel: String
+) {
+    val state = message.deliveryState ?: return
+    val presentation = deliveryAuditPresentation(state, message.deliveryReason)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        ChatBubble(
+            text = message.text,
+            role = ChatRole.ASSISTANT,
+            timeLabel = timeLabel
+        )
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Column(modifier = Modifier.widthIn(max = 300.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 20.dp)
+                        .size(width = 2.dp, height = 8.dp)
+                        .background(presentation.color.copy(alpha = 0.55f))
+                )
+                DeliveryAuditPanel(
+                    state = state,
+                    reason = message.deliveryReason,
+                    tags = message.deliveryTags,
+                    updatedAtEpochMs = message.deliveryUpdatedAtEpochMs,
+                    sourceTexts = message.deliverySourceTexts
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Detalhes do turno como cartão irmão do balão do agente. Cor nunca é o único
+ * sinal: o rótulo explica a decisão e o toque revela conjunto, código e hora.
+ */
+@Composable
+private fun DeliveryAuditPanel(
+    state: ChatDeliveryState,
+    reason: String?,
+    tags: List<String>,
+    updatedAtEpochMs: Long?,
+    sourceTexts: List<String>
+) {
+    val presentation = deliveryAuditPresentation(state, reason)
+    val auditKey = listOf(state.name, reason.orEmpty(), tags.joinToString("|"), updatedAtEpochMs ?: 0L)
+        .joinToString("#")
+    var expanded by rememberSaveable(auditKey) { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(presentation.color.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+            .clickable(
+                onClickLabel = if (expanded) {
+                    "Recolher detalhes do turno consolidado"
+                } else {
+                    "Ver detalhes do turno consolidado"
+                },
+                role = Role.Button
+            ) { expanded = !expanded }
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.heightIn(min = 40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "${presentation.title} · ${sourceTexts.size} ${if (sourceTexts.size == 1) "trecho" else "trechos"}",
+                color = presentation.color,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = presentation.color,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(bottom = 6.dp)) {
+                Text(
+                    text = "Mensagens enviadas em conjunto:",
+                    color = BubbleText,
+                    style = MaterialTheme.typography.labelMedium
+                )
+                sourceTexts.forEachIndexed { index, sourceText ->
+                    Text(
+                        text = "${index + 1}. $sourceText",
+                        color = BubbleText.copy(alpha = 0.94f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Text(
+                    text = "Motivo: ${deliveryReasonDetail(reason)}",
+                    color = BubbleText.copy(alpha = 0.94f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                reason?.trim()?.takeIf { it.isNotBlank() }?.let { code ->
+                    Text(
+                        text = "Código: $code",
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                if (tags.isNotEmpty()) {
+                    Text(
+                        text = "Sinais: ${tags.joinToString(", ")}",
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                updatedAtEpochMs?.takeIf { it > 0L }?.let { at ->
+                    Text(
+                        text = "Atualizado: ${AuditTimeFormatter.format(Instant.ofEpochMilli(at))}",
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ChatBubble(
     text: String,
@@ -357,6 +589,17 @@ private fun ChatBubble(
     audioError: String? = null
 ) {
     val isUser = role == ChatRole.USER
+    val audioTapModifier = audioPath?.let { wavPath ->
+        Modifier
+            .heightIn(min = 48.dp)
+            .clickable(
+                onClickLabel = audioDurationMs?.let { "Reproduzir áudio de ${formatAudioDuration(it)}" }
+                    ?: "Reproduzir áudio",
+                role = Role.Button
+            ) {
+                playPendingAudio(wavPath)
+            }
+    } ?: Modifier
     val shape = RoundedCornerShape(
         topStart = 16.dp,
         topEnd = 16.dp,
@@ -379,6 +622,9 @@ private fun ChatBubble(
                     color = if (provisional) bubbleColor.copy(alpha = 0.55f) else bubbleColor,
                     shape = shape
                 )
+                // A bolha e o controle de reprodução. Mantém uma área grande
+                // de toque e remove o botão/linha de áudio redundante.
+                .then(audioTapModifier)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             if (text.isNotBlank()) {
@@ -389,36 +635,13 @@ private fun ChatBubble(
                     fontStyle = if (provisional) FontStyle.Italic else FontStyle.Normal
                 )
             }
-            if (audioPath != null) {
-                Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconButton(onClick = { playPendingAudio(audioPath) }) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = "Reproduzir áudio desta transcrição",
-                            tint = BubbleText
-                        )
-                    }
-                    Text(
-                        text = "Ouvir áudio${audioDurationMs?.let { " • ${formatAudioDuration(it)}" }.orEmpty()}",
-                        color = BubbleTime,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-            }
-            if (audioState != null) {
-                val statusText = when (audioState) {
-                    ChatAudioState.TRANSCRIBING -> "Transcrevendo áudio…"
-                    ChatAudioState.TRANSCRIBED -> "Texto reconhecido"
-                    ChatAudioState.SENDING -> "Enviando para o sistema de IA…"
-                    ChatAudioState.ERROR -> "Falha na transcrição${audioError?.let { ": $it" }.orEmpty()}"
-                }
+            // Estados normais ficam compactos junto ao horário, como os tiques
+            // do WhatsApp: um após transcrever e dois após entregar ao agente.
+            // A falha continua explícita para não se confundir com uma entrega.
+            if (audioState == ChatAudioState.ERROR) {
                 Text(
-                    text = statusText,
-                    color = if (audioState == ChatAudioState.ERROR) AudioErrorText else BubbleTime,
+                    text = "Falha na transcrição${audioError?.let { ": $it" }.orEmpty()}",
+                    color = AudioErrorText,
                     style = MaterialTheme.typography.labelSmall,
                     fontStyle = FontStyle.Italic,
                     modifier = Modifier.padding(top = 2.dp)
@@ -458,12 +681,41 @@ private fun ChatBubble(
                     )
                 }
             }
-            Text(
-                text = timeLabel,
-                color = BubbleTime,
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.End)
-            )
+            Row(
+                modifier = Modifier.align(Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                if (audioPath != null && audioDurationMs != null) {
+                    Text(
+                        text = formatAudioDuration(audioDurationMs),
+                        color = BubbleTime,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Text(
+                    text = timeLabel,
+                    color = BubbleTime,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                if (isUser) {
+                    when (audioState) {
+                        ChatAudioState.TRANSCRIBED, ChatAudioState.SENDING -> Text(
+                            text = if (audioState == ChatAudioState.TRANSCRIBED) "✓" else "✓✓",
+                            color = BubbleTime,
+                            style = if (audioState == ChatAudioState.SENDING) {
+                                // O par de tiques e um unico indicador: fecha
+                                // levemente o kerning para nao parecer dois
+                                // estados independentes ao lado do horario.
+                                MaterialTheme.typography.labelSmall.copy(letterSpacing = (-0.12).em)
+                            } else {
+                                MaterialTheme.typography.labelSmall
+                            }
+                        )
+                        else -> Unit
+                    }
+                }
+            }
         }
     }
 }
@@ -890,20 +1142,38 @@ private fun ProcessingBubble(title: String = "Processando", label: String) {
 
 /**
  * Barra inferior do chat. Dois modos:
- *  - OUVINDO (state.listening): o campo de texto da lugar ao espectro de voz
+ *  - OUVINDO (nivel 2/state.listening): o campo de texto da lugar ao espectro de voz
  *    ao vivo — feedback de que o microfone e o canal de entrada no momento;
- *  - PARADO: campo de texto + botao de enviar; com o campo vazio o botao
- *    vira microfone para religar a escuta (padrao WhatsApp).
+ *  - TEXTO/STANDBY: campo de texto + botao de enviar; o monitor local de
+ *    wake word (nivel 1) continua ativo sem exibir o espectro ambiente.
  */
 @Composable
 fun ChatInputBar(
-    listening: Boolean,
+    ambientListening: Boolean,
+    isActivePage: Boolean,
     currentMicrophoneGain: Double?,
     onSendText: (String) -> Unit,
     onStartListening: () -> Unit,
+    onSwitchToTextInput: () -> Unit,
     onAttach: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var textInputRequested by rememberSaveable { mutableStateOf(!ambientListening) }
+    val showListeningSpectrum = ambientListening && !textInputRequested
+
+    // Se a captura for iniciada externamente (botao, API ou wake flow), o
+    // espectro volta a representar o modo real. Ao sair desta pagina, o modo
+    // texto nao pode continuar bloqueando a tela de depuracao de gestos.
+    androidx.compose.runtime.LaunchedEffect(ambientListening) {
+        if (ambientListening) textInputRequested = false
+    }
+    androidx.compose.runtime.LaunchedEffect(isActivePage, showListeningSpectrum) {
+        GatewayRuntime.setTextInputModeActive(isActivePage && !showListeningSpectrum)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { GatewayRuntime.setTextInputModeActive(false) }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -920,12 +1190,17 @@ fun ChatInputBar(
             )
         }
 
-        if (listening) {
+        if (showListeningSpectrum) {
             ListeningSpectrum(
                 currentMicrophoneGain = currentMicrophoneGain,
+                onSwitchToTextInput = {
+                    textInputRequested = true
+                    GatewayRuntime.setTextInputModeActive(true)
+                    onSwitchToTextInput()
+                },
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(48.dp)
             )
         } else {
             var draft by rememberSaveable { mutableStateOf("") }
@@ -955,11 +1230,13 @@ fun ChatInputBar(
                         onSendText(draft.trim())
                         draft = ""
                     } else {
+                        textInputRequested = false
+                        GatewayRuntime.setTextInputModeActive(false)
                         onStartListening()
                     }
                 },
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .background(Color(0xFF1F8A5F), CircleShape)
             ) {
                 Icon(
@@ -981,17 +1258,29 @@ fun ChatInputBar(
 @Composable
 private fun ListeningSpectrum(
     currentMicrophoneGain: Double?,
+    onSwitchToTextInput: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val values by GatewayRuntime.spectrum().collectAsState()
+    val shape = RoundedCornerShape(20.dp)
     Box(
-        modifier = modifier.background(Color(0xFF16263A), RoundedCornerShape(20.dp)),
+        modifier = modifier
+            .clip(shape)
+            .background(Color(0xFF16263A), shape)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "Alternar para digitacao",
+                onClick = onSwitchToTextInput
+            )
+            .semantics {
+                contentDescription = "Entrada de audio ativa. Toque para digitar."
+            },
         contentAlignment = Alignment.CenterStart
     ) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .padding(start = 12.dp, end = 52.dp, top = 6.dp, bottom = 6.dp)
         ) {
             if (values.isEmpty()) return@Canvas
             val spacing = 3.dp.toPx()
@@ -1025,5 +1314,16 @@ private fun ListeningSpectrum(
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             )
         }
+        Text(
+            text = "ABC",
+            color = BubbleText,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 12.dp)
+                .background(Color(0xFF22354C), RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp, vertical = 5.dp)
+        )
     }
 }

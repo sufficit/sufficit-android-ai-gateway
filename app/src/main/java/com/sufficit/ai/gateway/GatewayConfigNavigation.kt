@@ -24,10 +24,13 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -35,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sufficit.ai.gateway.runtime.GatewayRuntime
 
 private data class ConfigSectionCardState(
     val destination: ConfigSectionDestination,
@@ -54,6 +58,7 @@ fun ConfigHubPage(
     state: ConfigPageState,
     onOpenSection: (ConfigSectionDestination) -> Unit
 ) {
+    val wake by GatewayRuntime.wakeWord().collectAsState()
     val cards = buildList {
         add(
             ConfigSectionCardState(
@@ -63,6 +68,24 @@ fun ConfigHubPage(
                 summary = "Comece por aqui",
                 icon = Icons.Filled.CheckCircle,
                 accent = Color(0xFF35D08C)
+            )
+        )
+        add(
+            ConfigSectionCardState(
+                destination = ConfigSectionDestination.WAKE_WORD,
+                title = "Wake Lab",
+                subtitle = "Wizard gamificado da palavra de ativacao",
+                summary = if (wake.profileCount == 0) {
+                    "Nenhuma chamada cadastrada"
+                } else if (wake.readyProfileCount > 0) {
+                    val noun = if (wake.profileCount == 1) "chamada pronta" else "chamadas prontas"
+                    "${wake.readyProfileCount}/${wake.profileCount} $noun • ${wake.sampleCount} chaves"
+                } else {
+                    val noun = if (wake.profileCount == 1) "chamada" else "chamadas"
+                    "${wake.profileCount} $noun • treinamento pendente"
+                },
+                icon = Icons.Filled.Star,
+                accent = Color(0xFFF4B942)
             )
         )
         add(

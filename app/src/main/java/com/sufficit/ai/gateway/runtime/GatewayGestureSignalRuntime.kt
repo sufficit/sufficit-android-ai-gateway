@@ -15,9 +15,9 @@ data class ScreenEffect(val atEpochMs: Long, val label: String)
 /**
  * Gesto de comando ativo no momento (id de GestureCommandIds + instante).
  * Alimentado pelo reconhecedor a cada quadro estavel; consumido por:
- *  - RoomAudioForegroundService: "indicador mantido" segura a gravacao
- *    aberta ignorando o corte por silencio;
  *  - GestureCommandFooter: linha colorida no rodape da tela.
+ * O indicador so e publicado durante a retomada do nivel 2; quando a escuta
+ * ambiente ja esta ativa, a pose nao representa comando.
  */
 data class GestureCommand(
     val gestureId: String,

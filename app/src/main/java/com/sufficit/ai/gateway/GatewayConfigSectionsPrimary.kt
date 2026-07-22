@@ -34,7 +34,8 @@ import kotlin.math.roundToInt
 fun ConfigGeneralSectionPage(
     state: ConfigPageState,
     actions: ConfigPageActions,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenWakeWord: () -> Unit
 ) {
     ConfigSectionScaffold("Geral", "Permissao, autoplay e modo de trabalho", onBack) {
         item {
@@ -72,7 +73,7 @@ fun ConfigGeneralSectionPage(
             HandSkinConfigSection()
         }
         item {
-            WakeWordConfigSection()
+            WakeWordConfigSection(onOpenWizard = onOpenWakeWord)
         }
         item {
             SpeakerVoiceConfigSection()
