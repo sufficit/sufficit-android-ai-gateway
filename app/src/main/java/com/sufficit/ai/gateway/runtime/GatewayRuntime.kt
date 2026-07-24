@@ -331,6 +331,10 @@ object GatewayRuntime {
         )
     }
 
+    fun updateChatMessageText(id: Long, text: String) {
+        GatewayChatRuntime.updateChatMessageText(id, text)
+    }
+
     fun attachChatMessageAudio(
         id: Long,
         audioPath: String,

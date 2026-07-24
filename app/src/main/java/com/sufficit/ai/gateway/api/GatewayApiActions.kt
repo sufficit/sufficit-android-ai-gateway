@@ -3,7 +3,9 @@ package com.sufficit.ai.gateway.api
 import com.sufficit.ai.gateway.config.GatewaySettings
 import com.sufficit.ai.gateway.config.GatewaySettingsPatchResult
 import com.sufficit.ai.gateway.network.WakeOnLanDiscoveryResult
+import com.sufficit.ai.gateway.network.WakeOnLanKnownDevice
 import com.sufficit.ai.gateway.network.WakeOnLanResult
+import com.sufficit.ai.gateway.network.WakeOnLanVerificationResult
 import org.json.JSONObject
 
 /**
@@ -97,4 +99,16 @@ interface GatewayApiActions {
      * retornada como "unknown" ate ser confirmada por um teste real.
      */
     fun discoverWakeOnLanDevices(activeProbe: Boolean = true): WakeOnLanDiscoveryResult
+
+    /** Inventario persistido de MACs aprendidos na LAN. */
+    fun wakeOnLanKnownDevices(): List<WakeOnLanKnownDevice>
+
+    /** Nomeia um destino no inventario local e na memoria Sufficit autenticada. */
+    fun nameWakeOnLanDevice(macAddress: String, name: String): WakeOnLanKnownDevice
+
+    /** Envia WOL aos alvos conhecidos e monitora presença por até 30 segundos. */
+    fun verifyWakeOnLanDevices(
+        macAddresses: List<String> = emptyList(),
+        waitSeconds: Int = 30
+    ): WakeOnLanVerificationResult
 }

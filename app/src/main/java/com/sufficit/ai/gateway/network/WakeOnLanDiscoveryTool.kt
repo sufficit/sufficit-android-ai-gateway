@@ -1,10 +1,12 @@
 package com.sufficit.ai.gateway.network
 
+import org.json.JSONObject
 import java.io.File
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.SocketTimeoutException
 import java.io.ByteArrayOutputStream
@@ -18,6 +20,8 @@ data class WakeOnLanDiscoveredDevice(
     val localAddress: String,
     val broadcastAddress: String,
     val discoverySource: String,
+    /** Nome vindo de uma fonte local confiavel, quando disponivel. */
+    val discoveredName: String? = null,
     /** A descoberta nao consegue confirmar BIOS/NIC; use um teste WOL para isso. */
     val wakeOnLanStatus: String = "unknown"
 )
@@ -37,7 +41,9 @@ data class WakeOnLanDiscoveryResult(
     val scannedHostCount: Int,
     val networks: List<WakeOnLanDiscoveryNetwork>,
     val devices: List<WakeOnLanDiscoveredDevice>,
-    val warnings: List<String>
+    val warnings: List<String>,
+    /** MACs ja aprendidos continuam disponiveis mesmo com destino desligado. */
+    val knownDevices: List<WakeOnLanKnownDevice> = emptyList()
 )
 
 /**
@@ -56,6 +62,10 @@ object WakeOnLanDiscoveryTool {
     private const val ARP_SETTLE_MILLIS = 350L
     private const val NETBIOS_PORT = 137
     private const val NETBIOS_RESPONSE_WINDOW_MILLIS = 1_000L
+    private const val SUFFICIT_COMPANION_PORT = 45_991
+    private const val SUFFICIT_COMPANION_RESPONSE_WINDOW_MILLIS = 2_000L
+    private const val SUFFICIT_COMPANION_REQUEST_PREFIX = "SUFFICIT_WOL_DISCOVER_V1 "
+    private const val SUFFICIT_COMPANION_PROTOCOL = "sufficit-wol-inventory-v1"
     private const val IPV4_MASK = 0xFFFF_FFFFL
 
     fun discover(activeProbe: Boolean = true): WakeOnLanDiscoveryResult {
@@ -91,6 +101,11 @@ object WakeOnLanDiscoveryTool {
         } else {
             emptyList()
         }
+        val companionDevices = if (activeProbe && networks.isNotEmpty()) {
+            discoverSufficitCompanionDevices(networks, warnings)
+        } else {
+            emptyList()
+        }
         if (activeProbe && netBiosNeighbors.isEmpty()) {
             warnings += "Nenhum dispositivo respondeu à consulta NetBIOS de nome e MAC."
         }
@@ -116,7 +131,8 @@ object WakeOnLanDiscoveryTool {
                     discoverySource = "netbios"
                 )
             })
-            .distinctBy { "${it.ipAddress}|${it.macAddress}" }
+            .plus(companionDevices)
+            .distinctBy { it.macAddress }
             .sortedWith(compareBy(WakeOnLanDiscoveredDevice::interfaceName, WakeOnLanDiscoveredDevice::ipAddress))
 
         if (devices.isEmpty() && networks.isNotEmpty()) {
@@ -130,6 +146,68 @@ object WakeOnLanDiscoveryTool {
             devices = devices,
             warnings = warnings.distinct()
         )
+    }
+
+    /**
+     * Consulta um companion Sufficit presente na propria LAN. A resposta
+     * precisa repetir o nonce e so pode conter IPs da sub-rede que recebeu a
+     * consulta; isso evita aceitar inventarios antigos ou externos.
+     */
+    private fun discoverSufficitCompanionDevices(
+        networks: List<LocalNetwork>,
+        warnings: MutableList<String>
+    ): List<WakeOnLanDiscoveredDevice> {
+        val nonce = java.util.UUID.randomUUID().toString().replace("-", "")
+        val request = (SUFFICIT_COMPANION_REQUEST_PREFIX + nonce).toByteArray(Charsets.US_ASCII)
+        val devices = mutableListOf<WakeOnLanDiscoveredDevice>()
+        runCatching {
+            networks.forEach { network ->
+                DatagramSocket(InetSocketAddress(network.localAddress, 0)).use { socket ->
+                    socket.broadcast = true
+                    socket.send(DatagramPacket(request, request.size, network.broadcastAddress, SUFFICIT_COMPANION_PORT))
+                    val deadline = System.currentTimeMillis() + SUFFICIT_COMPANION_RESPONSE_WINDOW_MILLIS
+                    while (System.currentTimeMillis() < deadline) {
+                        val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(1L)
+                        socket.soTimeout = minOf(remaining, 250L).toInt()
+                        val response = DatagramPacket(ByteArray(65_507), 65_507)
+                        try {
+                            socket.receive(response)
+                        } catch (_: SocketTimeoutException) {
+                            continue
+                        }
+                        val responder = response.address as? Inet4Address ?: continue
+                        if (!network.contains(responder)) continue
+                        val json = runCatching {
+                            JSONObject(response.data.copyOfRange(0, response.length).toString(Charsets.UTF_8))
+                        }.getOrNull() ?: continue
+                        if (json.optString("protocol") != SUFFICIT_COMPANION_PROTOCOL || json.optString("nonce") != nonce) {
+                            continue
+                        }
+                        val array = json.optJSONArray("devices") ?: continue
+                        for (index in 0 until array.length()) {
+                            val item = array.optJSONObject(index) ?: continue
+                            val address = runCatching { InetAddress.getByName(item.optString("ip")) }.getOrNull()
+                                as? Inet4Address ?: continue
+                            if (!network.contains(address)) continue
+                            val mac = normalizeMac(item.optString("mac")) ?: continue
+                            devices += WakeOnLanDiscoveredDevice(
+                                ipAddress = address.hostAddress.orEmpty(),
+                                macAddress = mac,
+                                interfaceName = item.optString("interface").trim().ifBlank { "lan" },
+                                localAddress = network.localAddress.hostAddress.orEmpty(),
+                                broadcastAddress = network.broadcastAddress.hostAddress.orEmpty(),
+                                discoverySource = "sufficit_lan_companion",
+                                discoveredName = item.optString("name").trim().take(80)
+                                    .takeUnless { it.isBlank() || it.equals("null", ignoreCase = true) }
+                            )
+                        }
+                    }
+                }
+            }
+        }.onFailure { error ->
+            warnings += "Companion Sufficit indisponivel: ${error.message ?: "erro de rede"}."
+        }
+        return devices.distinctBy { it.macAddress }
     }
 
     private fun resolveLocalNetworks(): List<LocalNetwork> {

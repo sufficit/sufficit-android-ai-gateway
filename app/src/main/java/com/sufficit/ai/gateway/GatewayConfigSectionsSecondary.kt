@@ -108,10 +108,15 @@ fun ConfigScreenSectionPage(
                 MetadataChip(
                     "Modo atual",
                     when (ScreenMode.fromPersistedValue(state.screenMode)) {
-                        ScreenMode.ALWAYS_ON -> "Sempre ligado"
+                        ScreenMode.ALWAYS_ON -> "Sempre ligado durante voz"
                         ScreenMode.ALWAYS_OFF -> "Sempre desligado"
                         ScreenMode.ACTIVITY -> "Activity"
                     }
+                )
+                Text(
+                    text = "No modo de digitação, a tela sempre respeita o tempo de suspensão do Android. O monitor local da wake word continua ativo em segundo plano.",
+                    color = ConfigTheme.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
                 )
                 SliderSettingRow(
                     title = "Tempo de tela acesa",

@@ -28,7 +28,8 @@ import kotlinx.coroutines.delay
 fun HandleScreenAttentionBehavior(
     activity: ComponentActivity,
     effectiveScreenMode: ScreenMode,
-    screenAttentionUntilEpochMs: Long
+    screenAttentionUntilEpochMs: Long,
+    textInputModeActive: Boolean
 ) {
     val now by produceState(
         initialValue = System.currentTimeMillis(),
@@ -41,17 +42,23 @@ fun HandleScreenAttentionBehavior(
         value = System.currentTimeMillis()
     }
     val screenAttentionActive = screenAttentionUntilEpochMs > now
+    // O nivel 1 continua vivo com PARTIAL_WAKE_LOCK, que mantem apenas CPU e
+    // microfone. Quando o usuario troca o chat para digitacao, o display deve
+    // voltar imediatamente para a politica normal de timeout do Android,
+    // inclusive se a preferencia geral estiver em "Sempre ligado".
     val keepScreenOn = when (effectiveScreenMode) {
-        ScreenMode.ALWAYS_ON -> true
+        ScreenMode.ALWAYS_ON -> !textInputModeActive
         ScreenMode.ALWAYS_OFF -> false
-        ScreenMode.ACTIVITY -> screenAttentionActive
+        ScreenMode.ACTIVITY -> screenAttentionActive && !textInputModeActive
     }
 
     HandleScreenBehavior(
         activity = activity,
         screenMode = effectiveScreenMode,
         keepScreenOn = keepScreenOn,
-        wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY && screenAttentionActive
+        wakeRequested = effectiveScreenMode == ScreenMode.ACTIVITY &&
+            screenAttentionActive &&
+            !textInputModeActive
     )
 }
 

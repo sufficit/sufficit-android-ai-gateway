@@ -107,8 +107,10 @@ fun IdentityConfigSection() {
                     val updated = settings.copy(openClawUserId = newUserId)
                     store.save(updated)
                     settings = updated
-                    RoomAudioForegroundService.reloadConfig(context.applicationContext)
                 }
+                // Reabre a sessao MCP e atualiza o catalogo de client tools
+                // mesmo quando o mesmo usuario apenas renovou o login.
+                RoomAudioForegroundService.reloadConfig(context.applicationContext)
             } catch (ex: Exception) {
                 loading = false
                 status = "Falha no login: ${ex.message ?: ex.javaClass.simpleName}"
@@ -130,6 +132,14 @@ fun IdentityConfigSection() {
             OutlinedButton(
                 onClick = {
                     identityStore.clearSession()
+                    if (settings.openClawUserId.isNotBlank()) {
+                        val updated = settings.copy(openClawUserId = "")
+                        store.save(updated)
+                        settings = updated
+                    }
+                    // Remove imediatamente o catalogo MCP autenticado e
+                    // reconecta o canal sem reutilizar a identidade anterior.
+                    RoomAudioForegroundService.reloadConfig(context.applicationContext)
                     loggedIn = false
                     displayName = null
                     email = null

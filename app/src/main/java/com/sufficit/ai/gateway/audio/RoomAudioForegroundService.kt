@@ -51,6 +51,7 @@ import com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayPersistentConnection
+import com.sufficit.ai.gateway.mcp.SufficitMcpToolBridge
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
@@ -89,6 +90,8 @@ import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -128,6 +131,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
     private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
+    private val sufficitMcpToolBridge by lazy { SufficitMcpToolBridge(this) }
     private var persistentOpenClawConnection: OpenClawGatewayPersistentConnection? = null
     private val selfTestExecuted = AtomicBoolean(false)
     private val openClawHandshakeStarted = AtomicBoolean(false)
@@ -137,6 +141,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     @Volatile private var localSherpaOnnxEngine: LocalSherpaOnnxEngine? = null
     @Volatile private var speakerContinuityState: SpeakerContinuityState? = null
     private var openClawExecutor: ExecutorService? = null
+    private var clientToolExecutor: ExecutorService? = null
+    private var wakeOnLanExecutor: ExecutorService? = null
     @Volatile private var textToSpeech: TextToSpeech? = null
     @Volatile private var textToSpeechReady = false
     private val pendingAssistantSpeechAudio = ConcurrentHashMap<String, PendingAssistantSpeechAudio>()
@@ -218,6 +224,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val pendingDispatchLock = Any()
     @Volatile private var pendingOpenClawDispatchText: String = ""
     @Volatile private var pendingOpenClawDispatchState: GatewayUiState? = null
+    private val pendingWakeWordDispatch = WakeWordDispatchAccumulator()
     private val pendingOpenClawDispatchGeneration = AtomicLong(0L)
     @Volatile private var activeTranscriptionStartedAtEpochMs = 0L
     @Volatile private var activeOpenClawDispatchStartedAtEpochMs = 0L
@@ -269,6 +276,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             }
         }
         openClawExecutor = Executors.newSingleThreadExecutor()
+        clientToolExecutor = Executors.newSingleThreadExecutor()
+        wakeOnLanExecutor = Executors.newSingleThreadExecutor()
         textToSpeech = TextToSpeech(applicationContext, this)
         Log.i(TAG, "Camera gesture gate at create: open=${GatewayRuntime.cameraGestureGate().value}")
         persistentOpenClawConnection = OpenClawGatewayPersistentConnection(
@@ -295,6 +304,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
             }
         )
+        refreshSufficitMcpToolsAndPreferences()
         runOpenClawHandshakeIfNeeded()
     }
 
@@ -348,6 +358,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             ACTION_RELOAD_CONFIG -> {
                 val s = loadCurrentSettings()
                 refreshOpenClawConnection(s)
+                refreshSufficitMcpToolsAndPreferences()
                 restartApiServer(s)
                 return START_STICKY
             }
@@ -413,6 +424,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         transcriptionExecutor = null
         openClawExecutor?.shutdownNow()
         openClawExecutor = null
+        clientToolExecutor?.shutdownNow()
+        clientToolExecutor = null
+        wakeOnLanExecutor?.shutdownNow()
+        wakeOnLanExecutor = null
         persistentOpenClawConnection?.disconnect()
         persistentOpenClawConnection = null
         textToSpeech?.stop()
@@ -4011,12 +4026,19 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
 
         val generation = pendingOpenClawDispatchGeneration.incrementAndGet()
+        // A parada manual pode acontecer logo depois da fala e antes do fim
+        // da janela de acumulacao. Preserve no lote a wake word que estava
+        // ativa quando o trecho entrou na fila; limpar a sessao deve afetar
+        // apenas falas futuras, nunca reclassificar este comando como ambiente.
+        val phraseAwakened = wakeWordSessionActive
+        val phraseWakeWord = activeWakeWordPhrase.trim()
         val pendingLabel = synchronized(pendingDispatchLock) {
             pendingOpenClawDispatchText = mergePendingDispatchText(
                 existing = pendingOpenClawDispatchText,
                 incoming = normalizedPhrase
             )
             pendingOpenClawDispatchState = state
+            pendingWakeWordDispatch.include(phraseAwakened, phraseWakeWord)
             pendingOpenClawDispatchText
         }
         // Feedback visual antes de qualquer espera, avaliacao local ou acesso
@@ -4044,9 +4066,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
             val dispatchText: String
             val dispatchState: GatewayUiState
+            val dispatchAwakened: Boolean
+            val dispatchWakeWord: String
             synchronized(pendingDispatchLock) {
                 dispatchText = pendingOpenClawDispatchText.trim()
                 dispatchState = pendingOpenClawDispatchState ?: return@execute
+                val wakeWordSnapshot = pendingWakeWordDispatch.takeAndReset()
+                dispatchAwakened = wakeWordSnapshot.awakened
+                dispatchWakeWord = wakeWordSnapshot.wakeWord
                 pendingOpenClawDispatchText = ""
                 pendingOpenClawDispatchState = null
             }
@@ -4059,7 +4086,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
             dispatchTranscriptToOpenClaw(
                 phrase = dispatchText,
-                state = dispatchState
+                state = dispatchState,
+                awakened = dispatchAwakened,
+                wakeWord = dispatchWakeWord
             )
         }
     }
@@ -4213,7 +4242,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     private fun dispatchTranscriptToOpenClaw(
         phrase: String,
-        state: GatewayUiState
+        state: GatewayUiState,
+        awakened: Boolean,
+        wakeWord: String
     ) {
         // Despacho ja agendado mas tela de configuracao abriu nesse meio tempo:
         // cancela para o agente nao se intrometer.
@@ -4285,7 +4316,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         settings = settings,
                         state = state,
                         voiceDecision = decision,
-                        transcript = phrase
+                        transcript = phrase,
+                        awakened = awakened,
+                        wakeWord = wakeWord
                     ),
                     transcript = phrase
                 )
@@ -4342,10 +4375,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         state: GatewayUiState,
         settings: GatewaySettings,
         voiceDecision: VoiceChannelSkillDecision,
-        transcript: String? = null
+        transcript: String? = null,
+        awakenedOverride: Boolean? = null,
+        wakeWordOverride: String? = null
     ): JSONObject {
-        val awakened = wakeWordSessionActive
-        val wakeWordPhrase = activeWakeWordPhrase.trim()
+        val awakened = awakenedOverride ?: wakeWordSessionActive
+        val wakeWordPhrase = when (awakenedOverride) {
+            true -> wakeWordOverride.orEmpty().trim()
+            false -> ""
+            null -> activeWakeWordPhrase.trim()
+        }
         val interruptedReplyContext = if (assistantReplyInterruptedPending) {
             val preview = interruptedAssistantReplyPreview.trim()
             assistantReplyInterruptedPending = false
@@ -4438,15 +4477,25 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             put(tool("standby", "Coloca em espera (so palavra de ativacao reabre)."))
             put(tool("interrupt", "Interrompe a fala do assistente em andamento."))
             put(tool("config", "Edita configuracoes do app.", JSONObject().put("patch", "{chave:valor}")))
-            put(tool("wakeonlan", "Liga um computador na mesma rede por Wake-on-LAN (magic packet).",
+            put(tool("wakeonlan", "Liga um computador na mesma rede por Wake-on-LAN, monitora por ate 30 segundos e devolve confirmacao, falha ou estado nao verificavel.",
                 JSONObject()
                     .put("mac", "MAC do computador, ex.: AA:BB:CC:DD:EE:FF")
+                    .put("name", "nome amigavel opcional do dispositivo")
                     .put("broadcast", "IPv4 de broadcast opcional; padrao detecta a rede Wi-Fi")
                     .put("port", "porta UDP opcional, padrao 9")
-                    .put("repeat", "repeticoes opcionais de 1 a 5, padrao 3")))
-            put(tool("discover_wol_devices", "Descobre vizinhos ativos na rede local que podem ser cadastrados como alvos Wake-on-LAN.",
-                JSONObject().put("probe", "true para sondar ARP na sub-rede (padrao true); false apenas le ARP atual")))
+                    .put("repeat", "repeticoes opcionais de 1 a 5, padrao 3")
+                    .put("waitSeconds", "monitoramento entre 5 e 60 segundos; padrao 30")))
+            put(tool("discover_wol_devices", "Descobre MACs/IPs Wake-on-LAN na rede local sem senha de roteador. Consulta automaticamente o companion Sufficit na LAN e preserva os MACs aprendidos.",
+                JSONObject().put("probe", "true para consulta ativa e companion local (padrao true)")))
+            put(tool("verify_wol_devices", "Envia Wake-on-LAN a todos os MACs cadastrados (ou aos MACs informados), monitora a inicializacao e verifica quais ficaram acessiveis. Use para identificar novos dispositivos antes de nomea-los.",
+                JSONObject().put("macs", "lista opcional de MACs; vazio testa todos")
+                    .put("waitSeconds", "monitoramento entre 5 e 60 segundos; padrao 30")))
+            put(tool("name_wol_device", "Da um nome a um MAC aprendido e salva a preferencia na memoria Sufficit autenticada.",
+                JSONObject()
+                    .put("mac", "MAC ja presente no inventario")
+                    .put("name", "nome escolhido pelo usuario")))
             put(tool("clearChat", "Limpa o historico de conversa exibido."))
+            sufficitMcpToolBridge.appendClientToolCatalog(this)
         }
     }
 
@@ -4702,6 +4751,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 .ifBlank { action.optString("name").trim() }
                 .ifBlank { action.optString("type").trim() }
             if (tool.isBlank()) continue
+            if (sufficitMcpToolBridge.isMcpClientTool(tool)) {
+                executeSufficitMcpClientTool(action, tool)
+                continue
+            }
             val label = action.optString("label").trim()
             runCatching {
                 when (tool.lowercase()) {
@@ -4768,6 +4821,25 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
                         discoverWakeOnLanDevices(activeProbe)
                     }
+                    "verify_wol_devices", "verify_wakeonlan", "verify_wake_on_lan", "wol_verify" -> {
+                        val macs = buildList {
+                            val array = action.optJSONArray("macs")
+                            if (array != null) {
+                                for (index in 0 until array.length()) {
+                                    array.optString(index).trim().takeIf { it.isNotBlank() }?.let(::add)
+                                }
+                            }
+                            action.optString("mac").trim().takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                        verifyWakeOnLanDevices(macs, action.optInt("waitSeconds", 30))
+                    }
+                    "name_wol_device", "name_wakeonlan", "remember_wol_device" -> {
+                        val mac = action.optString("mac").trim()
+                            .ifBlank { action.optString("macAddress").trim() }
+                        val name = action.optString("name").trim()
+                            .ifBlank { action.optString("deviceName").trim() }
+                        nameWakeOnLanDevice(mac, name)
+                    }
                     "wakeonlan", "wake_on_lan", "wol" -> {
                         val macAddress = action.optString("mac").trim()
                             .ifBlank { action.optString("macAddress").trim() }
@@ -4793,7 +4865,25 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                                 com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
                             )
                         }
-                        wakeOnLan(macAddress, broadcastAddress, port, repeat)
+                        val targetName = action.optString("name").trim()
+                            .ifBlank { action.optString("deviceName").trim() }
+                            .ifBlank { action.optString("label").trim() }
+                        val callId = action.optString("callId").trim()
+                            .ifBlank { action.optString("call_id").trim() }
+                            .ifBlank { UUID.randomUUID().toString() }
+                        executeWakeOnLanWithVerification(
+                            callId = callId,
+                            tool = tool.lowercase(),
+                            macAddress = macAddress,
+                            targetName = targetName,
+                            broadcastAddress = broadcastAddress,
+                            port = port,
+                            repeat = repeat,
+                            waitSeconds = action.optInt(
+                                "waitSeconds",
+                                com.sufficit.ai.gateway.network.WakeOnLanVerificationTool.DEFAULT_WAIT_SECONDS
+                            )
+                        )
                     }
                     else -> Log.w(TAG, "Tool de agente desconhecida ignorada: $tool")
                 }
@@ -4803,6 +4893,70 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     ChatRole.SYSTEM,
                     "Falha ao executar ${tool.lowercase()}: ${ex.message ?: "erro desconhecido"}"
                 )
+            }
+        }
+    }
+
+    private fun refreshSufficitMcpToolsAndPreferences() {
+        val executor = clientToolExecutor ?: return
+        executor.execute {
+            runCatching {
+                runBlocking {
+                    val tools = sufficitMcpToolBridge.refreshTools()
+                    Log.i(TAG, "MCPs autenticados: ${tools.size} ferramenta(s) descoberta(s).")
+                    val namedDevices = com.sufficit.ai.gateway.network.WakeOnLanInventoryService(
+                        this@RoomAudioForegroundService
+                    ).knownDevices().filter { !it.name.isNullOrBlank() }
+                    namedDevices.forEach { device ->
+                        sufficitMcpToolBridge.saveWakeOnLanPreference(device)
+                    }
+                    if (namedDevices.isNotEmpty()) {
+                        Log.i(TAG, "Memoria Sufficit sincronizada: ${namedDevices.size} dispositivo(s) Wake-on-LAN.")
+                    }
+                }
+            }.onFailure { error ->
+                // Login ausente/expirado nao derruba captura, chat ou WOL
+                // local. O catalogo MCP simplesmente fica indisponivel ate a
+                // identidade ser recarregada.
+                runCatching {
+                    runBlocking { sufficitMcpToolBridge.reset() }
+                }
+                Log.w(TAG, "MCP Sufficit indisponivel: ${error.message}")
+            }
+        }
+    }
+
+    private fun executeSufficitMcpClientTool(action: JSONObject, tool: String) {
+        val executor = clientToolExecutor ?: run {
+            failAssistantProcessing("Fila de ferramentas cliente indisponivel.")
+            return
+        }
+        val callId = action.optString("callId").trim()
+            .ifBlank { action.optString("call_id").trim() }
+            .ifBlank { UUID.randomUUID().toString() }
+        val mcpToolName = sufficitMcpToolBridge.displayNameForClientTool(tool)
+        setAssistantProcessing(true, "Consultando $mcpToolName")
+        executor.execute {
+            val outcome = runCatching {
+                runBlocking {
+                    sufficitMcpToolBridge.executeClientToolAction(action)
+                }
+            }
+            val resultText = outcome.getOrNull()?.text.orEmpty()
+            val errorText = outcome.exceptionOrNull()?.message.orEmpty()
+            val queued = persistentOpenClawConnection?.sendClientToolResult(
+                callId = callId,
+                tool = tool,
+                result = resultText,
+                error = errorText
+            ) == true
+            if (!queued) {
+                failAssistantProcessing(
+                    errorText.ifBlank { "Nao foi possivel devolver o resultado da ferramenta ao agente." }
+                )
+            }
+            outcome.exceptionOrNull()?.let {
+                Log.w(TAG, "Falha na client tool MCP '$tool'", it)
             }
         }
     }
@@ -5123,20 +5277,133 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         return result
     }
 
+    private fun executeWakeOnLanWithVerification(
+        callId: String,
+        tool: String,
+        macAddress: String,
+        targetName: String,
+        broadcastAddress: String,
+        port: Int,
+        repeat: Int,
+        waitSeconds: Int
+    ) {
+        val executor = wakeOnLanExecutor ?: throw IllegalStateException(
+            "Fila de verificacao Wake-on-LAN indisponivel."
+        )
+        val safeWait = waitSeconds.coerceIn(5, 60)
+        val displayTarget = targetName.ifBlank { macAddress }
+        val statusMessageId = GatewayRuntime.appendChatMessage(
+            ChatRole.SYSTEM,
+            "Wake-on-LAN · $displayTarget: enviando e verificando a rede por ate ${safeWait}s."
+        )
+        executor.execute {
+            val outcome = runCatching {
+                com.sufficit.ai.gateway.network.WakeOnLanInventoryService(
+                    this@RoomAudioForegroundService
+                ).wakeAndVerify(
+                    macAddress = macAddress,
+                    broadcastAddress = broadcastAddress.takeIf { it.isNotBlank() },
+                    port = port,
+                    repeat = repeat,
+                    waitSeconds = safeWait,
+                    name = targetName.takeIf { it.isNotBlank() }
+                )
+            }
+            outcome.onSuccess { result ->
+                val target = result.targets.single()
+                val elapsedSeconds = (target.elapsedMs / 100L).toDouble() / 10.0
+                val ipSuffix = target.ipAddress.takeIf { it.isNotBlank() }?.let { " em $it" }.orEmpty()
+                val methodSuffix = target.verificationMethod?.takeIf { it.isNotBlank() }
+                    ?.let { " via ${wakeOnLanVerificationMethodLabel(it)}" }
+                    .orEmpty()
+                val finalText = when (target.status) {
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.ALREADY_REACHABLE ->
+                        "Wake-on-LAN · $displayTarget: o dispositivo ja estava acessivel$ipSuffix antes do envio."
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.CONFIRMED_ONLINE ->
+                        "Wake-on-LAN · $displayTarget: ligou e respondeu$ipSuffix após ${elapsedSeconds}s$methodSuffix."
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.NOT_RESPONDING ->
+                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes enviados, mas o dispositivo nao respondeu em ${safeWait}s. Voce pode pedir para tentar novamente."
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.UNVERIFIABLE ->
+                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes enviados, mas o MAC nao apareceu na rede em ${safeWait}s e nao ha IP conhecido para testar. Nao consegui confirmar se ligou; voce pode pedir para tentar novamente."
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.SEND_FAILED ->
+                        "Wake-on-LAN · $displayTarget: falha ao enviar os pacotes. ${target.error.orEmpty()} Voce pode pedir para tentar novamente."
+                }
+                GatewayRuntime.updateChatMessageText(statusMessageId, finalText)
+                Log.i(
+                    TAG,
+                    "Wake-on-LAN monitorado: alvo=$displayTarget mac=${target.macAddress} " +
+                        "status=${target.status} ip=${target.ipAddress.ifBlank { "desconhecido" }} " +
+                        "tentativas=${target.checkAttempts} elapsedMs=${target.elapsedMs}"
+                )
+                syncNamedWakeOnLanDevicesToSufficit(wakeOnLanKnownDevices())
+
+                val resultPayload = JSONObject()
+                    .put("status", target.status.name.lowercase())
+                    .put("target", displayTarget)
+                    .put("mac", target.macAddress)
+                    .put("ip", target.ipAddress.takeIf { it.isNotBlank() })
+                    .put("packetsSent", result.packetsSent)
+                    .put("waitSeconds", safeWait)
+                    .put("elapsedMs", target.elapsedMs)
+                    .put("checkAttempts", target.checkAttempts)
+                    .put("verificationMethod", target.verificationMethod)
+                    .put("message", finalText)
+                    .put(
+                        "retrySuggested",
+                        target.status == com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.NOT_RESPONDING ||
+                            target.status == com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.UNVERIFIABLE ||
+                            target.status == com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.SEND_FAILED
+                    )
+                val queued = persistentOpenClawConnection?.sendClientToolResult(
+                    callId = callId,
+                    tool = tool,
+                    result = resultPayload.toString(),
+                    error = target.error.orEmpty()
+                ) == true
+                if (!queued) {
+                    Log.w(TAG, "Resultado Wake-on-LAN ficou somente local: OpenClaw desconectado.")
+                }
+            }.onFailure { error ->
+                val finalText = "Wake-on-LAN · $displayTarget: falha ao executar ou verificar. " +
+                    "${error.message ?: "erro desconhecido"}. Voce pode pedir para tentar novamente."
+                GatewayRuntime.updateChatMessageText(statusMessageId, finalText)
+                persistentOpenClawConnection?.sendClientToolResult(
+                    callId = callId,
+                    tool = tool,
+                    result = "",
+                    error = error.message ?: "falha ao executar ou verificar Wake-on-LAN"
+                )
+                Log.w(TAG, "Falha no Wake-on-LAN monitorado para $displayTarget", error)
+            }
+        }
+    }
+
+    private fun wakeOnLanVerificationMethodLabel(method: String): String = when (method) {
+        "arp" -> "ARP"
+        "netbios" -> "NetBIOS"
+        "sufficit_lan_companion" -> "companion Sufficit"
+        "icmp_or_tcp" -> "ping/porta de rede"
+        else -> method
+    }
+
     override fun discoverWakeOnLanDevices(
         activeProbe: Boolean
     ): com.sufficit.ai.gateway.network.WakeOnLanDiscoveryResult {
-        val result = com.sufficit.ai.gateway.network.WakeOnLanDiscoveryTool.discover(activeProbe)
+        val result = com.sufficit.ai.gateway.network.WakeOnLanInventoryService(this).discover(activeProbe)
         val devices = result.devices
         val detail = if (devices.isEmpty()) {
-            "nenhum vizinho com MAC foi encontrado"
+            "nenhum MAC foi encontrado nesta consulta"
         } else {
-            devices.take(8).joinToString { "${it.ipAddress} (${it.macAddress})" } +
+            devices.take(8).joinToString { device ->
+                val label = device.discoveredName?.takeIf { it.isNotBlank() } ?: device.ipAddress
+                "$label (${device.macAddress})"
+            } +
                 if (devices.size > 8) " e mais ${devices.size - 8}" else ""
         }
         GatewayRuntime.appendChatMessage(
             ChatRole.SYSTEM,
-            "Descoberta Wake-on-LAN: ${devices.size} candidato(s) ativo(s): $detail. " +
+            "Descoberta Wake-on-LAN: ${devices.size} MAC(s) aprendido(s) nesta consulta; " +
+                "${result.knownDevices.size} mantido(s) no inventario: $detail. " +
                 "A compatibilidade da BIOS/NIC ainda precisa ser confirmada por teste WOL."
         )
         Log.i(
@@ -5144,7 +5411,63 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             "Descoberta Wake-on-LAN: dispositivos=${devices.size} redes=${result.networks.size} " +
                 "sonda=${result.probeExecuted} hosts=${result.scannedHostCount}"
         )
+        syncNamedWakeOnLanDevicesToSufficit(result.knownDevices)
         return result
+    }
+
+    override fun wakeOnLanKnownDevices(): List<com.sufficit.ai.gateway.network.WakeOnLanKnownDevice> =
+        com.sufficit.ai.gateway.network.WakeOnLanInventoryService(this).knownDevices()
+
+    override fun nameWakeOnLanDevice(
+        macAddress: String,
+        name: String
+    ): com.sufficit.ai.gateway.network.WakeOnLanKnownDevice {
+        val saved = com.sufficit.ai.gateway.network.WakeOnLanInventoryService(this)
+            .nameDevice(macAddress, name)
+        syncNamedWakeOnLanDevicesToSufficit(listOf(saved))
+        GatewayRuntime.appendChatMessage(
+            ChatRole.SYSTEM,
+            "Dispositivo ${saved.macAddress} salvo como ${saved.name}; sincronizando com a memoria Sufficit."
+        )
+        return saved
+    }
+
+    override fun verifyWakeOnLanDevices(
+        macAddresses: List<String>,
+        waitSeconds: Int
+    ): com.sufficit.ai.gateway.network.WakeOnLanVerificationResult {
+        val result = com.sufficit.ai.gateway.network.WakeOnLanInventoryService(this)
+            .verify(macAddresses, waitSeconds)
+        val reachable = result.targets.count { it.reachableAfterWake == true }
+        GatewayRuntime.appendChatMessage(
+            ChatRole.SYSTEM,
+            "Teste Wake-on-LAN: ${result.targets.size} alvo(s), ${result.packetsSent} pacote(s), " +
+                "$reachable acessivel(is) apos monitoramento de ate ${result.waitSeconds}s."
+        )
+        syncNamedWakeOnLanDevicesToSufficit(wakeOnLanKnownDevices())
+        return result
+    }
+
+    private fun syncNamedWakeOnLanDevicesToSufficit(
+        devices: List<com.sufficit.ai.gateway.network.WakeOnLanKnownDevice>
+    ) {
+        val named = devices.filter { !it.name.isNullOrBlank() }
+        if (named.isEmpty()) return
+        val executor = clientToolExecutor ?: return
+        executor.execute {
+            named.forEach { device ->
+                runCatching {
+                    runBlocking {
+                        sufficitMcpToolBridge.saveWakeOnLanPreference(device)
+                    }
+                }.onFailure { error ->
+                    Log.w(
+                        TAG,
+                        "Falha ao sincronizar ${device.macAddress} com a memoria Sufficit: ${error.message}"
+                    )
+                }
+            }
+        }
     }
 
     /**
@@ -5207,7 +5530,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         settings: GatewaySettings,
         state: GatewayUiState? = null,
         voiceDecision: VoiceChannelSkillDecision? = null,
-        transcript: String? = null
+        transcript: String? = null,
+        awakened: Boolean? = null,
+        wakeWord: String? = null
     ): OpenClawGatewayConfig {
         return OpenClawGatewayConfig(
             gatewayUrl = settings.openClawGatewayUrl,
@@ -5223,7 +5548,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     state = state,
                     settings = settings,
                     voiceDecision = voiceDecision,
-                    transcript = transcript
+                    transcript = transcript,
+                    awakenedOverride = awakened,
+                    wakeWordOverride = wakeWord
                 )
             } else {
                 null

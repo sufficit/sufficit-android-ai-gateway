@@ -116,6 +116,16 @@ fun ConfigHubPage(
         )
         add(
             ConfigSectionCardState(
+                destination = ConfigSectionDestination.MCP,
+                title = "MCP Lab",
+                subtitle = "Servidores, autenticação e capacidades",
+                summary = "Tools, prompts e recursos",
+                icon = Icons.Filled.Build,
+                accent = Color(0xFF35D08C)
+            )
+        )
+        add(
+            ConfigSectionCardState(
                 destination = ConfigSectionDestination.TRANSCRIPTION,
                 title = "Transcricao",
                 subtitle = "Whisper, captura e modelos",

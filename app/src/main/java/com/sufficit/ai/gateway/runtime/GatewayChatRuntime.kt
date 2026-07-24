@@ -176,6 +176,22 @@ internal object GatewayChatRuntime {
         return message.id
     }
 
+    /** Atualiza uma mensagem operacional sem criar marcadores duplicados no chat. */
+    fun updateChatMessageText(id: Long, text: String) {
+        val trimmed = text.trim()
+        if (id <= 0L || trimmed.isBlank()) return
+        var changed = false
+        chatFlow.value = chatFlow.value.map { message ->
+            if (message.id != id || message.text == trimmed) {
+                message
+            } else {
+                changed = true
+                message.copy(text = trimmed)
+            }
+        }
+        if (changed) persistChat()
+    }
+
     fun attachChatMessageAudio(
         id: Long,
         audioPath: String,

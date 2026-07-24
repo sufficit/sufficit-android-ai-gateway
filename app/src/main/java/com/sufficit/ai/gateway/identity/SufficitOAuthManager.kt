@@ -9,12 +9,11 @@ import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
-import net.openid.appauth.GrantTypeValues
 import net.openid.appauth.ResponseTypeValues
-import net.openid.appauth.TokenRequest
 import net.openid.appauth.TokenResponse
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -50,6 +49,12 @@ data class SufficitUserInfo(
     val name: String?,
     val email: String?,
     val pictureUrl: String?
+)
+
+data class SufficitRefreshedToken(
+    val accessToken: String,
+    val accessTokenExpirationTime: Long?,
+    val refreshToken: String?
 )
 
 class SufficitOAuthManager(private val context: Context) {
@@ -106,18 +111,78 @@ class SufficitOAuthManager(private val context: Context) {
      * identity.sufficit.com.br are short-lived; without this, login would
      * silently expire and the user would need to re-authenticate constantly.
      */
-    suspend fun refreshAccessToken(refreshToken: String): TokenResponse {
+    suspend fun refreshAccessToken(refreshToken: String): SufficitRefreshedToken {
         val serviceConfig = discover()
-        val request = TokenRequest.Builder(serviceConfig, SufficitOAuthConfig.CLIENT_ID)
-            .setGrantType(GrantTypeValues.REFRESH_TOKEN)
-            .setRefreshToken(refreshToken)
-            .setScopes(SufficitOAuthConfig.SCOPES)
+        val request = Request.Builder()
+            .url(serviceConfig.tokenEndpoint.toString())
+            .post(
+                FormBody.Builder()
+                    .add("grant_type", "refresh_token")
+                    .add("client_id", SufficitOAuthConfig.CLIENT_ID)
+                    .add("refresh_token", refreshToken)
+                    .add("scope", SufficitOAuthConfig.SCOPES.joinToString(" "))
+                    .build()
+            )
             .build()
 
         return suspendCancellableCoroutine { cont ->
-            authService.performTokenRequest(request) { response, ex ->
-                if (response != null) cont.resume(response) else cont.resumeWithException(ex ?: IllegalStateException("token refresh failed"))
-            }
+            val call = http.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        val body = it.body?.string().orEmpty()
+                        val json = runCatching { JSONObject(body) }.getOrElse { parseError ->
+                            if (cont.isActive) {
+                                cont.resumeWithException(
+                                    IllegalStateException("token refresh returned invalid JSON", parseError)
+                                )
+                            }
+                            return
+                        }
+                        if (!it.isSuccessful) {
+                            val description = json.optString("error_description")
+                                .ifBlank { json.optString("error") }
+                                .ifBlank { "HTTP ${it.code}" }
+                            if (cont.isActive) {
+                                cont.resumeWithException(
+                                    IllegalStateException("token refresh failed: $description")
+                                )
+                            }
+                            return
+                        }
+
+                        val accessToken = json.optString("access_token").trim()
+                        if (accessToken.isBlank()) {
+                            if (cont.isActive) {
+                                cont.resumeWithException(
+                                    IllegalStateException("token refresh returned no access token")
+                                )
+                            }
+                            return
+                        }
+                        val expiresInSeconds = json.optLong("expires_in", 0L)
+                        val expiresAt = expiresInSeconds
+                            .takeIf { seconds -> seconds > 0L }
+                            ?.let { seconds -> System.currentTimeMillis() + seconds * 1_000L }
+                        if (cont.isActive) {
+                            cont.resume(
+                                SufficitRefreshedToken(
+                                    accessToken = accessToken,
+                                    accessTokenExpirationTime = expiresAt,
+                                    refreshToken = json.optString("refresh_token")
+                                        .trim()
+                                        .takeIf { token -> token.isNotBlank() }
+                                )
+                            )
+                        }
+                    }
+                }
+            })
         }
     }
 

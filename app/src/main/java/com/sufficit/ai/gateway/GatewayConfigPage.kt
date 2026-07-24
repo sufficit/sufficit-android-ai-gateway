@@ -124,6 +124,7 @@ enum class ConfigSectionDestination {
     WAKE_WORD,
     GENERAL,
     OPENCLAW,
+    MCP,
     TRANSCRIPTION,
     ASSISTANT_VOICE,
     SCREEN,
@@ -276,6 +277,9 @@ fun ConfigPage(
         ConfigSectionDestination.OPENCLAW -> ConfigOpenClawSectionPage(
             state = state,
             actions = actions,
+            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+        )
+        ConfigSectionDestination.MCP -> McpWizardPage(
             onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
         )
         ConfigSectionDestination.TRANSCRIPTION -> ConfigTranscriptionSectionPage(

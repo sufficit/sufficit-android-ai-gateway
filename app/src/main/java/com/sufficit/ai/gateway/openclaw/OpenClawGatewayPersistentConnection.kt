@@ -101,6 +101,34 @@ class OpenClawGatewayPersistentConnection(
         return segmentId
     }
 
+    /**
+     * Devolve ao agente o resultado de uma ferramenta executada no aparelho.
+     * A mensagem usa o mesmo websocket de saida e a mesma identidade Sufficit
+     * do hello; nao abre porta nem aceita chamadas de rede no Android.
+     */
+    fun sendClientToolResult(
+        callId: String,
+        tool: String,
+        result: String,
+        error: String = ""
+    ): Boolean {
+        val config = currentConfig.get() ?: return false
+        val normalizedTool = tool.trim()
+        if (normalizedTool.isBlank()) return false
+        connect(config)
+        pendingMessages.add(
+            buildClientToolResultPayload(
+                config = config,
+                callId = callId.trim().ifBlank { UUID.randomUUID().toString() },
+                tool = normalizedTool,
+                result = result.take(MAX_CLIENT_TOOL_RESULT_CHARS),
+                error = error.take(MAX_CLIENT_TOOL_RESULT_CHARS)
+            )
+        )
+        flushPendingMessages()
+        return true
+    }
+
     private fun buildListener(generation: Long): WebSocketListener {
         return object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -266,6 +294,33 @@ class OpenClawGatewayPersistentConnection(
             .put("metadata", metadata)
     }
 
+    private fun buildClientToolResultPayload(
+        config: OpenClawGatewayConfig,
+        callId: String,
+        tool: String,
+        result: String,
+        error: String
+    ): JSONObject {
+        val metadata = JSONObject()
+        config.metadata?.let { source ->
+            val keys = source.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                metadata.put(key, source.opt(key))
+            }
+        }
+        config.userId.trim().takeIf { it.isNotBlank() }?.let { metadata.put("userId", it) }
+        config.installationId.trim().takeIf { it.isNotBlank() }?.let { metadata.put("installationId", it) }
+        metadata.put("deviceId", helper.describeAndroidDevice())
+        return JSONObject()
+            .put("type", "client_tool.result")
+            .put("callId", callId)
+            .put("tool", tool)
+            .put("result", result)
+            .put("error", error)
+            .put("metadata", metadata)
+    }
+
     private fun buildChannelErrorMessage(message: JSONObject): String {
         val code = message.optString("code").trim()
         // Server sends { type: "error", error: "..." } — fall back to "message" for future protocol variants.
@@ -309,6 +364,7 @@ class OpenClawGatewayPersistentConnection(
     companion object {
         private const val TAG = "OpenClawPersistent"
         private const val HEARTBEAT_INTERVAL_SECONDS = 15L
+        private const val MAX_CLIENT_TOOL_RESULT_CHARS = 32_000
         private val httpClient = OkHttpClient.Builder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .build()

@@ -302,7 +302,8 @@ private fun GatewayScreen() {
     HandleScreenAttentionBehavior(
         activity = activity,
         effectiveScreenMode = effectiveScreenMode,
-        screenAttentionUntilEpochMs = runtimeState.screenAttentionUntilEpochMs
+        screenAttentionUntilEpochMs = runtimeState.screenAttentionUntilEpochMs,
+        textInputModeActive = runtimeState.textInputModeActive
     )
 
     HandleConfigScreenActiveEffect(
