@@ -1,6 +1,7 @@
 package com.sufficit.ai.gateway.history
 
 import android.content.Context
+import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
@@ -48,6 +49,13 @@ class ChatHistoryStore(context: Context) {
                     }
                     val storedDeliveryState = o.optString("deliveryState").takeIf { it.isNotBlank() }
                         ?.let { runCatching { ChatDeliveryState.valueOf(it) }.getOrNull() }
+                    val storedAgentActivityState = o.optString("agentActivityState")
+                        .takeIf { it.isNotBlank() }
+                        ?.let { runCatching { ChatAgentActivityState.valueOf(it) }.getOrNull() }
+                    val restoredAgentActivityState = when (storedAgentActivityState) {
+                        null, ChatAgentActivityState.FAILED -> storedAgentActivityState
+                        else -> ChatAgentActivityState.FAILED
+                    }
                     val deliveryTags = o.optJSONArray("deliveryTags")?.let { tags ->
                         buildList {
                             for (index in 0 until tags.length()) {
@@ -73,7 +81,15 @@ class ChatHistoryStore(context: Context) {
                         ChatMessage(
                             id = o.optLong("id"),
                             role = parseRole(o.optString("role")),
-                            text = text,
+                            text = if (
+                                storedAgentActivityState != null &&
+                                storedAgentActivityState != ChatAgentActivityState.FAILED
+                            ) {
+                                "Não consegui concluir este pedido. " +
+                                    "O aplicativo foi reiniciado durante o processamento."
+                            } else {
+                                text
+                            },
                             atEpochMs = o.optLong("atEpochMs"),
                             details = o.optString("details").takeIf { it.isNotBlank() },
                             imagePath = imagePath,
@@ -100,7 +116,15 @@ class ChatHistoryStore(context: Context) {
                             deliveryUpdatedAtEpochMs = o.optLong("deliveryUpdatedAtEpochMs")
                                 .takeIf { it > 0L },
                             deliverySourceMessageIds = deliverySourceMessageIds,
-                            deliverySourceTexts = deliverySourceTexts
+                            deliverySourceTexts = deliverySourceTexts,
+                            agentActivityState = restoredAgentActivityState,
+                            agentActivityUpdatedAtEpochMs = if (
+                                restoredAgentActivityState != storedAgentActivityState
+                            ) {
+                                System.currentTimeMillis()
+                            } else {
+                                o.optLong("agentActivityUpdatedAtEpochMs").takeIf { it > 0L }
+                            }
                         )
                     )
                 }
@@ -123,7 +147,35 @@ class ChatHistoryStore(context: Context) {
                 if (!legacyDuplicate) restored += message
                 restored
             }.let(::migrateLegacyDeliveryAudits)
+                .let(::closeTrailingOrphanedUserTurn)
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Versões anteriores podiam encerrar o processo entre a transcrição e a
+     * criação do provisório. Repara somente o bloco final órfão: nunca altera
+     * turnos antigos que já possuem resposta/auditoria depois deles.
+     */
+    private fun closeTrailingOrphanedUserTurn(messages: List<ChatMessage>): List<ChatMessage> {
+        if (messages.lastOrNull()?.role != ChatRole.USER) return messages
+        val trailingUsers = messages.takeLastWhile { it.role == ChatRole.USER }
+        val actionableSources = trailingUsers.filter { message ->
+            message.text.isNotBlank() && message.audioState != ChatAudioState.ERROR
+        }
+        if (actionableSources.isEmpty()) return messages
+
+        val now = System.currentTimeMillis()
+        return messages + ChatMessage(
+            id = (messages.maxOfOrNull { it.id } ?: 0L) + 1L,
+            role = ChatRole.ASSISTANT,
+            text = "Não consegui concluir este pedido. " +
+                "O processamento anterior terminou sem registrar resposta ou falha.",
+            atEpochMs = now,
+            deliverySourceMessageIds = actionableSources.map { it.id },
+            deliverySourceTexts = actionableSources.map { it.text.trim() },
+            agentActivityState = ChatAgentActivityState.FAILED,
+            agentActivityUpdatedAtEpochMs = now
+        )
     }
 
     /**
@@ -229,6 +281,10 @@ class ChatHistoryStore(context: Context) {
                                 }
                                 if (m.deliverySourceTexts.isNotEmpty()) {
                                     put("deliverySourceTexts", JSONArray(m.deliverySourceTexts))
+                                }
+                                m.agentActivityState?.let { put("agentActivityState", it.name) }
+                                m.agentActivityUpdatedAtEpochMs?.let {
+                                    put("agentActivityUpdatedAtEpochMs", it)
                                 }
                             }
                     )

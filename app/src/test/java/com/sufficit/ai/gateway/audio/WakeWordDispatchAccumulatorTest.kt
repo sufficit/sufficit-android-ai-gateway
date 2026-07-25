@@ -31,4 +31,23 @@ class WakeWordDispatchAccumulatorTest {
         assertFalse(nextBatch.awakened)
         assertEquals("", nextBatch.wakeWord)
     }
+
+    @Test
+    fun wakeOriginSurvivesBothTranscriptionAndDispatchQueues() {
+        val transcriptionWindow = WakeWordDispatchAccumulator()
+        val dispatchWindow = WakeWordDispatchAccumulator()
+
+        // O áudio fecha enquanto a sessão está acordada.
+        transcriptionWindow.include(phraseAwakened = true, phraseWakeWord = "xuxu")
+        // A parada manual acontece antes de o STT devolver o texto.
+        val completedTranscript = transcriptionWindow.takeAndReset()
+        dispatchWindow.include(
+            phraseAwakened = completedTranscript.awakened,
+            phraseWakeWord = completedTranscript.wakeWord
+        )
+
+        val outgoingMetadata = dispatchWindow.takeAndReset()
+        assertTrue(outgoingMetadata.awakened)
+        assertEquals("xuxu", outgoingMetadata.wakeWord)
+    }
 }

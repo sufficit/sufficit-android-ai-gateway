@@ -31,6 +31,20 @@ enum class ChatDeliveryState {
 }
 
 /**
+ * Estado persistente do turno do agente.
+ *
+ * Diferente de `GatewayUiState.assistantProcessing`, este estado pertence ao
+ * histórico. Assim um timeout, uma desconexão ou a recriação do Service nunca
+ * apagam silenciosamente o único indício de que o pedido foi recebido.
+ */
+enum class ChatAgentActivityState {
+    QUEUED,
+    PROCESSING,
+    EXECUTING_ACTION,
+    FAILED
+}
+
+/**
  * Trecho fechado e enviado para transcricao. E efemero: existe somente ate o
  * resultado chegar (ou falhar), mas contem o WAV exato para o usuario poder
  * conferir o que foi selecionado enquanto aguarda.
@@ -76,7 +90,10 @@ data class ChatMessage(
     /** IDs das bolhas de usuário que formaram o turno remoto auditado. */
     val deliverySourceMessageIds: List<Long> = emptyList(),
     /** Cópia textual dos trechos do turno, preservada mesmo após o WAV expirar. */
-    val deliverySourceTexts: List<String> = emptyList()
+    val deliverySourceTexts: List<String> = emptyList(),
+    /** Bolha operacional persistente que garante feedback até resposta/falha. */
+    val agentActivityState: ChatAgentActivityState? = null,
+    val agentActivityUpdatedAtEpochMs: Long? = null
 )
 
 /**
@@ -190,6 +207,142 @@ internal object GatewayChatRuntime {
             }
         }
         if (changed) persistChat()
+    }
+
+    /**
+     * Cria ou atualiza a bolha operacional do turno e a move para o fim.
+     *
+     * Um lote pode ganhar novos trechos durante a janela de acumulação. Ao
+     * mover a mesma bolha (mesmo id) para depois do trecho recém-chegado, a
+     * mensagem do usuário nunca fica visualmente sem um estado do agente.
+     */
+    fun upsertAgentActivityMessage(
+        existingId: Long,
+        dispatchedText: String,
+        state: ChatAgentActivityState,
+        statusText: String,
+        windowMs: Long = 10 * 60_000L
+    ): Long {
+        val normalizedDispatch = normalizeDispatchText(dispatchedText)
+        val normalizedStatus = statusText.trim()
+        if (normalizedDispatch.isBlank() || normalizedStatus.isBlank()) return 0L
+
+        val now = System.currentTimeMillis()
+        val messages = chatFlow.value
+        val lastAssistantIndex = messages.indexOfLast { it.role == ChatRole.ASSISTANT }
+        val sourceMessages = messages.drop(lastAssistantIndex + 1).filter { message ->
+            val messageText = normalizeDispatchText(message.text)
+            message.role == ChatRole.USER &&
+                messageText.isNotBlank() &&
+                now - message.atEpochMs in 0..windowMs &&
+                dispatchContainsMessage(normalizedDispatch, messageText)
+        }
+        val candidate = messages.firstOrNull { message ->
+            message.id == existingId &&
+                message.role == ChatRole.ASSISTANT &&
+                message.agentActivityState != null &&
+                message.agentActivityState != ChatAgentActivityState.FAILED
+        }
+        // Uma nova fila pode nascer enquanto o turno anterior aguarda reply.
+        // Nesse caso QUEUED nunca sequestra a bolha PROCESSING anterior.
+        val current = candidate?.takeIf { message ->
+            state != ChatAgentActivityState.QUEUED ||
+                message.agentActivityState == ChatAgentActivityState.QUEUED
+        }
+        val id = current?.id ?: chatMessageIdSeq.incrementAndGet()
+        val sourceIds = (
+            current?.deliverySourceMessageIds.orEmpty() + sourceMessages.map { it.id }
+            ).distinct()
+        val sourceTexts = (
+            current?.deliverySourceTexts.orEmpty() +
+                sourceMessages.map { it.text.trim() }.filter { it.isNotBlank() }
+            ).distinct()
+        val activity = ChatMessage(
+            id = id,
+            role = ChatRole.ASSISTANT,
+            text = normalizedStatus,
+            atEpochMs = now,
+            deliverySourceMessageIds = sourceIds,
+            deliverySourceTexts = sourceTexts.ifEmpty { listOf(dispatchedText.trim()) },
+            agentActivityState = state,
+            agentActivityUpdatedAtEpochMs = now
+        )
+        chatFlow.value = retainHistory(messages.filterNot { it.id == id } + activity)
+        persistChat()
+        return id
+    }
+
+    /** Localiza a atividade que pertence ao transcript devolvido pelo agente. */
+    fun findAgentActivityMessageId(dispatchedText: String): Long {
+        val normalizedDispatch = normalizeDispatchText(dispatchedText)
+        if (normalizedDispatch.isBlank()) return 0L
+        // Respostas do websocket chegam na ordem dos turnos. Para comandos
+        // textualmente idênticos em voo, escolha a atividade mais antiga.
+        return chatFlow.value.firstOrNull { message ->
+            message.role == ChatRole.ASSISTANT &&
+                message.agentActivityState != null &&
+                message.deliverySourceTexts.isNotEmpty() &&
+                message.deliverySourceTexts.all { source ->
+                    dispatchContainsMessage(normalizedDispatch, normalizeDispatchText(source))
+                }
+        }?.id ?: 0L
+    }
+
+    /** Fecha todas as atividades que ultrapassaram o prazo, inclusive concorrentes. */
+    fun failStaleAgentActivityMessages(
+        nowEpochMs: Long,
+        timeoutMs: Long,
+        reason: String
+    ): Int {
+        val staleIds = chatFlow.value.filter { message ->
+            val updatedAt = message.agentActivityUpdatedAtEpochMs ?: message.atEpochMs
+            message.agentActivityState != null &&
+                message.agentActivityState != ChatAgentActivityState.FAILED &&
+                nowEpochMs - updatedAt > timeoutMs
+        }.map { it.id }
+        staleIds.forEach { id -> failAgentActivityMessage(id, reason) }
+        return staleIds.size
+    }
+
+    /** Converte a atividade em uma falha consultável e mantém a causa na tela. */
+    fun failAgentActivityMessage(id: Long, reason: String): Boolean {
+        val normalizedReason = reason.trim().ifBlank { "Motivo não informado." }
+        val messages = chatFlow.value
+        val activity = messages.firstOrNull { message ->
+            message.id == id &&
+                message.role == ChatRole.ASSISTANT &&
+                message.agentActivityState != null &&
+                message.agentActivityState != ChatAgentActivityState.FAILED
+        } ?: messages.asReversed().firstOrNull { message ->
+            message.role == ChatRole.ASSISTANT &&
+                message.agentActivityState != null &&
+                message.agentActivityState != ChatAgentActivityState.FAILED
+        } ?: return false
+
+        val now = System.currentTimeMillis()
+        val failed = activity.copy(
+            text = "Não consegui concluir este pedido. $normalizedReason",
+            atEpochMs = now,
+            agentActivityState = ChatAgentActivityState.FAILED,
+            agentActivityUpdatedAtEpochMs = now
+        )
+        chatFlow.value = retainHistory(messages.filterNot { it.id == activity.id } + failed)
+        persistChat()
+        return true
+    }
+
+    /**
+     * Remove a bolha operacional somente depois que uma resposta, auditoria ou
+     * cartão de ação definitivo já foi anexado ao histórico.
+     */
+    fun removeAgentActivityMessage(id: Long) {
+        if (id <= 0L) return
+        val updated = chatFlow.value.filterNot { message ->
+            message.id == id && message.agentActivityState != null
+        }
+        if (updated.size == chatFlow.value.size) return
+        chatFlow.value = updated
+        persistChat()
     }
 
     fun attachChatMessageAudio(

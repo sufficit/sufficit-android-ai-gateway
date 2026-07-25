@@ -335,6 +335,38 @@ object GatewayRuntime {
         GatewayChatRuntime.updateChatMessageText(id, text)
     }
 
+    fun upsertAgentActivityMessage(
+        existingId: Long,
+        dispatchedText: String,
+        state: ChatAgentActivityState,
+        statusText: String
+    ): Long = GatewayChatRuntime.upsertAgentActivityMessage(
+        existingId = existingId,
+        dispatchedText = dispatchedText,
+        state = state,
+        statusText = statusText
+    )
+
+    fun failAgentActivityMessage(id: Long, reason: String): Boolean =
+        GatewayChatRuntime.failAgentActivityMessage(id, reason)
+
+    fun findAgentActivityMessageId(dispatchedText: String): Long =
+        GatewayChatRuntime.findAgentActivityMessageId(dispatchedText)
+
+    fun failStaleAgentActivityMessages(
+        nowEpochMs: Long,
+        timeoutMs: Long,
+        reason: String
+    ): Int = GatewayChatRuntime.failStaleAgentActivityMessages(
+        nowEpochMs = nowEpochMs,
+        timeoutMs = timeoutMs,
+        reason = reason
+    )
+
+    fun removeAgentActivityMessage(id: Long) {
+        GatewayChatRuntime.removeAgentActivityMessage(id)
+    }
+
     fun attachChatMessageAudio(
         id: Long,
         audioPath: String,

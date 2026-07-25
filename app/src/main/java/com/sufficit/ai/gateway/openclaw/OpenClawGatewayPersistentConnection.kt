@@ -11,6 +11,7 @@ import java.net.SocketException
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,6 +44,10 @@ class OpenClawGatewayPersistentConnection(
     private val currentConfig = AtomicReference<OpenClawGatewayConfig?>()
     private val currentIdentity = AtomicReference<ConnectionIdentity?>()
     private var heartbeatExecutor: ScheduledExecutorService? = null
+    private val reconnectExecutor: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor()
+    private var reconnectFuture: ScheduledFuture<*>? = null
+    private var reconnectAttempt: Int = 0
 
     @Synchronized
     fun connect(config: OpenClawGatewayConfig) {
@@ -68,11 +73,15 @@ class OpenClawGatewayPersistentConnection(
         currentConfig.set(normalized)
         currentIdentity.set(identity)
         manualCloseRequested.set(false)
+        openSocketLocked(normalized)
+    }
+
+    private fun openSocketLocked(config: OpenClawGatewayConfig) {
         connecting.set(true)
         val generation = connectionGeneration.incrementAndGet()
-        Log.i(TAG, "Abrindo websocket persistente OpenClaw Android em ${normalized.gatewayUrl}")
+        Log.i(TAG, "Abrindo websocket persistente OpenClaw Android em ${config.gatewayUrl}")
         val webSocket = httpClient.newWebSocket(
-            Request.Builder().url(normalized.gatewayUrl).build(),
+            Request.Builder().url(config.gatewayUrl).build(),
             buildListener(generation)
         )
         socketRef.set(webSocket)
@@ -81,6 +90,9 @@ class OpenClawGatewayPersistentConnection(
     @Synchronized
     fun disconnect() {
         connectionGeneration.incrementAndGet()
+        reconnectFuture?.cancel(false)
+        reconnectFuture = null
+        reconnectAttempt = 0
         heartbeatExecutor?.shutdownNow()
         heartbeatExecutor = null
         connected.set(false)
@@ -159,6 +171,7 @@ class OpenClawGatewayPersistentConnection(
                             }
                             connecting.set(false)
                             connected.set(true)
+                            resetReconnectBackoff()
                             startHeartbeat()
                             flushPendingMessages()
                             listener.onConnected()
@@ -200,6 +213,8 @@ class OpenClawGatewayPersistentConnection(
                 connecting.set(false)
                 connected.set(false)
                 socketRef.compareAndSet(webSocket, null)
+                heartbeatExecutor?.shutdownNow()
+                heartbeatExecutor = null
                 if (
                     manualCloseRequested.get() &&
                     t is SocketException &&
@@ -209,6 +224,7 @@ class OpenClawGatewayPersistentConnection(
                     return
                 }
                 listener.onError("Falha websocket OpenClaw: ${t.message}", t)
+                scheduleReconnect(generation, "falha de transporte")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -222,8 +238,57 @@ class OpenClawGatewayPersistentConnection(
                 heartbeatExecutor?.shutdownNow()
                 heartbeatExecutor = null
                 listener.onDisconnected("Websocket Android fechado ($code): ${reason.ifBlank { "sem motivo" }}")
+                scheduleReconnect(generation, "fechamento remoto")
             }
         }
+    }
+
+    @Synchronized
+    private fun resetReconnectBackoff() {
+        reconnectFuture?.cancel(false)
+        reconnectFuture = null
+        reconnectAttempt = 0
+    }
+
+    @Synchronized
+    private fun scheduleReconnect(failedGeneration: Long, reason: String) {
+        if (
+            manualCloseRequested.get() ||
+            connectionGeneration.get() != failedGeneration ||
+            currentConfig.get() == null
+        ) {
+            return
+        }
+        if (reconnectFuture?.isDone == false) {
+            return
+        }
+
+        val delaySeconds = reconnectDelaySeconds(reconnectAttempt)
+        reconnectAttempt += 1
+        Log.i(
+            TAG,
+            "Websocket OpenClaw desconectado por $reason; reconectando em ${delaySeconds}s."
+        )
+        reconnectFuture = reconnectExecutor.schedule(
+            {
+                synchronized(this) {
+                    reconnectFuture = null
+                    val config = currentConfig.get()
+                    if (
+                        config == null ||
+                        manualCloseRequested.get() ||
+                        connectionGeneration.get() != failedGeneration ||
+                        connected.get() ||
+                        connecting.get()
+                    ) {
+                        return@synchronized
+                    }
+                    openSocketLocked(config)
+                }
+            },
+            delaySeconds,
+            TimeUnit.SECONDS
+        )
     }
 
     private fun startHeartbeat() {
@@ -364,9 +429,17 @@ class OpenClawGatewayPersistentConnection(
     companion object {
         private const val TAG = "OpenClawPersistent"
         private const val HEARTBEAT_INTERVAL_SECONDS = 15L
+        private const val RECONNECT_BASE_SECONDS = 2L
+        private const val RECONNECT_MAX_SECONDS = 30L
         private const val MAX_CLIENT_TOOL_RESULT_CHARS = 32_000
         private val httpClient = OkHttpClient.Builder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .build()
+
+        internal fun reconnectDelaySeconds(attempt: Int): Long {
+            val exponent = attempt.coerceIn(0, 4)
+            return (RECONNECT_BASE_SECONDS * (1L shl exponent))
+                .coerceAtMost(RECONNECT_MAX_SECONDS)
+        }
     }
 }

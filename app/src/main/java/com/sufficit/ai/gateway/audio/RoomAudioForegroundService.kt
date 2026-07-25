@@ -52,6 +52,7 @@ import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayPersistentConnection
 import com.sufficit.ai.gateway.mcp.SufficitMcpToolBridge
+import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
@@ -225,6 +226,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     @Volatile private var pendingOpenClawDispatchText: String = ""
     @Volatile private var pendingOpenClawDispatchState: GatewayUiState? = null
     private val pendingWakeWordDispatch = WakeWordDispatchAccumulator()
+    private val transcriptWakeWordLock = Any()
+    private val currentTranscriptWakeWord = WakeWordDispatchAccumulator()
     private val pendingOpenClawDispatchGeneration = AtomicLong(0L)
     @Volatile private var activeTranscriptionStartedAtEpochMs = 0L
     @Volatile private var activeOpenClawDispatchStartedAtEpochMs = 0L
@@ -233,6 +236,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     // reply chegar (handleOpenClawReply). Timestamp para expirar caso o reply
     // nunca volte (websocket caido), evitando o balao preso.
     @Volatile private var assistantProcessingSinceMs = 0L
+    @Volatile private var assistantActivityMessageId = 0L
     @Volatile private var lastQueueReconcileAtEpochMs = 0L
 
     @Volatile private var transcriptClearTimeoutSecs = GatewaySettingsStore.DEFAULT_TRANSCRIPT_CLEAR_TIMEOUT_SECS
@@ -831,6 +835,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (now - lastQueueReconcileAtEpochMs >= TRANSCRIPTION_QUEUE_RECONCILE_INTERVAL_MS) {
                     lastQueueReconcileAtEpochMs = now
                     updateQueueCount()
+                    GatewayRuntime.failStaleAgentActivityMessages(
+                        nowEpochMs = now,
+                        timeoutMs = ASSISTANT_PROCESSING_TIMEOUT_MS,
+                        reason = "Tempo esgotado aguardando resposta do agente."
+                    )
                 }
                 // Expira o balao de "processando" se o reply nunca voltar
                 // (ex.: websocket caiu) — evita o balao preso.
@@ -1564,6 +1573,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             Log.i(TAG, "Segmento descartado: bytes=${pcmBytes.size}, duracao=${durationMs}ms.")
             return
         }
+        // A transcrição termina de forma assíncrona e pode voltar somente
+        // depois de um punho/botão ter encerrado a sessão ao vivo. Preserve a
+        // origem no instante em que ESTE áudio foi fechado.
+        val segmentAwakened = wakeWordSessionActive
+        val segmentWakeWord = activeWakeWordPhrase.trim()
         val segmentLooksLikeSpeech = segmentLooksLikeSpeech(
             pcmBytes = pcmBytes,
             settings = settings
@@ -1879,9 +1893,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     // pelo capturador (phraseAdvanceReady).
                     val shouldAdvanceWindow = phraseAdvanceReady
                     if (shouldAdvanceWindow) {
+                        val previousWakeContext = takeCurrentTranscriptWakeWord()
                         appendTranscriptHistory(
                             phrase = currentState.currentTranscript,
-                            state = currentState
+                            state = currentState,
+                            wakeWordContext = previousWakeContext
+                        )
+                    }
+                    if (correctedText.isNotBlank()) {
+                        includeCurrentTranscriptWakeWord(
+                            awakened = segmentAwakened,
+                            wakeWord = segmentWakeWord
                         )
                     }
                     val baseState = if (shouldAdvanceWindow) {
@@ -2806,6 +2828,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         markDirectAddressNow()
         Log.i(TAG, "Sessao de wake word iniciada: '${activeWakeWordPhrase.ifBlank { "(sem rotulo)" }}'.")
     }
+
+    private fun includeCurrentTranscriptWakeWord(awakened: Boolean, wakeWord: String) {
+        synchronized(transcriptWakeWordLock) {
+            currentTranscriptWakeWord.include(awakened, wakeWord)
+        }
+    }
+
+    private fun takeCurrentTranscriptWakeWord(): WakeWordDispatchSnapshot =
+        synchronized(transcriptWakeWordLock) {
+            currentTranscriptWakeWord.takeAndReset()
+        }
 
     /** Encerra a sessao explicita e tambem elimina a janela curta residual. */
     private fun clearWakeWordConversation(reason: String) {
@@ -3914,10 +3947,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private fun commitCurrentTranscriptToPrevious() {
         val snapshot = GatewayRuntime.state().value
         val hadContent = snapshot.currentTranscript.trim().isNotBlank()
+        val wakeWordContext = if (hadContent) {
+            takeCurrentTranscriptWakeWord()
+        } else {
+            null
+        }
         appendTranscriptHistory(
             phrase = snapshot.currentTranscript,
             state = snapshot,
-            immediate = true
+            immediate = true,
+            wakeWordContext = wakeWordContext
         )
         GatewayRuntime.update {
             val current = it.currentTranscript.trim()
@@ -3944,7 +3983,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private fun appendTranscriptHistory(
         phrase: String,
         state: GatewayUiState,
-        immediate: Boolean = false
+        immediate: Boolean = false,
+        wakeWordContext: WakeWordDispatchSnapshot? = null
     ) {
         val normalizedPhrase = phrase.trim()
         if (normalizedPhrase.isBlank()) {
@@ -3976,14 +4016,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         scheduleTranscriptDispatchToOpenClaw(
             phrase = normalizedPhrase,
             state = state,
-            immediate = immediate
+            immediate = immediate,
+            wakeWordContext = wakeWordContext
         )
     }
 
     private fun scheduleTranscriptDispatchToOpenClaw(
         phrase: String,
         state: GatewayUiState,
-        immediate: Boolean = false
+        immediate: Boolean = false,
+        wakeWordContext: WakeWordDispatchSnapshot? = null
     ) {
         val normalizedPhrase = phrase.trim()
         if (normalizedPhrase.isBlank()) {
@@ -4030,8 +4072,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // da janela de acumulacao. Preserve no lote a wake word que estava
         // ativa quando o trecho entrou na fila; limpar a sessao deve afetar
         // apenas falas futuras, nunca reclassificar este comando como ambiente.
-        val phraseAwakened = wakeWordSessionActive
-        val phraseWakeWord = activeWakeWordPhrase.trim()
+        val phraseAwakened = wakeWordContext?.awakened ?: wakeWordSessionActive
+        val phraseWakeWord = when {
+            !phraseAwakened -> ""
+            wakeWordContext != null -> wakeWordContext.wakeWord.trim()
+            else -> activeWakeWordPhrase.trim()
+        }
+        Log.i(
+            TAG,
+            "Contexto wake preservado no lote: awakened=$phraseAwakened " +
+                "wakeWord=${phraseWakeWord.ifBlank { "(nenhuma)" }}"
+        )
         val pendingLabel = synchronized(pendingDispatchLock) {
             pendingOpenClawDispatchText = mergePendingDispatchText(
                 existing = pendingOpenClawDispatchText,
@@ -4041,8 +4092,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             pendingWakeWordDispatch.include(phraseAwakened, phraseWakeWord)
             pendingOpenClawDispatchText
         }
-        // Feedback visual antes de qualquer espera, avaliacao local ou acesso
-        // a rede. A bolha nasce primeiro; o envio remoto acontece depois.
+        // Feedback persistente antes de qualquer espera, avaliação local ou
+        // acesso à rede. A mesma bolha é movida para depois de cada novo
+        // trecho do lote; assim a mensagem do usuário nunca fica sozinha.
+        assistantActivityMessageId = GatewayRuntime.upsertAgentActivityMessage(
+            existingId = assistantActivityMessageId,
+            dispatchedText = pendingLabel,
+            state = ChatAgentActivityState.QUEUED,
+            statusText = "Preparando seu pedido para o agente…"
+        )
+        // Mantém também o estado leve usado pelo cabeçalho/notificação.
         setAssistantProcessing(true, pendingLabel)
         updateOpenClawDispatchQueueCount()
 
@@ -4081,9 +4140,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             updateOpenClawDispatchQueueCount()
 
             if (dispatchText.isBlank()) {
+                failAssistantProcessing("O turno ficou vazio antes do envio.")
                 return@execute
             }
 
+            assistantActivityMessageId = GatewayRuntime.upsertAgentActivityMessage(
+                existingId = assistantActivityMessageId,
+                dispatchedText = dispatchText,
+                state = ChatAgentActivityState.PROCESSING,
+                statusText = "Processando seu pedido…"
+            )
             dispatchTranscriptToOpenClaw(
                 phrase = dispatchText,
                 state = dispatchState,
@@ -4218,7 +4284,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     /** Fecha a bolha provisoria e deixa uma causa visivel, em vez de apagar
      * silenciosamente o pedido ou deixa-lo em "Processando" para sempre. */
     private fun failAssistantProcessing(reason: String) {
-        val wasProcessing = GatewayRuntime.state().value.assistantProcessing || assistantProcessingSinceMs > 0L
+        val activityId = assistantActivityMessageId
+        val activityFailed = activityId > 0L &&
+            GatewayRuntime.failAgentActivityMessage(activityId, reason)
+        if (activityFailed) {
+            assistantActivityMessageId = 0L
+        }
+        val wasProcessing = GatewayRuntime.state().value.assistantProcessing ||
+            assistantProcessingSinceMs > 0L ||
+            activityFailed
         assistantProcessingSinceMs = 0L
         activeOpenClawDispatchStartedAtEpochMs = 0L
         updateOpenClawDispatchQueueCount()
@@ -4250,7 +4324,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // cancela para o agente nao se intrometer.
         if (GatewayRuntime.configScreenActive().value) {
             Log.i(TAG, "Despacho em voo cancelado: tela de configuracao ativa.")
-            setAssistantProcessing(false)
+            failAssistantProcessing(
+                "O envio foi cancelado porque uma tela de configuração foi aberta."
+            )
             return
         }
         val store = settingsStore ?: GatewaySettingsStore(this)
@@ -4619,13 +4695,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun handleOpenClawReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply) {
+        var replyActivityId = GatewayRuntime.findAgentActivityMessageId(
+            reply.transcript.orEmpty()
+        ).takeIf { it > 0L } ?: assistantActivityMessageId
         // Resposta chegou: encerra o balao de "processando".
         setAssistantProcessing(false)
         // Falha do agente no servidor: detalhe cru vem no campo "error" do
         // envelope. Vai para log e status — nunca vira bolha de chat e o TTS
         // nunca le o texto cru; o usuario ouve um aviso curto e amigavel.
         reply.errorText?.takeIf { it.isNotBlank() }?.let { error ->
-            recordOpenClawDeliveryAudit(reply, displayReply = "")
+            val auditMessageId = recordOpenClawDeliveryAudit(reply, displayReply = "")
             Log.e(TAG, "OpenClaw: falha do agente no servidor: $error")
             GatewayRuntime.update {
                 it.copy(
@@ -4639,12 +4718,24 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 )
             }
             speakAssistantReply("Tive um problema ao processar. Pode tentar de novo?")
+            if (auditMessageId > 0L) {
+                finishAgentActivity(replyActivityId)
+            } else {
+                failAgentActivity(
+                    replyActivityId,
+                    "O agente remoto falhou ao processar o pedido."
+                )
+            }
             return
         }
         val loadedSettings = runCatching {
             settingsStore?.load() ?: GatewaySettingsStore(this).load()
         }.getOrElse {
             Log.w(TAG, "Falha ao carregar configuracao do OpenClaw para reply", it)
+            failAgentActivity(
+                replyActivityId,
+                "A resposta chegou, mas não consegui carregar a configuração local."
+            )
             return
         }
         val patchResult = applyRemoteSettingsPatchIfNeeded(reply, loadedSettings)
@@ -4657,7 +4748,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val assistantReply = reply.replyText.trim()
         val spokenReply = reply.spokenReplyText.ifBlank { assistantReply }
         val displayReply = spokenReply.ifBlank { assistantReply }
-        recordOpenClawDeliveryAudit(reply, displayReply)
+        val auditMessageId = recordOpenClawDeliveryAudit(reply, displayReply)
         val requiresAttention = reply.needsAttention
         val blockingAnnouncement = when {
             requiresAttention -> buildBlockingAnnouncementMessage(reply)
@@ -4732,11 +4823,47 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // Ferramentas escolhidas pelo agente (campo "actions"): executadas no
         // aparelho pela conexao de saida — sem rede de entrada. Apos a fala
         // para nao competir com o TTS.
+        if (reply.actions.isNotEmpty() && replyActivityId > 0L) {
+            replyActivityId = GatewayRuntime.upsertAgentActivityMessage(
+                existingId = replyActivityId,
+                dispatchedText = reply.transcript.orEmpty(),
+                state = ChatAgentActivityState.EXECUTING_ACTION,
+                statusText = "Executando a ação solicitada…"
+            )
+        }
         executeAgentActions(reply.actions)
+        if (auditMessageId > 0L || assistantMessageId > 0L || reply.actions.isNotEmpty()) {
+            finishAgentActivity(replyActivityId)
+        } else {
+            failAgentActivity(
+                replyActivityId,
+                "O agente respondeu sem texto, decisão ou ação executável."
+            )
+        }
         Log.i(
             TAG,
             "OpenClaw reply recebida: ${reply.rawReplyText.take(180)} | patch=${patchSummary ?: "nenhum"} | actions=${reply.actions.size}"
         )
+    }
+
+    /** A resposta definitiva já está no histórico; remove só agora o provisório. */
+    private fun finishAgentActivity(activityId: Long = assistantActivityMessageId) {
+        if (assistantActivityMessageId == activityId) {
+            assistantActivityMessageId = 0L
+        }
+        if (activityId > 0L) {
+            GatewayRuntime.removeAgentActivityMessage(activityId)
+        }
+    }
+
+    private fun failAgentActivity(activityId: Long, reason: String) {
+        if (activityId > 0L && GatewayRuntime.failAgentActivityMessage(activityId, reason)) {
+            if (assistantActivityMessageId == activityId) {
+                assistantActivityMessageId = 0L
+            }
+            return
+        }
+        failAssistantProcessing(reason)
     }
 
     /**

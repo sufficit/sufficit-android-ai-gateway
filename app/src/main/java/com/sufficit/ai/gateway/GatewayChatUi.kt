@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.sufficit.ai.gateway.runtime.ChatMessage
+import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
 import com.sufficit.ai.gateway.runtime.ChatRole
@@ -122,6 +123,17 @@ fun ChatMessagesList(
     val messages by GatewayRuntime.chatMessages().collectAsState()
     val pendingAudioCaptures by GatewayRuntime.pendingAudioCaptures().collectAsState()
     val partialTranscript = currentTranscript.trim()
+    val hasPersistentAgentActivity = messages.any { message ->
+        message.agentActivityState != null &&
+            message.agentActivityState != ChatAgentActivityState.FAILED
+    }
+    val latestMessageVersion = messages.lastOrNull()?.let { message ->
+        Triple(
+            message.id,
+            message.agentActivityUpdatedAtEpochMs ?: message.deliveryUpdatedAtEpochMs,
+            message.text
+        )
+    }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     var autoScrollEnabled by rememberSaveable { mutableStateOf(true) }
     val scrollScope = rememberCoroutineScope()
@@ -157,6 +169,7 @@ fun ChatMessagesList(
     // interrompido por puxao de scroll). Com reverseLayout, indice 0 = rodape.
     androidx.compose.runtime.LaunchedEffect(
         messages.size,
+        latestMessageVersion,
         partialTranscript.isNotBlank(),
         pendingAudioCaptures.size,
         assistantProcessing
@@ -200,7 +213,7 @@ fun ChatMessagesList(
         }
         // Balao do assistente "processando": aparece enquanto o agente trabalha
         // no pedido, com o que esta sendo processado.
-        if (assistantProcessing) {
+        if (assistantProcessing && !hasPersistentAgentActivity) {
             item(key = "processing") {
                 ProcessingBubble(label = assistantProcessingLabel)
             }
@@ -227,6 +240,14 @@ fun ChatMessagesList(
                 )
             } else if (message.role == ChatRole.SYSTEM) {
                 SystemMarker(text = message.text)
+            } else if (
+                message.role == ChatRole.ASSISTANT &&
+                    message.agentActivityState != null
+            ) {
+                AgentActivityMessage(
+                    message = message,
+                    timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
+                )
             } else if (
                 message.role == ChatRole.ASSISTANT &&
                     message.deliveryState != null &&
@@ -299,6 +320,46 @@ fun ChatMessagesList(
                 )
             }
         }
+    }
+}
+
+/**
+ * Bolha operacional do agente. Estados ativos animam; falhas permanecem no
+ * histórico com causa e horário para o usuário nunca precisar inferir silêncio.
+ */
+@Composable
+private fun AgentActivityMessage(
+    message: ChatMessage,
+    timeLabel: String
+) {
+    val state = message.agentActivityState ?: return
+    val sourceLabel = message.deliverySourceTexts
+        .joinToString(" ")
+        .trim()
+        .take(180)
+    if (state != ChatAgentActivityState.FAILED) {
+        val title = when (state) {
+            ChatAgentActivityState.QUEUED -> "Preparando"
+            ChatAgentActivityState.PROCESSING -> "Processando"
+            ChatAgentActivityState.EXECUTING_ACTION -> "Executando ação"
+            ChatAgentActivityState.FAILED -> error("Estado tratado acima")
+        }
+        ProcessingBubble(title = title, label = sourceLabel)
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        ChatBubble(
+            text = message.text,
+            role = ChatRole.ASSISTANT,
+            timeLabel = timeLabel
+        )
+        Text(
+            text = "Falha registrada • envie novamente para tentar de novo",
+            color = AudioErrorText,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(start = 12.dp, top = 2.dp)
+        )
     }
 }
 
