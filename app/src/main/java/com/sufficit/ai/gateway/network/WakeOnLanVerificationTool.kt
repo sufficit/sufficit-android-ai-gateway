@@ -30,7 +30,9 @@ data class WakeOnLanVerificationResult(
     val targets: List<WakeOnLanVerificationDevice>,
     val waitSeconds: Int,
     val packetsSent: Int,
-    val elapsedMs: Long
+    val elapsedMs: Long,
+    /** Entregas aceitas pelo kernel de rede do Android; não prova recepção na NIC remota. */
+    val deliveryAttempts: List<WakeOnLanDeliveryAttempt> = emptyList()
 )
 
 /**
@@ -64,7 +66,8 @@ object WakeOnLanVerificationTool {
             targets = results.flatMap(WakeOnLanVerificationResult::targets),
             waitSeconds = waitSeconds.coerceIn(MIN_WAIT_SECONDS, MAX_WAIT_SECONDS),
             packetsSent = results.sumOf(WakeOnLanVerificationResult::packetsSent),
-            elapsedMs = results.maxOfOrNull(WakeOnLanVerificationResult::elapsedMs) ?: 0L
+            elapsedMs = results.maxOfOrNull(WakeOnLanVerificationResult::elapsedMs) ?: 0L,
+            deliveryAttempts = results.flatMap(WakeOnLanVerificationResult::deliveryAttempts)
         )
     }
 
@@ -90,7 +93,8 @@ object WakeOnLanVerificationTool {
                 macAddress = normalizedMac,
                 broadcastAddress = broadcastAddress,
                 port = port,
-                repeat = repeat
+                repeat = repeat,
+                targetIpAddress = ipAddress
             )
         }.getOrElse { error ->
             val elapsed = System.currentTimeMillis() - startedAt
@@ -133,7 +137,8 @@ object WakeOnLanVerificationTool {
                 ),
                 waitSeconds = safeWait,
                 packetsSent = wakeResult.packetsSent,
-                elapsedMs = elapsed
+                elapsedMs = elapsed,
+                deliveryAttempts = wakeResult.deliveries
             )
         }
 
@@ -177,7 +182,8 @@ object WakeOnLanVerificationTool {
             ),
             waitSeconds = safeWait,
             packetsSent = wakeResult.packetsSent,
-            elapsedMs = elapsed
+            elapsedMs = elapsed,
+            deliveryAttempts = wakeResult.deliveries
         )
     }
 

@@ -108,6 +108,19 @@ class McpServerStore(context: Context) {
         )
     }
 
+    fun createTuyaDraft(): McpServerConfiguration {
+        val id = UUID.randomUUID().toString()
+        return McpServerConfiguration(
+            id = id,
+            namespace = TUYA_NAMESPACE,
+            name = "Tuya / Smart Life",
+            endpoint = TUYA_MCP_ENDPOINT,
+            authenticationMode = McpAuthenticationMode.BEARER,
+            enabled = true,
+            builtIn = false
+        )
+    }
+
     @Synchronized
     fun delete(id: String): Boolean {
         val current = list()
@@ -229,6 +242,8 @@ class McpServerStore(context: Context) {
 
     companion object {
         const val SUFFICIT_SERVER_ID = "sufficit-ai"
+        const val TUYA_NAMESPACE = "tuya"
+        const val TUYA_MCP_ENDPOINT = "https://openclaw.sufficit.com.br/mcp/tuya"
         private const val PREFERENCES_NAME = "mcp_servers_secure_prefs"
         private const val KEY_SERVERS = "servers_json"
 

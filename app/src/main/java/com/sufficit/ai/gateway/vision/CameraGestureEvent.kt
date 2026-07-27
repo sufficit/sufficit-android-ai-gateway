@@ -75,13 +75,15 @@ object GestureCommandIds {
  *
  * O nivel 1 (wake word local) nao aparece como [listening]: nele o indicador
  * ainda pode retomar o nivel 2. Com [listening] ativo, liberar a fala seria
- * redundante. Fora do Chat ou durante digitacao, nenhum comando de camera
- * deve atravessar.
+ * redundante. A mao aberta so existe enquanto o assistente realmente fala,
+ * pois fora desse estado nao ha audio para interromper. Fora do Chat ou
+ * durante digitacao, nenhum comando de camera deve atravessar.
  */
 object GestureCommandPolicy {
     fun filter(
         gestureId: String?,
         listening: Boolean,
+        assistantSpeaking: Boolean,
         textInputModeActive: Boolean,
         interactionActive: Boolean
     ): String? = when {
@@ -89,6 +91,7 @@ object GestureCommandPolicy {
         textInputModeActive -> null
         gestureId == GestureCommandIds.FIST && !listening -> null
         gestureId == GestureCommandIds.INDEX_UP && listening -> null
+        gestureId == GestureCommandIds.OPEN_HAND && !assistantSpeaking -> null
         else -> gestureId
     }
 }

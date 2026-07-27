@@ -47,13 +47,23 @@ fun GestureCommandFooter(modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(false) }
 
     // Defesa visual: ao entrar no nivel 2, remove inclusive o linger do
-    // indicador usado para acordar a escuta. Mao aberta e punho permanecem.
+    // Cada indicador visual so permanece enquanto sua acao ainda e valida.
     if (runtimeState.listening && lastGestureId == GestureCommandIds.INDEX_UP) {
         lastGestureId = null
         visible = false
     }
+    if (!runtimeState.listening && lastGestureId == GestureCommandIds.FIST) {
+        lastGestureId = null
+        visible = false
+    }
+    if (!runtimeState.speakingBack && lastGestureId == GestureCommandIds.OPEN_HAND) {
+        lastGestureId = null
+        visible = false
+    }
     val current = command?.takeUnless {
-        runtimeState.listening && it.gestureId == GestureCommandIds.INDEX_UP
+        (runtimeState.listening && it.gestureId == GestureCommandIds.INDEX_UP) ||
+            (!runtimeState.listening && it.gestureId == GestureCommandIds.FIST) ||
+            (!runtimeState.speakingBack && it.gestureId == GestureCommandIds.OPEN_HAND)
     }
     if (current != null) {
         lastGestureId = current.gestureId

@@ -165,8 +165,23 @@ class GatewayApiServer(
         } else {
             body.optInt("repetitions", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT)
         }
+        val targetIpAddress = body.optString("ip").trim()
+            .ifBlank { body.optString("ipAddress").trim() }
+            .ifBlank { body.optString("targetIp").trim() }
+        val includeCompatibilityRoutes = if (body.has("allRoutes")) {
+            body.optBoolean("allRoutes", true)
+        } else {
+            body.optBoolean("allVariants", true)
+        }
         return runCatching {
-            actions.wakeOnLan(macAddress, broadcastAddress, port, repeat)
+            actions.wakeOnLan(
+                macAddress = macAddress,
+                broadcastAddress = broadcastAddress,
+                port = port,
+                repeat = repeat,
+                targetIpAddress = targetIpAddress,
+                includeCompatibilityRoutes = includeCompatibilityRoutes
+            )
         }.fold(
             onSuccess = { result ->
                 json(
@@ -175,8 +190,18 @@ class GatewayApiServer(
                         .put("ok", true)
                         .put("mac", result.macAddress)
                         .put("port", result.port)
+                        .put("ports", JSONArray(result.ports))
                         .put("packetsSent", result.packetsSent)
                         .put("destinations", JSONArray(result.destinations))
+                        .put("deliveries", JSONArray().apply {
+                            result.deliveries.forEach { delivery ->
+                                put(JSONObject()
+                                    .put("destination", delivery.destination)
+                                    .put("port", delivery.port)
+                                    .put("mode", delivery.mode.name.lowercase())
+                                )
+                            }
+                        })
                 )
             },
             onFailure = { error -> badRequest(error.message ?: "falha ao enviar Wake-on-LAN") }

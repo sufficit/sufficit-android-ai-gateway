@@ -219,7 +219,7 @@ fun startCameraGestureCapture(
  )
  logStart("Starting camera capture. previewVisible=$previewVisible hasCameraPermission=$hasCameraPermission")
  // Roteamento dos gestos de comando (contrato em CameraGestureEvent):
- //  1. Mao aberta  -> interrompe a fala do assistente imediatamente.
+ //  1. Mao aberta  -> interrompe somente uma fala ativa do assistente.
  //  2. Indicador   -> abre a gravacao somente se o nivel 2 estiver parado.
  //  3. Punho       -> para a deteccao de voz/entra em espera.
  // Cada evento tambem acende a linha colorida do rodape via o estado
@@ -253,10 +253,14 @@ fun startCameraGestureCapture(
  )
  }
  is CameraGestureEvent.OpenHandCalm -> {
+ // Defesa contra a fala terminar entre o ultimo quadro reconhecido e o
+ // callback estabilizado. Sem TTS ativo, a palma nao representa comando.
+ if (!GatewayRuntime.state().value.speakingBack) return@eventHandler
  // Interrupcao da fala COM atraso: cancelada se um punho vier logo
  // depois (a mao estava so a caminho do punho). Mao aberta mantida
  // executa apos o atraso.
  OpenHandInterruptDebounce.schedule {
+ if (!GatewayRuntime.state().value.speakingBack) return@schedule
  GatewayRuntime.setCameraGestureStatus("Mao aberta: interrompendo fala do assistente.")
  interruptAssistant()
  }

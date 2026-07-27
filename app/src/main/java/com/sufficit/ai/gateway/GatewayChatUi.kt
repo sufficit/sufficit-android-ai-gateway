@@ -54,17 +54,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.activity.compose.BackHandler
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatAudioState
@@ -1220,16 +1228,45 @@ fun ChatInputBar(
     modifier: Modifier = Modifier
 ) {
     var textInputRequested by rememberSaveable { mutableStateOf(!ambientListening) }
+    var textFieldFocused by remember { mutableStateOf(false) }
+    var requestTextFieldFocus by remember { mutableStateOf(false) }
+    val textFieldFocusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardVisible = rememberKeyboardVisible()
     val showListeningSpectrum = ambientListening && !textInputRequested
 
     // Se a captura for iniciada externamente (botao, API ou wake flow), o
     // espectro volta a representar o modo real. Ao sair desta pagina, o modo
     // texto nao pode continuar bloqueando a tela de depuracao de gestos.
     androidx.compose.runtime.LaunchedEffect(ambientListening) {
-        if (ambientListening) textInputRequested = false
+        if (ambientListening) {
+            textInputRequested = false
+            requestTextFieldFocus = false
+            focusManager.clearFocus()
+            GatewayRuntime.setTextInputModeActive(false)
+        }
     }
-    androidx.compose.runtime.LaunchedEffect(isActivePage, showListeningSpectrum) {
-        GatewayRuntime.setTextInputModeActive(isActivePage && !showListeningSpectrum)
+    // O campo visivel nao significa que o usuario esta digitando: voz pausada
+    // e standby tambem exibem o campo. Gestos so ficam bloqueados enquanto o
+    // editor realmente tem foco (teclado/entrada de texto em uso).
+    androidx.compose.runtime.LaunchedEffect(isActivePage, textFieldFocused, keyboardVisible) {
+        val typingActive = isActivePage && textFieldFocused && keyboardVisible
+        GatewayRuntime.setTextInputModeActive(typingActive)
+        android.util.Log.i(
+            "ChatInputBar",
+            "Gesture typing guard: active=$typingActive " +
+                "focus=$textFieldFocused keyboard=$keyboardVisible page=$isActivePage"
+        )
+    }
+    BackHandler(enabled = isActivePage && textFieldFocused) {
+        focusManager.clearFocus()
+        GatewayRuntime.setTextInputModeActive(false)
+    }
+    androidx.compose.runtime.LaunchedEffect(showListeningSpectrum, requestTextFieldFocus) {
+        if (!showListeningSpectrum && requestTextFieldFocus) {
+            textFieldFocusRequester.requestFocus()
+            requestTextFieldFocus = false
+        }
     }
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose { GatewayRuntime.setTextInputModeActive(false) }
@@ -1256,7 +1293,7 @@ fun ChatInputBar(
                 currentMicrophoneGain = currentMicrophoneGain,
                 onSwitchToTextInput = {
                     textInputRequested = true
-                    GatewayRuntime.setTextInputModeActive(true)
+                    requestTextFieldFocus = true
                     onSwitchToTextInput()
                 },
                 modifier = Modifier
@@ -1268,7 +1305,10 @@ fun ChatInputBar(
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(textFieldFocusRequester)
+                    .onFocusChanged { textFieldFocused = it.isFocused },
                 placeholder = { Text("Mensagem") },
                 maxLines = 4,
                 shape = RoundedCornerShape(20.dp),
@@ -1290,8 +1330,11 @@ fun ChatInputBar(
                     if (hasText) {
                         onSendText(draft.trim())
                         draft = ""
+                        focusManager.clearFocus()
+                        GatewayRuntime.setTextInputModeActive(false)
                     } else {
                         textInputRequested = false
+                        focusManager.clearFocus()
                         GatewayRuntime.setTextInputModeActive(false)
                         onStartListening()
                     }
@@ -1308,6 +1351,26 @@ fun ChatInputBar(
             }
         }
     }
+}
+
+@Composable
+private fun rememberKeyboardVisible(): Boolean {
+    val view = LocalView.current
+    var visible by remember(view) { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(view) {
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            visible = ViewCompat.getRootWindowInsets(view)
+                ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        listener.onGlobalLayout()
+        onDispose {
+            if (view.viewTreeObserver.isAlive) {
+                view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+        }
+    }
+    return visible
 }
 
 /**

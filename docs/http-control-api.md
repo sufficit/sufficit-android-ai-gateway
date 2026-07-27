@@ -96,11 +96,12 @@ curl -X POST $BASE/api/listen/stop  -H "Authorization: Bearer $TOKEN"
 curl -X POST $BASE/api/gesture -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" -d '{"id": "fist"}'
 
-# Ligar um computador da mesma rede por Wake-on-LAN. `broadcast` é opcional:
-# sem ele, o app usa 255.255.255.255 e os broadcasts das interfaces IPv4 ativas.
+# Ligar um computador da mesma rede por Wake-on-LAN. Por padrão, o app usa
+# broadcast da sub-rede, 255.255.255.255, unicast do último IP conhecido e
+# portas UDP 9 e 7. `allRoutes:false` limita ao destino/porta explicitamente informados.
 curl -X POST $BASE/api/wakeonlan \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"mac": "AA:BB:CC:DD:EE:FF", "broadcast": "192.168.1.255", "port": 9, "repeat": 3}'
+  -d '{"mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.1.220", "broadcast": "192.168.1.255", "port": 9, "repeat": 3}'
 
 # Descobrir vizinhos ativos. A sonda UDP vazia só provoca resolução ARP na
 # sub-rede; `probe:false` apenas devolve a tabela ARP já existente.
@@ -120,11 +121,18 @@ curl -X POST $BASE/api/wakeonlan/discover \
 - **`speak: false`** suprime a fala apenas da próxima resposta do agente.
 - A API só responde enquanto o serviço de áudio está vivo. `POST
   /api/listen/start` garante a captura ativa.
-- **Wake-on-LAN** envia o pacote pela mesma rede do telefone. A confirmação da
-  rota significa que o UDP foi enviado, não que o computador já iniciou: a
+- **Wake-on-LAN** despacha o Magic Packet pela mesma rede do telefone. A confirmação do
+  despacho significa que o Android entregou o UDP à pilha local, não que o computador recebeu
+  ou já iniciou: uma NIC desligada não responde ao pacote. A confirmação só ocorre quando o alvo
+  volta a aparecer por ARP, ping, porta TCP, NetBIOS ou companion Sufficit. A
   placa de rede/BIOS do destino precisa estar configurada para WOL, e telefone
   e computador precisam alcançar o mesmo domínio de broadcast (ou usar um
   relay configurado na rede).
+- O Magic Packet possui um único formato padronizado (6 bytes `FF` e o MAC
+  repetido 16 vezes). O app cobre as variações usuais de transporte: portas UDP
+  9 e 7, broadcast de sub-rede, broadcast limitado e unicast do último IP.
+  **SecureOn** exige uma senha de seis bytes configurada na NIC; ela não pode
+  ser deduzida nem enviada em todas as combinações.
 - **Descoberta WOL** não consegue determinar pela rede se a BIOS/NIC de outro
   aparelho aceita magic packet. Ela retorna vizinhos vistos por ARP e, nos
   Androids que bloqueiam ARP, respostas NetBIOS NODE STATUS (IP, MAC,
@@ -142,6 +150,7 @@ catálogo `availableTools`. O agente pode executá-la pela conexão de saída:
     {
       "tool": "wakeonlan",
       "mac": "AA:BB:CC:DD:EE:FF",
+      "ip": "192.168.1.220",
       "broadcast": "192.168.1.255",
       "port": 9,
       "repeat": 3
@@ -150,9 +159,11 @@ catálogo `availableTools`. O agente pode executá-la pela conexão de saída:
 }
 ```
 
-`mac` é obrigatório; `broadcast` é opcional; `port` aceita `1..65535` e
-`repeat` aceita `1..5` (padrão: `9` e `3`). O resultado — ou uma falha de
-validação/rede — fica registrado como bolha de sistema no chat.
+`mac` é obrigatório; `ip` e `broadcast` são opcionais; `port` aceita `1..65535` e
+`repeat` aceita `1..5` (padrão: porta preferida `9` e três ciclos). Mesmo com
+uma porta preferida, o cliente cobre também a porta `7`, todos os broadcasts
+IPv4 disponíveis e o último IP conhecido. O resultado lista cada rota e deixa
+claro se houve apenas despacho local ou confirmação do despertar.
 
 ## Ferramenta do agente: `discover_wol_devices`
 

@@ -32,6 +32,7 @@ import com.sufficit.ai.gateway.audio.wake.WakeWordDetector
 import com.sufficit.ai.gateway.audio.wake.WakeWordProfileConfig
 import com.sufficit.ai.gateway.audio.wake.WakeWordStore
 import com.sufficit.ai.gateway.audio.wake.WakeWordTemplateProfile
+import com.sufficit.ai.gateway.audio.wake.WakeWordThresholdPolicy
 import com.sufficit.ai.gateway.vision.GestureCommandIds
 import com.sufficit.ai.gateway.vision.GestureCommandPolicy
 import com.sufficit.ai.gateway.config.AssistantVoiceStyle
@@ -705,6 +706,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private fun runCaptureLoop(recorder: AudioRecord, bufferSize: Int) {
         acquireCaptureWakeLock()
         val buffer = ShortArray(bufferSize / 2)
+        // Copia reutilizavel do sinal cru para o nivel 1. O ganho de
+        // transcricao pode cair ao detectar musica/ruido estavel, mas isso
+        // nunca deve reduzir o alcance da wake word permanente.
+        val wakeWordBuffer = ShortArray(bufferSize / 2)
         val loadedSettings = settingsStore?.load() ?: GatewaySettingsStore(this).load()
         var settings = normalizeRuntimeSettings(loadedSettings)
         transcriptClearTimeoutSecs = settings.transcriptClearTimeoutSecs
@@ -908,22 +913,42 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                             speechLikeFrameRaw = false,
                             settings = settings
                         ) >= settings.ambientGainStabilityThreshold
+                val quietFrameForGain = AdaptiveMicrophoneGainPolicy.isQuietFrame(
+                    inputRms = rawRms,
+                    inputPeakNormalized = rawPeakNormalized
+                )
+                val stableBackgroundNeedsAttenuation =
+                    AdaptiveMicrophoneGainPolicy.shouldAttenuateStableBackground(
+                        environmentStable = environmentStableForGain ||
+                            environmentLooksStable ||
+                            ambientNoiseDetected,
+                        noiseFloorRms = noiseFloorRms,
+                        inputRms = rawRms,
+                        inputPeakNormalized = rawPeakNormalized
+                    )
                 // Gain reduction path: uses environmentStableForGain (no speechLikeFrame penalty,
                 // no dynamicSpeechOverride guard) so that acoustically-stable environments like music
                 // always reduce the gain, even when contrast keeps dynamicSpeechOverride true.
-                val shouldReduceGainForAmbient = !speechActive && environmentStableForGain
+                val shouldReduceGainForAmbient =
+                    !speechActive &&
+                        environmentStableForGain &&
+                        stableBackgroundNeedsAttenuation
                 val shouldCompensateAmbientNoise =
-                    shouldReduceGainForAmbient ||
-                        (!speechActive && !dynamicSpeechOverride &&
-                            (environmentLooksStable || ambientNoiseDetected))
+                    stableBackgroundNeedsAttenuation &&
+                        (
+                            shouldReduceGainForAmbient ||
+                                (!speechActive && !dynamicSpeechOverride &&
+                                    (environmentLooksStable || ambientNoiseDetected))
+                            )
                 var dynamicMicrophoneGain = if (settings.microphoneAutoSensitivityEnabled) {
-                    resolveAutomaticMicrophoneGain(
+                    AdaptiveMicrophoneGainPolicy.resolveTargetGain(
                         peakGain = settings.microphoneGain,
+                        minGain = settings.ambientGainMinGain,
                         noiseFloorRms = noiseFloorRms,
+                        inputRms = rawRms,
                         speechLikeFrame = speechLikeFrameRaw && !shouldCompensateAmbientNoise,
                         speechActive = speechActive && !shouldCompensateAmbientNoise,
-                        inputPeakNormalized = rawPeakNormalized,
-                        settings = settings
+                        inputPeakNormalized = rawPeakNormalized
                     )
                 } else {
                     settings.microphoneGain
@@ -938,14 +963,20 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     ).coerceIn(settings.ambientGainMinGain, settings.microphoneGain.coerceAtLeast(settings.ambientGainMinGain))
                 }
                 if (settings.microphoneAutoSensitivityEnabled) {
-                    if ((speechLikeFrameRaw || speechActive) && dynamicMicrophoneGain > smoothedDynamicGain) {
-                        // Ataque imediato: ao detectar fala o ganho salta
-                        // direto para o alvo. Com a subida suavizada (bug
-                        // antigo) o inicio de cada frase era gravado com o
-                        // ganho reduzido de ambiente e o volume subia no meio
-                        // do segmento — pessimo para transcricao, palavra de
-                        // ativacao e perfil de voz. A QUEDA continua suave
-                        // (fast/slow) para o ambiente nao "bombear".
+                    if (
+                        AdaptiveMicrophoneGainPolicy.shouldRaiseGainImmediately(
+                            currentGain = smoothedDynamicGain,
+                            targetGain = dynamicMicrophoneGain,
+                            inputRms = rawRms,
+                            inputPeakNormalized = rawPeakNormalized,
+                            speechLikeFrame = speechLikeFrameRaw,
+                            speechActive = speechActive
+                        )
+                    ) {
+                        // Ataque imediato para fala e recuperacao imediata no
+                        // primeiro bloco silencioso. Assim uma wake word
+                        // distante nao comeca com o ganho herdado de um ruido
+                        // anterior. A QUEDA continua suave para nao bombear.
                         smoothedDynamicGain = dynamicMicrophoneGain
                     } else {
                         val smoothingFactor = if (dynamicMicrophoneGain < smoothedDynamicGain) {
@@ -962,10 +993,21 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
                 if (settings.microphoneAutoSensitivityEnabled) {
                     if (lastLoggedDynamicGain.isNaN() || abs(dynamicMicrophoneGain - lastLoggedDynamicGain) >= 0.05) {
-                        val noiseLabel = if (ambientNoiseDetected || environmentLooksStable) "ambient" else "normal"
+                        val gainMode = when {
+                            quietFrameForGain -> "quiet-boost"
+                            shouldCompensateAmbientNoise -> "noise-reduction"
+                            ambientNoiseDetected || environmentLooksStable -> "ambient"
+                            speechLikeFrameRaw || speechActive -> "speech"
+                            else -> "normal"
+                        }
                         Log.i(
                             TAG,
-                            "Auto gain update: gain=${"%.2f".format(dynamicMicrophoneGain)} mode=$noiseLabel contrast=${"%.4f".format(dynamicContrast)} score=${"%.2f".format(stabilityScore)}"
+                            "Auto gain update: gain=${"%.2f".format(dynamicMicrophoneGain)} " +
+                                "mode=$gainMode raw=${"%.4f".format(rawRms)} " +
+                                "floor=${"%.4f".format(noiseFloorRms)} " +
+                                "peak=${"%.3f".format(rawPeakNormalized)} " +
+                                "contrast=${"%.4f".format(dynamicContrast)} " +
+                                "score=${"%.2f".format(stabilityScore)}"
                         )
                         lastLoggedDynamicGain = dynamicMicrophoneGain
                     }
@@ -983,6 +1025,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
                     }
                 }
+                val wakeWordGain = if (settings.microphoneAutoSensitivityEnabled) {
+                    AdaptiveMicrophoneGainPolicy.resolveWakeWordGain(
+                        peakGain = settings.microphoneGain,
+                        minGain = settings.ambientGainMinGain,
+                        inputPeakNormalized = rawPeakNormalized
+                    )
+                } else {
+                    settings.microphoneGain
+                }
+                System.arraycopy(buffer, 0, wakeWordBuffer, 0, readCount)
+                applyMicrophoneGain(wakeWordBuffer, readCount, wakeWordGain)
                 applyMicrophoneGain(buffer, readCount, dynamicMicrophoneGain)
                 // Depuracao: grava TUDO que o mic captou (pos-ganho), antes
                 // de qualquer supressao/descarte da segmentacao.
@@ -1045,7 +1098,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     }
                     continue
                 }
-                handleWakeWordAudio(buffer, readCount, now, settings)
+                handleWakeWordAudio(
+                    buffer = wakeWordBuffer,
+                    readCount = readCount,
+                    now = now,
+                    settings = settings,
+                    appliedGain = wakeWordGain
+                )
 
                 if (standbyMode) {
                     // Nivel 1 permanente: o microfone continua aberto apenas
@@ -2952,13 +3011,19 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val updatedProfiles = config.profiles.map { profile ->
             if (!profile.enabled || !profile.autoThreshold) return@map profile
             val suggestion = wakeWordDetector.suggestedThreshold(profile.id) ?: return@map profile
-            if (kotlin.math.abs(suggestion - profile.threshold) <= 0.05) return@map profile
+            val calibratedThreshold = WakeWordThresholdPolicy.resolveAutomaticUpdate(
+                currentThreshold = profile.threshold,
+                suggestedThreshold = suggestion,
+                automatic = profile.autoThreshold
+            ) ?: return@map profile
             thresholdsChanged = true
             Log.i(
                 TAG,
-                "Wake word '${profile.phraseLabel}' limiar automatico: ${"%.2f".format(suggestion)}"
+                "Wake word '${profile.phraseLabel}' limiar automatico: " +
+                    "${"%.2f".format(profile.threshold)} -> ${"%.2f".format(calibratedThreshold)} " +
+                    "(sugerido=${"%.2f".format(suggestion)})"
             )
-            profile.copy(threshold = suggestion)
+            profile.copy(threshold = calibratedThreshold)
         }
         if (thresholdsChanged) {
             config = config.copy(profiles = updatedProfiles)
@@ -3007,7 +3072,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         buffer: ShortArray,
         readCount: Int,
         now: Long,
-        settings: GatewaySettings
+        settings: GatewaySettings,
+        appliedGain: Double
     ) {
         syncWakeWordConfig()
 
@@ -3058,7 +3124,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             Log.i(
                 TAG,
                 "Wake word check: dist=${result.distance?.let { "%.2f".format(it) } ?: "sem-energia"} " +
-                    "rms=${"%.4f".format(chunkRms)} matched=${result.matched}"
+                    "rms=${"%.4f".format(chunkRms)} gain=${"%.2f".format(appliedGain)} " +
+                    "matched=${result.matched}"
             )
         }
         if (result.matched) {
@@ -3345,49 +3412,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val enoughBody = peakNormalized >= minPeak
 
         return speechBandZcr && notImpulse && enoughBody
-    }
-
-    private fun resolveAutomaticMicrophoneGain(
-        peakGain: Double,
-        noiseFloorRms: Double,
-        speechLikeFrame: Boolean,
-        speechActive: Boolean,
-        inputPeakNormalized: Double,
-        settings: GatewaySettings
-    ): Double {
-        val minGain = settings.ambientGainMinGain
-        val maxGain = peakGain.coerceAtLeast(minGain)
-
-        // Teto de ganho que mantem o PICO de entrada no alvo (headroom abaixo
-        // do joelho do soft-clip em 0.85). Acima deste pico o ganho cai abaixo
-        // de 1.0 — e o que impede musica/fala alta de saturar e estourar o
-        // espectro. Sinal quase-silencioso nao tem teto util: usa o ganho
-        // cheio para captar fala distante.
-        val ceilToTarget = if (inputPeakNormalized > MIN_PEAK_FOR_AGC) {
-            (TARGET_PEAK_NORMALIZED / inputPeakNormalized).coerceIn(minGain, maxGain)
-        } else {
-            maxGain
-        }
-
-        if (speechLikeFrame || speechActive) {
-            // AGC: normaliza a fala ao alvo. Antes retornava peakGain cego — o
-            // que fazia musica (transientes que parecem fala) ir a 2.4x e
-            // saturar. Agora amplifica fala fraca ate o alvo e ABAIXA o ganho
-            // quando o sinal ja chega forte.
-            return ceilToTarget
-        }
-
-        val backgroundGain = when {
-            noiseFloorRms >= 0.030 -> peakGain * 0.22
-            noiseFloorRms >= 0.020 -> peakGain * 0.28
-            noiseFloorRms >= 0.012 -> peakGain * 0.34
-            else -> peakGain * 0.42
-        }
-
-        // Fundo: reducao por ruido E pelo teto de pico (o que for menor).
-        return backgroundGain
-            .coerceIn(minGain, maxGain)
-            .coerceAtMost(ceilToTarget)
     }
 
     private fun segmentLooksLikeSpeech(
@@ -4553,12 +4577,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             put(tool("standby", "Coloca em espera (so palavra de ativacao reabre)."))
             put(tool("interrupt", "Interrompe a fala do assistente em andamento."))
             put(tool("config", "Edita configuracoes do app.", JSONObject().put("patch", "{chave:valor}")))
-            put(tool("wakeonlan", "Liga um computador na mesma rede por Wake-on-LAN, monitora por ate 30 segundos e devolve confirmacao, falha ou estado nao verificavel.",
+            put(tool("wakeonlan", "Liga um computador na mesma rede por Wake-on-LAN. Despacha o Magic Packet por broadcast da sub-rede, broadcast limitado, unicast do ultimo IP e portas UDP 9/7; monitora por ate 30 segundos e distingue pacote despachado de equipamento confirmado.",
                 JSONObject()
                     .put("mac", "MAC do computador, ex.: AA:BB:CC:DD:EE:FF")
                     .put("name", "nome amigavel opcional do dispositivo")
+                    .put("ip", "ultimo IPv4 opcional; tambem recebe Magic Packet unicast")
                     .put("broadcast", "IPv4 de broadcast opcional; padrao detecta a rede Wi-Fi")
-                    .put("port", "porta UDP opcional, padrao 9")
+                    .put("port", "porta UDP preferida opcional; portas 9 e 7 tambem sao cobertas")
                     .put("repeat", "repeticoes opcionais de 1 a 5, padrao 3")
                     .put("waitSeconds", "monitoramento entre 5 e 60 segundos; padrao 30")))
             put(tool("discover_wol_devices", "Descobre MACs/IPs Wake-on-LAN na rede local sem senha de roteador. Consulta automaticamente o companion Sufficit na LAN e preserva os MACs aprendidos.",
@@ -4976,6 +5001,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
                         val broadcastAddress = action.optString("broadcast").trim()
                             .ifBlank { action.optString("broadcastAddress").trim() }
+                        val targetIpAddress = action.optString("ip").trim()
+                            .ifBlank { action.optString("ipAddress").trim() }
+                            .ifBlank { action.optString("targetIp").trim() }
                         val port = action.optInt(
                             "port",
                             com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_PORT
@@ -5003,6 +5031,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                             tool = tool.lowercase(),
                             macAddress = macAddress,
                             targetName = targetName,
+                            targetIpAddress = targetIpAddress,
                             broadcastAddress = broadcastAddress,
                             port = port,
                             repeat = repeat,
@@ -5302,6 +5331,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val acceptedGestureId = GestureCommandPolicy.filter(
             gestureId = gestureId,
             listening = runtimeState.listening,
+            assistantSpeaking = runtimeState.speakingBack,
             textInputModeActive = runtimeState.textInputModeActive,
             interactionActive = GatewayRuntime.cameraGestureInteractionActive().value
         )
@@ -5310,7 +5340,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             Log.i(
                 TAG,
                 "Gesto simulado ignorado pelo estado atual: id=$gestureId " +
-                    "listening=${runtimeState.listening} textMode=${runtimeState.textInputModeActive}"
+                    "listening=${runtimeState.listening} " +
+                    "speaking=${runtimeState.speakingBack} " +
+                    "textMode=${runtimeState.textInputModeActive}"
             )
             return
         }
@@ -5385,21 +5417,27 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         macAddress: String,
         broadcastAddress: String,
         port: Int,
-        repeat: Int
+        repeat: Int,
+        targetIpAddress: String,
+        includeCompatibilityRoutes: Boolean
     ): com.sufficit.ai.gateway.network.WakeOnLanResult {
         val result = com.sufficit.ai.gateway.network.WakeOnLanTool.send(
             macAddress = macAddress,
             broadcastAddress = broadcastAddress,
             port = port,
-            repeat = repeat
+            repeat = repeat,
+            targetIpAddress = targetIpAddress,
+            includeCompatibilityRoutes = includeCompatibilityRoutes
         )
         GatewayRuntime.appendChatMessage(
             ChatRole.SYSTEM,
-            "Wake-on-LAN enviado para ${result.macAddress}: ${result.packetsSent} pacote(s) UDP na porta ${result.port}."
+            "Wake-on-LAN despachado para ${result.macAddress}: ${result.packetsSent} Magic Packets UDP. " +
+                wakeOnLanDeliverySummary(result.deliveries)
         )
         Log.i(
             TAG,
-            "Wake-on-LAN enviado para ${result.macAddress}: destinos=${result.destinations.joinToString()} porta=${result.port} pacotes=${result.packetsSent}"
+            "Wake-on-LAN despachado para ${result.macAddress}: " +
+                "rotas=${result.deliveries.joinToString { it.description }} pacotes=${result.packetsSent}"
         )
         return result
     }
@@ -5409,6 +5447,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         tool: String,
         macAddress: String,
         targetName: String,
+        targetIpAddress: String,
         broadcastAddress: String,
         port: Int,
         repeat: Int,
@@ -5429,6 +5468,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     this@RoomAudioForegroundService
                 ).wakeAndVerify(
                     macAddress = macAddress,
+                    ipAddress = targetIpAddress.takeIf { it.isNotBlank() },
                     broadcastAddress = broadcastAddress.takeIf { it.isNotBlank() },
                     port = port,
                     repeat = repeat,
@@ -5443,15 +5483,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 val methodSuffix = target.verificationMethod?.takeIf { it.isNotBlank() }
                     ?.let { " via ${wakeOnLanVerificationMethodLabel(it)}" }
                     .orEmpty()
+                val deliverySuffix = wakeOnLanDeliverySummary(result.deliveryAttempts)
                 val finalText = when (target.status) {
                     com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.ALREADY_REACHABLE ->
-                        "Wake-on-LAN · $displayTarget: o dispositivo ja estava acessivel$ipSuffix antes do envio."
+                        "Wake-on-LAN · $displayTarget: o dispositivo ja estava acessivel$ipSuffix antes do envio; " +
+                            "o Android ainda despachou ${result.packetsSent} pacote(s) de diagnostico.$deliverySuffix"
                     com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.CONFIRMED_ONLINE ->
-                        "Wake-on-LAN · $displayTarget: ligou e respondeu$ipSuffix após ${elapsedSeconds}s$methodSuffix."
+                        "Wake-on-LAN · $displayTarget: ligou e respondeu$ipSuffix após ${elapsedSeconds}s$methodSuffix.$deliverySuffix"
                     com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.NOT_RESPONDING ->
-                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes enviados, mas o dispositivo nao respondeu em ${safeWait}s. Voce pode pedir para tentar novamente."
+                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes despachados pelo Android, mas o dispositivo nao respondeu em ${safeWait}s.$deliverySuffix A entrega na NIC desligada nao pode ser confirmada pela rede; voce pode pedir para tentar novamente."
                     com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.UNVERIFIABLE ->
-                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes enviados, mas o MAC nao apareceu na rede em ${safeWait}s e nao ha IP conhecido para testar. Nao consegui confirmar se ligou; voce pode pedir para tentar novamente."
+                        "Wake-on-LAN · $displayTarget: ${result.packetsSent} pacotes despachados pelo Android, mas o MAC nao apareceu na rede em ${safeWait}s e nao ha IP conhecido para testar.$deliverySuffix Nao consegui confirmar se ligou; voce pode pedir para tentar novamente."
                     com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.SEND_FAILED ->
                         "Wake-on-LAN · $displayTarget: falha ao enviar os pacotes. ${target.error.orEmpty()} Voce pode pedir para tentar novamente."
                 }
@@ -5470,6 +5512,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     .put("mac", target.macAddress)
                     .put("ip", target.ipAddress.takeIf { it.isNotBlank() })
                     .put("packetsSent", result.packetsSent)
+                    .put("deliveryAttempts", org.json.JSONArray().apply {
+                        result.deliveryAttempts.forEach { delivery ->
+                            put(JSONObject()
+                                .put("destination", delivery.destination)
+                                .put("port", delivery.port)
+                                .put("mode", delivery.mode.name.lowercase())
+                            )
+                        }
+                    })
                     .put("waitSeconds", safeWait)
                     .put("elapsedMs", target.elapsedMs)
                     .put("checkAttempts", target.checkAttempts)
@@ -5511,6 +5562,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         "sufficit_lan_companion" -> "companion Sufficit"
         "icmp_or_tcp" -> "ping/porta de rede"
         else -> method
+    }
+
+    private fun wakeOnLanDeliverySummary(
+        deliveries: List<com.sufficit.ai.gateway.network.WakeOnLanDeliveryAttempt>
+    ): String {
+        if (deliveries.isEmpty()) return ""
+        val routes = deliveries.joinToString("; ") { it.description }
+        return " Rotas: $routes."
     }
 
     override fun discoverWakeOnLanDevices(
@@ -6097,13 +6156,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         private const val ASSISTANT_PROCESSING_TIMEOUT_MS = 90_000L
         private const val ASSISTANT_PROCESSING_HANDOFF_GRACE_MS = 10_000L
         private const val OPENCLAW_FAILURE_NOTICE_MS = 8_000L
-
-        // AGC: alvo de pico normalizado do sinal pos-ganho. 0.70 deixa
-        // headroom abaixo do joelho do soft-clip (0.85) — fala/musica nao
-        // satura nem gruda o espectro no teto. Abaixo de MIN_PEAK_FOR_AGC o
-        // sinal e silencio/quase: nao limita (usa ganho cheio p/ fala distante).
-        private const val TARGET_PEAK_NORMALIZED = 0.70
-        private const val MIN_PEAK_FOR_AGC = 0.02
 
         // Atividade labial: quadro do FaceMesh so vale como amostra do
         // segmento se for recente (camera viva publicando).

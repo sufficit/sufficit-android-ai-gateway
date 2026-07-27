@@ -27,6 +27,7 @@ class WakeOnLanInventoryService(context: Context) {
 
     fun wakeAndVerify(
         macAddress: String,
+        ipAddress: String? = null,
         broadcastAddress: String? = null,
         port: Int = WakeOnLanTool.DEFAULT_PORT,
         repeat: Int = WakeOnLanTool.DEFAULT_REPEAT,
@@ -35,6 +36,7 @@ class WakeOnLanInventoryService(context: Context) {
     ): WakeOnLanVerificationResult {
         val remembered = store.rememberTarget(
             macAddress = macAddress,
+            ipAddress = ipAddress,
             broadcastAddress = broadcastAddress,
             name = name
         )

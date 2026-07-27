@@ -673,6 +673,7 @@ class MediaPipeCameraGestureRecognizer(
         return GestureCommandPolicy.filter(
             gestureId = rawGestureId,
             listening = runtimeState.listening,
+            assistantSpeaking = runtimeState.speakingBack,
             textInputModeActive = runtimeState.textInputModeActive,
             interactionActive = GatewayRuntime.cameraGestureInteractionActive().value
         )
@@ -689,16 +690,19 @@ class MediaPipeCameraGestureRecognizer(
                 "Escuta ambiente ativa; nao e necessario liberar a fala."
             rawGestureId == GestureCommandIds.FIST && !runtimeState.listening ->
                 "Escuta ambiente parada; punho sem acao neste estado."
+            rawGestureId == GestureCommandIds.OPEN_HAND && !runtimeState.speakingBack ->
+                "Assistente em silencio; palma sem acao neste estado."
             else -> "Pose sem comando associado neste estado."
         }
     }
 
     private fun updateGestureStability(rawGestureId: String?) {
         // A linguagem de gestos depende do estado real do nivel 2:
-        //  - ouvindo: punho e mao aberta continuam uteis; indicador nao faz
-        //    nada porque a fala ja esta liberada;
+        //  - ouvindo: punho continua util; indicador nao faz nada porque a
+        //    fala ja esta liberada;
         //  - standby: indicador continua disponivel para acordar o nivel 2;
-        //    punho nao tem o que interromper.
+        //    punho nao tem o que interromper;
+        //  - em qualquer nivel, a mao aberta so participa durante fala TTS.
         val gestureId = filterGestureForCurrentState(rawGestureId)
         val now = System.currentTimeMillis()
         // MediaPipe pode perder um ou dois quadros mesmo com a mao parada.

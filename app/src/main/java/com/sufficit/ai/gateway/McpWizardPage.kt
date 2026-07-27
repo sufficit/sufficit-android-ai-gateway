@@ -255,6 +255,11 @@ fun McpWizardPage(onBack: () -> Unit) {
                     McpLabStage.OVERVIEW -> McpLabOverview(
                         servers = servers,
                         discoveringId = discoveringId,
+                        onAddTuya = {
+                            draft = store.createTuyaDraft()
+                            lastDiscovery = null
+                            goTo(McpLabStage.CONNECTION)
+                        },
                         onAdd = {
                             draft = store.createDraft()
                             lastDiscovery = null
@@ -365,6 +370,7 @@ private fun McpLabTopBar(
 private fun McpLabOverview(
     servers: List<McpServerConfiguration>,
     discoveringId: String?,
+    onAddTuya: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (McpServerConfiguration) -> Unit,
     onDiscover: (McpServerConfiguration) -> Unit
@@ -423,7 +429,7 @@ private fun McpLabOverview(
                         McpMetric("RECURSOS", resources, Modifier.weight(1f))
                     }
                     Button(
-                        onClick = onAdd,
+                        onClick = onAddTuya,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
@@ -433,6 +439,16 @@ private fun McpLabOverview(
                         )
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Conectar Tuya / Smart Life", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = onAdd,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    ) {
+                        Icon(Icons.Filled.Build, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Adicionar servidor MCP", fontWeight = FontWeight.Bold)
                     }
@@ -806,11 +822,22 @@ private fun McpAuthenticationStep(
         }
         if (draft.authenticationMode == McpAuthenticationMode.BEARER) {
             item {
+                val isTuya = draft.namespace == McpServerStore.TUYA_NAMESPACE
                 OutlinedTextField(
                     value = draft.bearerToken,
                     onValueChange = { onDraftChange(draft.copy(bearerToken = it)) },
-                    label = { Text("Bearer token") },
-                    supportingText = { Text("Armazenado somente no cofre local do aparelho") },
+                    label = {
+                        Text(if (isTuya) "API Key Tuya (sk-…)" else "Bearer token")
+                    },
+                    supportingText = {
+                        Text(
+                            if (isTuya) {
+                                "Gere em tuya.ai. A chave fica somente no cofre local do aparelho."
+                            } else {
+                                "Armazenado somente no cofre local do aparelho"
+                            }
+                        )
+                    },
                     visualTransformation = if (revealToken) {
                         VisualTransformation.None
                     } else {

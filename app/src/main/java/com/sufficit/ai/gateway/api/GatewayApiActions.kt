@@ -88,7 +88,9 @@ interface GatewayApiActions {
         macAddress: String,
         broadcastAddress: String = "",
         port: Int = 9,
-        repeat: Int = 3
+        repeat: Int = 3,
+        targetIpAddress: String = "",
+        includeCompatibilityRoutes: Boolean = true
     ): WakeOnLanResult
 
     /**

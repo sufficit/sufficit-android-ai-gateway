@@ -25,7 +25,7 @@ data class WakeWordConfig(
 ) {
     companion object {
         // Escala da distancia cosseno DTW normalizada (0..~1).
-        const val DEFAULT_THRESHOLD = 0.18
+        const val DEFAULT_THRESHOLD = WakeWordThresholdPolicy.MIN_AUTOMATIC_THRESHOLD
     }
 }
 
