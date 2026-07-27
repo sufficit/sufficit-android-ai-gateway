@@ -787,7 +787,11 @@ private fun McpAuthenticationStep(
         item {
             McpAuthChoice(
                 title = "Sessão Sufficit",
-                subtitle = "Reutiliza automaticamente o login e o usuário atual.",
+                subtitle = if (draft.namespace == McpServerStore.TUYA_NAMESPACE) {
+                    "Usa seu login Sufficit e a conta Tuya vinculada pelo QR oficial."
+                } else {
+                    "Reutiliza automaticamente o login e o usuário atual."
+                },
                 selected = draft.authenticationMode == McpAuthenticationMode.SUFFICIT,
                 onClick = {
                     onDraftChange(
@@ -851,6 +855,18 @@ private fun McpAuthenticationStep(
                     singleLine = true,
                     colors = configTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
+                )
+            }
+        } else if (
+            draft.namespace == McpServerStore.TUYA_NAMESPACE &&
+            draft.authenticationMode == McpAuthenticationMode.SUFFICIT
+        ) {
+            item {
+                Text(
+                    "A autorização Tuya fica vinculada ao seu ID Sufficit no servidor. " +
+                        "Nenhuma chave Tuya precisa ser copiada para este aparelho.",
+                    color = ConfigTheme.TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
         }

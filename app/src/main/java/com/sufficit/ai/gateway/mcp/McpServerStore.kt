@@ -115,7 +115,7 @@ class McpServerStore(context: Context) {
             namespace = TUYA_NAMESPACE,
             name = "Tuya / Smart Life",
             endpoint = TUYA_MCP_ENDPOINT,
-            authenticationMode = McpAuthenticationMode.BEARER,
+            authenticationMode = McpAuthenticationMode.SUFFICIT,
             enabled = true,
             builtIn = false
         )
