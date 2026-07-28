@@ -40,6 +40,8 @@ data class OpenClawGatewayReply(
     val shouldSpeak: Boolean,
     val speakBlockReason: String?,
     val isSystemInfo: Boolean,
+    /** Evento interno normalizado; não cria bolha do agente nem áudio. */
+    val internalEvent: OpenClawInternalEvent? = null,
     val tags: List<String>,
     val confidence: Double?,
     val overlap: Boolean,
@@ -288,6 +290,7 @@ class OpenClawGatewayClient {
             shouldSpeak = envelope.shouldSpeak,
             speakBlockReason = envelope.speakBlockReason,
             isSystemInfo = envelope.isSystemInfo,
+            internalEvent = envelope.internalEvent,
             tags = envelope.tags,
             confidence = envelope.confidence,
             overlap = envelope.overlap,

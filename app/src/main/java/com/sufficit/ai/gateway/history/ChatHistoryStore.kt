@@ -6,6 +6,7 @@ import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
 import com.sufficit.ai.gateway.runtime.ChatRole
+import com.sufficit.ai.gateway.openclaw.OpenClawInternalEventClassifier
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -147,6 +148,7 @@ class ChatHistoryStore(context: Context) {
                 if (!legacyDuplicate) restored += message
                 restored
             }.let(::migrateLegacyDeliveryAudits)
+                .let(::migrateLegacyInternalEvents)
                 .let(::closeTrailingOrphanedUserTurn)
         }.getOrDefault(emptyList())
     }
@@ -221,6 +223,44 @@ class ChatHistoryStore(context: Context) {
             }
         }
         return restored
+    }
+
+    /**
+     * A primeira versao do canal podia receber a telemetria de compactacao do
+     * OpenClaw como se fosse uma resposta. Reclassifica registros ja gravados
+     * para um marcador de sistema discreto e remove o WAV TTS correspondente,
+     * para que esse texto nunca volte a ser reproduzido pelo botao de audio.
+     */
+    private fun migrateLegacyInternalEvents(messages: List<ChatMessage>): List<ChatMessage> {
+        return messages.map { message ->
+            val event = OpenClawInternalEventClassifier.detect(message.text)
+            if (message.role != ChatRole.ASSISTANT || event == null) {
+                message
+            } else {
+                message.audioPath?.let(::deleteLegacyAssistantAudioIfOwned)
+                message.copy(
+                    role = ChatRole.SYSTEM,
+                    text = event.systemMessage,
+                    details = null,
+                    audioPath = null,
+                    audioDurationMs = null,
+                    audioExpiresAtEpochMs = null,
+                    audioState = null,
+                    audioError = null
+                )
+            }
+        }
+    }
+
+    private fun deleteLegacyAssistantAudioIfOwned(path: String) {
+        val audio = File(path)
+        val expectedDirectory = File(file.parentFile, "assistant-reply-audio")
+        val belongsToAssistant = runCatching {
+            audio.canonicalFile.parentFile == expectedDirectory.canonicalFile
+        }.getOrDefault(false)
+        if (belongsToAssistant) {
+            runCatching { audio.delete() }
+        }
     }
 
     private fun legacyDeliveryMarker(text: String): Pair<ChatDeliveryState, String>? {

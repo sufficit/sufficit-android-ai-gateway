@@ -412,6 +412,7 @@ class OpenClawGatewayPersistentConnection(
             shouldSpeak = envelope.shouldSpeak,
             speakBlockReason = envelope.speakBlockReason,
             isSystemInfo = envelope.isSystemInfo,
+            internalEvent = envelope.internalEvent,
             tags = envelope.tags,
             confidence = envelope.confidence,
             overlap = envelope.overlap,

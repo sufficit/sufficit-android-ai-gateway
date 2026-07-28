@@ -2,6 +2,55 @@ package com.sufficit.ai.gateway.openclaw
 
 import org.json.JSONObject
 
+/** Eventos internos do gateway que jamais representam uma fala do assistente. */
+enum class OpenClawInternalEvent(val systemMessage: String) {
+    CONTEXT_COMPACTION("Contexto interno do agente compactado.")
+}
+
+/**
+ * Defesa no cliente para eventos de manutencao que um gateway legado possa
+ * devolver como texto puro. O servidor tambem classifica o evento, mas esta
+ * camada impede que qualquer variacao volte a ser lida pelo TTS.
+ */
+object OpenClawInternalEventClassifier {
+    fun detect(vararg values: String?): OpenClawInternalEvent? {
+        return if (values.any(::isContextCompaction)) {
+            OpenClawInternalEvent.CONTEXT_COMPACTION
+        } else {
+            null
+        }
+    }
+
+    private fun isContextCompaction(value: String?): Boolean {
+        val lines = value.orEmpty()
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .toList()
+        if (lines.isEmpty()) return false
+        return lines.all { line ->
+            val withoutLeadingSymbols = line
+                .replace(Regex("^[^\\p{L}\\p{N}]+"), "")
+                .trim()
+                .lowercase()
+            CONTEXT_MAINTENANCE_PREFIXES.any { prefix -> withoutLeadingSymbols.startsWith(prefix) }
+        }
+    }
+
+    private val CONTEXT_MAINTENANCE_PREFIXES = listOf(
+        "compacting context",
+        "context compacted",
+        "summarizing context",
+        "context summarized",
+        "compactando contexto",
+        "compactando o contexto",
+        "contexto compactado",
+        "resumindo contexto",
+        "resumindo o contexto",
+        "contexto resumido"
+    )
+}
+
 data class OpenClawReplyEnvelope(
     val rawText: String,
     val replyText: String,
@@ -10,6 +59,7 @@ data class OpenClawReplyEnvelope(
     val shouldSpeak: Boolean,
     val speakBlockReason: String?,
     val isSystemInfo: Boolean,
+    val internalEvent: OpenClawInternalEvent? = null,
     val tags: List<String>,
     val confidence: Double?,
     val overlap: Boolean,
@@ -63,6 +113,7 @@ internal object OpenClawReplyEnvelopeParser {
                     }
                 }
                 .orEmpty()
+                .toMutableList()
             val replyText = parsedJson.optString("replyText").trim()
                 .ifBlank { parsedJson.optString("text").trim() }
                 .ifBlank { parsedJson.optString("message").trim() }
@@ -77,7 +128,7 @@ internal object OpenClawReplyEnvelopeParser {
                         it.equals("uncertain_target", ignoreCase = true) ||
                             it.equals("needs_attention", ignoreCase = true)
                     }
-            val shouldSpeak =
+            val requestedSpeech =
                 parsedJson.booleanOrNull("shouldSpeak")
                     ?: parsedJson.booleanOrNull("speak")
                     ?: (!needsAttention && tags.none {
@@ -85,7 +136,12 @@ internal object OpenClawReplyEnvelopeParser {
                             it.equals("do_not_speak", ignoreCase = true)
                     })
             val speakBlockReason = parsedJson.optString("speakBlockReason").trim().ifBlank { null }
-            val isSystemInfo = parsedJson.booleanOrNull("isSystemInfo") ?: false
+            val internalEvent = OpenClawInternalEventClassifier.detect(replyText, spokenReplyText)
+            val isSystemInfo = (parsedJson.booleanOrNull("isSystemInfo") ?: false) || internalEvent != null
+            val shouldSpeak = requestedSpeech && internalEvent == null
+            if (internalEvent != null && "internal_context_compaction" !in tags) {
+                tags += "internal_context_compaction"
+            }
             val overlap =
                 parsedJson.booleanOrNull("overlap")
                     ?: tags.any {
@@ -127,12 +183,13 @@ internal object OpenClawReplyEnvelopeParser {
             }
             return OpenClawReplyEnvelope(
                 rawText = rawEnvelopeText,
-                replyText = replyText,
-                spokenReplyText = spokenReplyText,
+                replyText = internalEvent?.systemMessage ?: replyText,
+                spokenReplyText = if (internalEvent == null) spokenReplyText else "",
                 needsAttention = needsAttention,
                 shouldSpeak = shouldSpeak,
                 speakBlockReason = speakBlockReason,
                 isSystemInfo = isSystemInfo,
+                internalEvent = internalEvent,
                 tags = tags,
                 confidence = confidence,
                 overlap = overlap,
@@ -149,15 +206,20 @@ internal object OpenClawReplyEnvelopeParser {
 
         val needsAttention = normalizedRaw.startsWith(uncertainPrefix)
         val cleanedReply = normalizedRaw.removePrefix(uncertainPrefix).trim()
+        val internalEvent = OpenClawInternalEventClassifier.detect(cleanedReply)
         return OpenClawReplyEnvelope(
             rawText = normalizedRaw,
-            replyText = cleanedReply.ifBlank { normalizedRaw },
-            spokenReplyText = cleanedReply.ifBlank { normalizedRaw },
+            replyText = internalEvent?.systemMessage ?: cleanedReply.ifBlank { normalizedRaw },
+            spokenReplyText = if (internalEvent == null) cleanedReply.ifBlank { normalizedRaw } else "",
             needsAttention = needsAttention,
-            shouldSpeak = !needsAttention,
+            shouldSpeak = !needsAttention && internalEvent == null,
             speakBlockReason = null,
-            isSystemInfo = false,
-            tags = if (needsAttention) listOf("uncertain_target") else emptyList(),
+            isSystemInfo = internalEvent != null,
+            internalEvent = internalEvent,
+            tags = buildList {
+                if (needsAttention) add("uncertain_target")
+                if (internalEvent != null) add("internal_context_compaction")
+            },
             confidence = null,
             overlap = false,
             settingsPatch = null

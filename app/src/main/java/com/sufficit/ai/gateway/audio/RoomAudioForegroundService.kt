@@ -50,6 +50,7 @@ import com.sufficit.ai.gateway.history.SpeakerContinuityHistoryLogger
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsEntry
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
+import com.sufficit.ai.gateway.openclaw.OpenClawInternalEventClassifier
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayPersistentConnection
 import com.sufficit.ai.gateway.mcp.SufficitMcpToolBridge
@@ -4770,24 +4771,40 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             ?.takeIf { it.isNotEmpty() }
             ?.joinToString(", ")
         val currentState = GatewayRuntime.state().value
+        val internalEvent = reply.internalEvent
         val assistantReply = reply.replyText.trim()
         val spokenReply = reply.spokenReplyText.ifBlank { assistantReply }
         val displayReply = spokenReply.ifBlank { assistantReply }
-        val auditMessageId = recordOpenClawDeliveryAudit(reply, displayReply)
+        // Manutencao de contexto e um evento do motor, nao uma decisao sobre
+        // a fala do usuario. Nao a transforma em auditoria de entrega nem em
+        // resposta do assistente.
+        val auditMessageId = if (internalEvent == null) {
+            recordOpenClawDeliveryAudit(reply, displayReply)
+        } else {
+            0L
+        }
         val requiresAttention = reply.needsAttention
         val blockingAnnouncement = when {
             requiresAttention -> buildBlockingAnnouncementMessage(reply)
             !reply.shouldSpeak && !reply.speakBlockReason.isNullOrBlank() -> reply.speakBlockReason
             else -> null
         }
-        val systemInfoMessage = if (reply.isSystemInfo && assistantReply.isNotBlank()) assistantReply else null
-        if (assistantReply.isNotBlank() || requiresAttention) {
+        val systemInfoMessage = when {
+            internalEvent != null -> internalEvent.systemMessage
+            reply.isSystemInfo && assistantReply.isNotBlank() -> assistantReply
+            else -> null
+        }
+        if ((assistantReply.isNotBlank() || requiresAttention) && internalEvent == null) {
             assistantConversationUntilEpochMs =
                 System.currentTimeMillis() + settings.voiceChannelFollowUpSeconds.coerceAtLeast(0) * 1000L
         }
         GatewayRuntime.update {
             it.copy(
                 openClawStatus = when {
+                    internalEvent != null -> {
+                        "OpenClaw atualizou o contexto interno."
+                    }
+
                     assistantReply.isBlank() && requiresAttention -> {
                         "OpenClaw reteve o trecho para revisar contexto."
                     }
@@ -4805,7 +4822,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     }
                 } + patchSummary?.let { " Config Android atualizada: $it." }.orEmpty(),
                 blockingAnnouncementMessage = blockingAnnouncement,
-                lastAssistantReply = if (requiresAttention || reply.isSystemInfo) "" else displayReply.ifBlank { it.lastAssistantReply },
+                lastAssistantReply = if (requiresAttention || reply.isSystemInfo || internalEvent != null) "" else displayReply.ifBlank { it.lastAssistantReply },
                 lastAssistantReplyNeedsAttention = requiresAttention,
                 lastAssistantReplyTags = reply.tags,
                 lastAssistantReplyConfidence = reply.confidence,
@@ -4817,8 +4834,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // Historico de conversa: resposta do assistente vira bolha no chat.
         // O details (conteudo visual-apenas) vai junto como painel expansivel;
         // nunca entra no texto falado (spokenReply).
+        val systemMessageId = internalEvent?.let { event ->
+            GatewayRuntime.appendChatMessage(ChatRole.SYSTEM, event.systemMessage)
+        } ?: 0L
         val assistantMessageId = if (
             !reply.isSystemInfo &&
+                internalEvent == null &&
                 !requiresAttention &&
                 !isPreAgentDecisionOnly(reply) &&
                 displayReply.isNotBlank()
@@ -4832,7 +4853,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         if (speechSuppressedByApi) {
             suppressNextReplySpeech = false
         }
-        if (reply.shouldSpeak && !reply.isSystemInfo && spokenReply.isNotBlank() && !speechSuppressedByApi) {
+        if (reply.shouldSpeak && !reply.isSystemInfo && internalEvent == null && spokenReply.isNotBlank() && !speechSuppressedByApi) {
             speakAssistantReply(spokenReply)
         } else {
             Log.i(
@@ -4842,7 +4863,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
         // A fala usa QUEUE_FLUSH. Sintetizar depois dela evita que esse flush
         // cancele o arquivo persistido e deixe apenas o cabecalho WAV.
-        if (assistantMessageId > 0L && spokenReply.isNotBlank()) {
+        if (assistantMessageId > 0L && internalEvent == null && spokenReply.isNotBlank()) {
             persistAssistantReplyAudio(spokenReply, assistantMessageId, settings)
         }
         // Ferramentas escolhidas pelo agente (campo "actions"): executadas no
@@ -4857,7 +4878,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             )
         }
         executeAgentActions(reply.actions)
-        if (auditMessageId > 0L || assistantMessageId > 0L || reply.actions.isNotEmpty()) {
+        if (auditMessageId > 0L || systemMessageId > 0L || assistantMessageId > 0L || reply.actions.isNotEmpty()) {
             finishAgentActivity(replyActivityId)
         } else {
             failAgentActivity(
@@ -5832,6 +5853,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }.getOrDefault(0L)
 
     private fun sanitizeReplyForSpeech(replyText: String): String {
+        if (OpenClawInternalEventClassifier.detect(replyText) != null) {
+            Log.i(TAG, "Evento interno de contexto bloqueado antes do TTS.")
+            return ""
+        }
         val normalized = replyText
             .replace(Regex("```[\\s\\S]*?```"), " ")
             .replace(Regex("`([^`]*)`"), "$1")
