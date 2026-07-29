@@ -2,6 +2,9 @@ package com.sufficit.ai.gateway.vision
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
@@ -14,6 +17,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmark
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList
 import com.google.mediapipe.solutions.facemesh.FaceMesh
@@ -28,6 +32,7 @@ import com.sufficit.ai.gateway.runtime.LipActivity
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class MediaPipeCameraGestureRecognizer(
     private val activity: ComponentActivity
@@ -183,6 +188,21 @@ class MediaPipeCameraGestureRecognizer(
     private var previewAttached = false
     private val running = AtomicBoolean(false)
     private val frameInFlight = AtomicBoolean(false)
+    private val lastFrameAtElapsedMs = AtomicLong(0L)
+    private val recoveryPending = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var requestedPreviewVisible = false
+    private var sessionStartedAtElapsedMs = 0L
+    private var lastRecoveryAtElapsedMs = 0L
+    private val healthCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!running.get()) return
+            checkCameraHealth()
+            if (running.get()) {
+                mainHandler.postDelayed(this, CAMERA_HEALTH_CHECK_INTERVAL_MS)
+            }
+        }
+    }
 
     fun ensurePreviewView(): PreviewView {
         previewView?.let { return it }
@@ -201,16 +221,23 @@ class MediaPipeCameraGestureRecognizer(
     fun start(previewVisible: Boolean, onEvent: (CameraGestureEvent) -> Unit) {
         callback = onEvent
         active = java.lang.ref.WeakReference(this)
+        requestedPreviewVisible = previewVisible
         if (running.getAndSet(true)) {
             Log.i(TAG, "Camera gesture recognizer already running; callback refreshed (previewVisible=$previewVisible).")
             if (previewVisible != previewAttached) {
                 rebindUseCases(previewVisible)
             }
+            scheduleCameraHealthCheck(immediate = true)
             return
         }
         Log.i(TAG, "Starting camera gesture recognizer (previewVisible=$previewVisible).")
         resetGestureStability()
         frameInFlight.set(false)
+        lastFrameAtElapsedMs.set(0L)
+        recoveryPending.set(false)
+        sessionStartedAtElapsedMs = SystemClock.elapsedRealtime()
+        lastRecoveryAtElapsedMs = 0L
+        scheduleCameraHealthCheck()
 
         val executor = Executors.newSingleThreadExecutor()
         analysisExecutor = executor
@@ -253,6 +280,7 @@ class MediaPipeCameraGestureRecognizer(
     // o Preview so entra no bind quando a tela de depuracao esta visivel.
     private fun bindUseCases(provider: ProcessCameraProvider, previewVisible: Boolean) {
         val analysis = imageAnalysis ?: return
+        requestedPreviewVisible = previewVisible
         provider.unbindAll()
         if (previewVisible) {
             val preview = Preview.Builder().build().also {
@@ -281,11 +309,16 @@ class MediaPipeCameraGestureRecognizer(
     fun stop() {
         callback = null
         if (active?.get() === this) active = null
+        mainHandler.removeCallbacks(healthCheckRunnable)
         if (!running.getAndSet(false)) {
             return
         }
         resetGestureStability()
         frameInFlight.set(false)
+        lastFrameAtElapsedMs.set(0L)
+        recoveryPending.set(false)
+        sessionStartedAtElapsedMs = 0L
+        lastRecoveryAtElapsedMs = 0L
         imageAnalysis?.clearAnalyzer()
         imageAnalysis = null
         previewUseCase = null
@@ -389,6 +422,7 @@ class MediaPipeCameraGestureRecognizer(
     fun previewViewOrNull(): PreviewView? = previewView
 
     private fun handleStartFailure(ex: Throwable) {
+        mainHandler.removeCallbacks(healthCheckRunnable)
         running.set(false)
         imageAnalysis?.clearAnalyzer()
         imageAnalysis = null
@@ -412,6 +446,17 @@ class MediaPipeCameraGestureRecognizer(
         if (!running.get()) {
             image.close()
             return
+        }
+        lastFrameAtElapsedMs.set(SystemClock.elapsedRealtime())
+        if (recoveryPending.getAndSet(false)) {
+            Log.i(TAG, "Camera frame flow recovered; gesture recognition resumed.")
+            GatewayRuntime.setCameraGestureStatus("Camera retomada. Gestos ativos.")
+            GatewayRuntime.setGestureDebugState(
+                detectedLabel = null,
+                matched = false,
+                reason = "Fluxo da camera retomado automaticamente.",
+                active = true
+            )
         }
         if (!frameInFlight.compareAndSet(false, true)) {
             image.close()
@@ -446,6 +491,58 @@ class MediaPipeCameraGestureRecognizer(
             image.close()
             frameInFlight.set(false)
         }
+    }
+
+    private fun scheduleCameraHealthCheck(immediate: Boolean = false) {
+        mainHandler.removeCallbacks(healthCheckRunnable)
+        if (!running.get()) return
+        mainHandler.postDelayed(
+            healthCheckRunnable,
+            if (immediate) 0L else CAMERA_HEALTH_CHECK_INTERVAL_MS
+        )
+    }
+
+    /**
+     * Rebinds a stale CameraX session after transient policy/lifecycle blocks.
+     *
+     * A system overlay or the transition from the lock screen may cause the
+     * camera service to reject the first open asynchronously. The original
+     * bind call still succeeds, so [running] remains true and no normal start
+     * path is invoked again. The frame heartbeat is the reliable signal here:
+     * once the chat is resumed and frames remain absent, rebind with a bounded
+     * cooldown until Android makes the camera available.
+     */
+    private fun checkCameraHealth() {
+        val now = SystemClock.elapsedRealtime()
+        val shouldRecover = CameraGestureHealthPolicy.shouldRecover(
+            running = running.get(),
+            interactionActive = GatewayRuntime.cameraGestureInteractionActive().value,
+            lifecycleResumed = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+            nowElapsedMs = now,
+            sessionStartedAtElapsedMs = sessionStartedAtElapsedMs,
+            lastFrameAtElapsedMs = lastFrameAtElapsedMs.get(),
+            lastRecoveryAtElapsedMs = lastRecoveryAtElapsedMs,
+            stallTimeoutMs = CAMERA_FRAME_STALL_TIMEOUT_MS,
+            recoveryCooldownMs = CAMERA_RECOVERY_COOLDOWN_MS
+        )
+        if (!shouldRecover) return
+
+        val provider = cameraProvider ?: return
+        lastRecoveryAtElapsedMs = now
+        recoveryPending.set(true)
+        Log.w(
+            TAG,
+            "No camera frames while chat is resumed; rebinding gesture use cases " +
+                "(previewVisible=$requestedPreviewVisible)."
+        )
+        GatewayRuntime.setCameraGestureStatus("Camera interrompida. Retomando gestos...")
+        GatewayRuntime.setGestureDebugState(
+            detectedLabel = null,
+            matched = false,
+            reason = "Sem quadros da camera; retomada automatica em andamento.",
+            active = true
+        )
+        rebindUseCases(requestedPreviewVisible)
     }
 
     private fun maybeAnalyzeFace(bitmap: Bitmap) {
@@ -1039,6 +1136,14 @@ class MediaPipeCameraGestureRecognizer(
         // a base por pelo menos POINTING_MIN_Z_DELTA.
         // Cadencia do log de diagnostico de gestos no logcat.
         private const val GESTURE_DIAGNOSTIC_LOG_INTERVAL_MS = 700L
+
+        // CameraX pode permanecer "bound" sem entregar quadros depois de uma
+        // recusa temporaria do Android (lock screen/politica/overlay). O
+        // watchdog roda leve no main thread e so refaz o bind com Activity
+        // RESUMED e chat apto a receber gestos.
+        private const val CAMERA_HEALTH_CHECK_INTERVAL_MS = 2_000L
+        private const val CAMERA_FRAME_STALL_TIMEOUT_MS = 4_500L
+        private const val CAMERA_RECOVERY_COOLDOWN_MS = 6_000L
 
         // ---- FaceMesh / atividade labial ----
         private const val MAX_FACES = 2
