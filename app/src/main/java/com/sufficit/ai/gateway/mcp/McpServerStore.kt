@@ -63,11 +63,7 @@ class McpServerStore(context: Context) {
     @Synchronized
     fun list(): List<McpServerConfiguration> {
         val saved = readSaved()
-        val withBuiltIn = if (saved.any { it.id == SUFFICIT_SERVER_ID }) {
-            saved
-        } else {
-            listOf(defaultSufficitServer()) + saved
-        }
+        val withBuiltIn = reconcileBuiltInServer(saved)
         if (withBuiltIn != saved) persist(withBuiltIn)
         return withBuiltIn.sortedWith(
             compareByDescending<McpServerConfiguration> { it.builtIn }
@@ -257,6 +253,18 @@ class McpServerStore(context: Context) {
                 enabled = true,
                 builtIn = true
             )
+
+        internal fun reconcileBuiltInServer(
+            saved: List<McpServerConfiguration>
+        ): List<McpServerConfiguration> {
+            val canonical = defaultSufficitServer()
+            val existing = saved.firstOrNull { it.id == SUFFICIT_SERVER_ID }
+            val migrated = canonical.copy(
+                enabled = existing?.enabled ?: canonical.enabled,
+                summary = existing?.summary ?: canonical.summary
+            )
+            return listOf(migrated) + saved.filterNot { it.id == SUFFICIT_SERVER_ID }
+        }
 
         fun sanitizeNamespace(value: String): String = value
             .trim()

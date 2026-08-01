@@ -2,18 +2,48 @@
 
 [![Release APK](https://github.com/sufficit/sufficit-android-ai-gateway/actions/workflows/release.yml/badge.svg)](https://github.com/sufficit/sufficit-android-ai-gateway/actions/workflows/release.yml)
 
-Gateway Android dedicado para captar áudio ambiente de uma sala e encaminhar trechos de fala para a stack de voz da Sufficit/OpenClaw.
+Interface Android multimodal entre uma pessoa e um agente de inteligência artificial remoto, como OpenClaw ou Hermes Agent.
+
+O aplicativo captura voz, texto e gestos, preserva o contexto da interação, anuncia capacidades do aparelho e apresenta a resposta em uma experiência móvel curta, audível, visível e interrompível. O raciocínio, o planejamento, a memória cognitiva e a autonomia pertencem ao agente remoto.
 
 > Projeto aberto. Contribuições são bem-vindas — veja [Build](#build-local) e [Contribuindo](#contribuindo).
 
 ## Objetivo
 
-Este projeto existe para transformar um celular Android parado em mesa em um endpoint de áudio estável para a sala:
+Este projeto transforma um celular Android em uma interface permanente de sala para conversar com um agente remoto:
 
-- captura contínua de microfone
-- detecção local de voz
-- envio de trechos de fala para um gateway local
-- integração posterior com Whisper e OpenClaw
+- recebe voz, texto e gestos de uma pessoa;
+- usa wake word, VAD, segmentação e transcrição para formar turnos humanos;
+- envia ao agente remoto o texto e os sinais necessários para interpretar a interação;
+- informa que a resposta será consumida em uma tela pequena e, muitas vezes, por TTS;
+- mostra fila, processamento, ação, sucesso, retenção e falha;
+- executa somente capacidades locais explicitamente anunciadas como ferramentas cliente;
+- devolve resultados e evidências ao agente remoto.
+
+## Responsabilidade do produto
+
+O Gateway é um **orquestrador de interação e adapter de plataforma**, não um segundo agente.
+
+Pertencem ao Gateway:
+
+- áudio, wake word, transcrição, gestos, câmera e UI;
+- agrupamento e transporte dos turnos;
+- adaptação da resposta para chat/TTS/anexos;
+- catálogo e execução segura de ferramentas do aparelho;
+- autenticação e transporte de MCP quando o aparelho é o cliente;
+- feedback visual, cancelamento e auditoria local.
+
+Pertencem ao agente remoto:
+
+- interpretação, raciocínio e planejamento;
+- memória cognitiva e contexto de longo prazo;
+- skills, subagentes, automações e ferramentas remotas;
+- decisão sobre quais ferramentas usar;
+- produção da resposta final.
+
+Não devem ser introduzidos no APK um planner cognitivo geral, runtime de subagentes, shell irrestrito, skills autoexecutáveis ou uma memória paralela à Sufficit.
+
+A decisão completa, o contrato de mensagens e o prompt base independente de OpenClaw/Hermes estão em [Fronteira do produto e contrato de interface com agentes](./docs/product-boundary-and-agent-interface.md).
 
 ## Motivação
 
@@ -28,21 +58,24 @@ Por isso, a solução adotada aqui é um **app Android nativo** com **Foreground
 
 ## Arquitetura resumida
 
-Fluxo pretendido:
+Fluxo principal:
 
 1. Android capta áudio com `AudioRecord`
-2. VAD local decide quando existe fala
-3. app envia chunk de áudio para um endpoint local
-4. gateway local encaminha para Whisper
-5. transcrição é entregue ao OpenClaw
-6. OpenClaw processa intenção e responde
+2. wake word/VAD/gestos delimitam a interação
+3. STT local, companion ou remoto produz a transcrição
+4. o app consolida pausas humanas em um turno
+5. o Gateway envia texto, contexto de interação e capacidades cliente
+6. OpenClaw, Hermes ou outro agente compatível interpreta e responde
+7. o app separa texto curto, fala, detalhes, anexos e ações
+8. ferramentas cliente são executadas no aparelho e seus resultados voltam ao agente
 
-Topologia preferida:
+Fronteira preferida:
 
-- Android antigo = sensor de áudio da sala
-- Raspberry = gateway local
-- Whisper = STT
-- OpenClaw = orquestração e resposta
+- Android = interface humana, sensores, apresentação e capacidades do cliente
+- STT/TTS/MCP = serviços especializados intercambiáveis
+- OpenClaw/Hermes = agente, memória, raciocínio, autonomia e resposta
+
+O contrato entre Android e agente é a fronteira estável: nenhum dos lados deve depender da implementação interna do outro.
 
 ## API HTTP de controle
 
@@ -61,29 +94,23 @@ Referência completa: [docs/http-control-api.md](./docs/http-control-api.md).
 
 ## Documentação inicial
 
+- [Fronteira do produto e contrato de interface com agentes](./docs/product-boundary-and-agent-interface.md)
+- [Plano de implementação inspirado no Hermes Agent](./docs/hermes-inspired-gateway-implementation-plan.md)
 - [API HTTP de controle](./docs/http-control-api.md)
 - [Visão de arquitetura](./docs/architecture.md)
 - [Roadmap da primeira versão](./docs/roadmap.md)
 - [Instalação e teste em Android](./docs/android-testing.md)
 
-## Escopo da primeira versão
+## Princípios da interface com o agente
 
-Primeira entrega técnica:
-
-- app Android em Kotlin
-- captura contínua de microfone
-- `ForegroundService`
-- VAD local simples
-- envio via WebSocket para endpoint configurável
-- UI mínima com estado de conexão e captura
-
-Fica fora da primeira versão:
-
-- hotword sofisticada
-- wake word offline avançada
-- TTS no próprio Android
-- configuração remota complexa
-- publicação em Play Store
+- Respostas devem ser curtas por padrão e começar pelo resultado.
+- Conteúdo falado deve ser pronunciável; URLs, JSON, tabelas e logs não vão para o TTS.
+- Conteúdo longo deve preferir documento, link ou anexo com um resumo curto no chat.
+- `awakened=true` significa que a sessão foi iniciada pela wake word e está dirigida ao agente até parada explícita.
+- O agente só pode acionar ferramentas anunciadas pelo aparelho.
+- O histórico deve distinguir ação despachada de resultado confirmado.
+- Mensagens internas de compactação, manutenção e memória não são respostas e nunca devem ser faladas.
+- A mensagem do usuário nunca deve permanecer sem estado de atividade, resposta ou falha visível.
 
 ## Build local
 
@@ -135,21 +162,26 @@ git push origin v0.1.0
 
 ## Estado atual
 
-Projeto iniciado em 2026-03-17. O esqueleto Android já saiu do papel:
+Projeto iniciado em 2026-03-17 e validado principalmente em um Samsung Galaxy A51 (`SM-A515F`). A árvore atual já inclui:
 
-- build local via Gradle Wrapper
-- APK debug gerado com sucesso
-- instalação validada por ADB em um Samsung Galaxy A51 (`SM-A515F`)
-- `ForegroundService` implementado com `AudioRecord` real em `16 kHz mono`
-- notificação persistente atualizando nível RMS/pico da captura
-- configuração local persistida para endpoint e limiar de VAD
-- VAD inicial por RMS com estado simples de `fala` versus `silencio`
+- `ForegroundService` e captura PCM 16 kHz mono com tela apagada;
+- ganho automático, VAD, segmentação e wake words treináveis;
+- transcrição remota, local e por companion AIDL;
+- agrupamento de trechos por pausa humana;
+- WebSocket persistente e metadados de interação para OpenClaw;
+- chat persistente com áudio, atividade, auditoria, timeout e falha;
+- TTS com interrupção por toque/gesto;
+- câmera frontal, gestos e atividade labial;
+- ferramentas cliente para câmera, tela, áudio, configuração e Wake-on-LAN;
+- descoberta MCP de tools, prompts e resources;
+- contrato canônico de turno/resposta independente do agente e adapter OpenClaw;
+- registro único de capacidades nativas e MCP, com validação, timeout e cancelamento;
+- ledger Room/SQLite por `turnId` e `callId`, recuperação após reinício e bloqueio de duplicatas;
+- anexos canônicos persistidos e relatório `doctor` JSON sanitizado;
+- autenticação OAuth e memória Sufficit por MCP;
+- API HTTP local opcional.
 
-Próximo foco:
-
-- trocar o VAD heurístico por segmentação útil de áudio
-- transporte para Raspberry/OpenClaw
-- configuração de endpoint e handshake do dispositivo
+O contrato, o transporte, o registro de capacidades e o ledger já foram extraídos. O trabalho de manutenção continua reduzindo o tamanho do `RoomAudioForegroundService`, sem transferir raciocínio ou autonomia do agente remoto para o APK.
 
 ## Experimento GPU local
 
@@ -162,4 +194,3 @@ Em `2026-03-17`, o caminho de `whisper.cpp` com `ggml-vulkan` foi validado para 
 Referências:
 
 - [Experimento Whisper local com Vulkan](./docs/on-device-whisper-vulkan.md)
-- [Script de build Vulkan para Android](./tools/build-whisper-vulkan-android.ps1)

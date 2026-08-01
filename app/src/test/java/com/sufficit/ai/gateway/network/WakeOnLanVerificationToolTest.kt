@@ -2,8 +2,17 @@ package com.sufficit.ai.gateway.network
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.concurrent.CancellationException
 
 class WakeOnLanVerificationToolTest {
+    @Test(expected = CancellationException::class)
+    fun canceledVerificationStopsBeforeNetworkIO() {
+        WakeOnLanVerificationTool.verifyTarget(
+            macAddress = "02:00:00:00:00:01",
+            isCanceled = { true }
+        )
+    }
+
     @Test
     fun reportsConfirmedOnlineWhenTargetAppearsAfterWake() {
         assertEquals(

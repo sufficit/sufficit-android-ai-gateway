@@ -1,10 +1,39 @@
 package com.sufficit.ai.gateway.openclaw
 
+import com.sufficit.ai.gateway.agentinterface.AgentAuditDecision
+import com.sufficit.ai.gateway.agentinterface.AgentInternalEventType
+import com.sufficit.ai.gateway.agentinterface.AgentMessageContent
+import com.sufficit.ai.gateway.agentinterface.AgentProtocolCodec
+import com.sufficit.ai.gateway.agentinterface.AgentReplyEnvelope
+import com.sufficit.ai.gateway.agentinterface.RemoteAgentEventClassifier
 import org.json.JSONObject
 
 /** Eventos internos do gateway que jamais representam uma fala do assistente. */
-enum class OpenClawInternalEvent(val systemMessage: String) {
-    CONTEXT_COMPACTION("Contexto interno do agente compactado.")
+enum class OpenClawInternalEvent(
+    val canonicalType: AgentInternalEventType,
+    val systemMessage: String
+) {
+    CONTEXT_COMPACTION(
+        AgentInternalEventType.CONTEXT_COMPACTION,
+        "Contexto interno do agente compactado."
+    ),
+    MEMORY_INTERNAL(
+        AgentInternalEventType.MEMORY_INTERNAL,
+        "Memoria interna do agente atualizada."
+    ),
+    MAINTENANCE(
+        AgentInternalEventType.MAINTENANCE,
+        "Manutencao interna do agente concluida."
+    ),
+    SYSTEM_INTERNAL(
+        AgentInternalEventType.SYSTEM_INTERNAL,
+        "Evento interno do agente processado."
+    );
+
+    companion object {
+        fun fromCanonical(value: AgentInternalEventType?): OpenClawInternalEvent? =
+            entries.firstOrNull { it.canonicalType == value }
+    }
 }
 
 /**
@@ -14,41 +43,10 @@ enum class OpenClawInternalEvent(val systemMessage: String) {
  */
 object OpenClawInternalEventClassifier {
     fun detect(vararg values: String?): OpenClawInternalEvent? {
-        return if (values.any(::isContextCompaction)) {
-            OpenClawInternalEvent.CONTEXT_COMPACTION
-        } else {
-            null
-        }
+        return OpenClawInternalEvent.fromCanonical(
+            RemoteAgentEventClassifier.detectInternalEvent(textValues = values)
+        )
     }
-
-    private fun isContextCompaction(value: String?): Boolean {
-        val lines = value.orEmpty()
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .toList()
-        if (lines.isEmpty()) return false
-        return lines.all { line ->
-            val withoutLeadingSymbols = line
-                .replace(Regex("^[^\\p{L}\\p{N}]+"), "")
-                .trim()
-                .lowercase()
-            CONTEXT_MAINTENANCE_PREFIXES.any { prefix -> withoutLeadingSymbols.startsWith(prefix) }
-        }
-    }
-
-    private val CONTEXT_MAINTENANCE_PREFIXES = listOf(
-        "compacting context",
-        "context compacted",
-        "summarizing context",
-        "context summarized",
-        "compactando contexto",
-        "compactando o contexto",
-        "contexto compactado",
-        "resumindo contexto",
-        "resumindo o contexto",
-        "contexto resumido"
-    )
 }
 
 data class OpenClawReplyEnvelope(
@@ -89,7 +87,9 @@ data class OpenClawReplyEnvelope(
      * entrada (substitui a skill que exigia mesma rede). Ferramentas: screenshot,
      * photo, wake, effect, say, listen, standby, interrupt, config, clearChat.
      */
-    val actions: List<JSONObject> = emptyList()
+    val actions: List<JSONObject> = emptyList(),
+    /** Envelope neutro usado pelos novos adapters e pela apresentacao movel. */
+    val canonicalReply: AgentReplyEnvelope? = null
 )
 
 internal object OpenClawReplyEnvelopeParser {
@@ -101,112 +101,64 @@ internal object OpenClawReplyEnvelopeParser {
         val parsedJson = parseJsonObject(normalizedRaw)
         if (parsedJson != null) {
             val source = parsedJson.optString("source").trim()
-            val tags = parsedJson.optJSONArray("tags")
-                ?.let { array ->
-                    buildList {
-                        for (index in 0 until array.length()) {
-                            val value = array.optString(index).trim()
-                            if (value.isNotBlank()) {
-                                add(value)
-                            }
-                        }
-                    }
-                }
-                .orEmpty()
-                .toMutableList()
-            val replyText = parsedJson.optString("replyText").trim()
-                .ifBlank { parsedJson.optString("text").trim() }
-                .ifBlank { parsedJson.optString("message").trim() }
-            val spokenReplyText = parsedJson.optString("spokenReplyText").trim()
-                .ifBlank { parsedJson.optString("voiceReplyText").trim() }
-                .ifBlank { replyText }
-            val needsAttention =
-                parsedJson.booleanOrNull("needsAttention")
-                    ?: parsedJson.booleanOrNull("attention")
-                    ?: parsedJson.booleanOrNull("attentionRequired")
-                    ?: tags.any {
-                        it.equals("uncertain_target", ignoreCase = true) ||
-                            it.equals("needs_attention", ignoreCase = true)
-                    }
-            val requestedSpeech =
-                parsedJson.booleanOrNull("shouldSpeak")
-                    ?: parsedJson.booleanOrNull("speak")
-                    ?: (!needsAttention && tags.none {
-                        it.equals("silent", ignoreCase = true) ||
-                            it.equals("do_not_speak", ignoreCase = true)
-                    })
-            val speakBlockReason = parsedJson.optString("speakBlockReason").trim().ifBlank { null }
-            val internalEvent = OpenClawInternalEventClassifier.detect(replyText, spokenReplyText)
+            val canonical = AgentProtocolCodec.decodeReply(parsedJson)
+            val internalEvent = OpenClawInternalEvent.fromCanonical(canonical.internalEvent)
             val isSystemInfo = (parsedJson.booleanOrNull("isSystemInfo") ?: false) || internalEvent != null
-            val shouldSpeak = requestedSpeech && internalEvent == null
-            if (internalEvent != null && "internal_context_compaction" !in tags) {
-                tags += "internal_context_compaction"
-            }
-            val overlap =
-                parsedJson.booleanOrNull("overlap")
-                    ?: tags.any {
-                        it.equals("overlap_suspected", ignoreCase = true) ||
-                            it.equals("overlap_confirmed", ignoreCase = true)
-                    }
-            val confidence = parsedJson.numberOrNull("confidence")
-            val settingsPatch =
-                parsedJson.optJSONObject("settingsPatch")
-                    ?: parsedJson.optJSONObject("settings")
-                    ?: parsedJson.optJSONObject("androidSettings")
-            val transcript = parsedJson.optString("transcript").trim().ifBlank { null }
-            val preAgentAction = parsedJson.optString("action").trim().ifBlank { null }
-            val preAgentReason = parsedJson.optString("reason").trim().ifBlank { null }
-            val shouldForwardToFinalAgent = parsedJson.booleanOrNull("shouldForwardToFinalAgent")
-            val errorText = parsedJson.optString("error").trim()
-                .ifBlank { parsedJson.optString("errorText").trim() }
-                .ifBlank { null }
-            val detailsText = parsedJson.optString("details").trim()
-                .ifBlank { parsedJson.optString("visualNote").trim() }
-                .ifBlank { null }
-            val actions = (parsedJson.optJSONArray("actions") ?: parsedJson.optJSONArray("tools"))
-                ?.let { array ->
-                    buildList {
-                        for (index in 0 until array.length()) {
-                            // Aceita objeto {tool,...} ou string "wake" (atalho sem args).
-                            when (val item = array.opt(index)) {
-                                is JSONObject -> add(item)
-                                is String -> if (item.isNotBlank()) add(JSONObject().put("tool", item.trim()))
-                            }
-                        }
+            val actions = canonical.actions.map { request ->
+                if (request.raw.length() > 0) {
+                    JSONObject(request.raw.toString())
+                } else {
+                    JSONObject().put("tool", request.tool).apply {
+                        request.callId?.let { put("callId", it) }
                     }
                 }
-                .orEmpty()
+            }
             val rawEnvelopeText = when {
                 source.equals("android-pre-agent", ignoreCase = true) -> normalizedRaw
-                replyText.isNotBlank() -> normalizedRaw
+                canonical.content.text.isNotBlank() -> normalizedRaw
                 else -> normalizedRaw
             }
             return OpenClawReplyEnvelope(
                 rawText = rawEnvelopeText,
-                replyText = internalEvent?.systemMessage ?: replyText,
-                spokenReplyText = if (internalEvent == null) spokenReplyText else "",
-                needsAttention = needsAttention,
-                shouldSpeak = shouldSpeak,
-                speakBlockReason = speakBlockReason,
+                replyText = internalEvent?.systemMessage ?: canonical.content.text,
+                spokenReplyText = if (internalEvent == null) canonical.content.speech else "",
+                needsAttention = canonical.needsAttention,
+                shouldSpeak = canonical.shouldSpeak && !isSystemInfo,
+                speakBlockReason = canonical.speakBlockReason,
                 isSystemInfo = isSystemInfo,
                 internalEvent = internalEvent,
-                tags = tags,
-                confidence = confidence,
-                overlap = overlap,
-                settingsPatch = settingsPatch,
-                transcript = transcript,
-                preAgentAction = preAgentAction,
-                preAgentReason = preAgentReason,
-                shouldForwardToFinalAgent = shouldForwardToFinalAgent,
-                errorText = errorText,
-                detailsText = detailsText,
-                actions = actions
+                tags = canonical.tags,
+                confidence = canonical.confidence,
+                overlap = canonical.overlap,
+                settingsPatch = canonical.settingsPatch,
+                transcript = canonical.audit.transcript,
+                preAgentAction = canonical.audit.action,
+                preAgentReason = canonical.audit.reason,
+                shouldForwardToFinalAgent = canonical.audit.shouldForwardToFinalAgent,
+                errorText = canonical.errorText,
+                detailsText = canonical.content.details,
+                actions = actions,
+                canonicalReply = canonical
             )
         }
 
         val needsAttention = normalizedRaw.startsWith(uncertainPrefix)
         val cleanedReply = normalizedRaw.removePrefix(uncertainPrefix).trim()
         val internalEvent = OpenClawInternalEventClassifier.detect(cleanedReply)
+        val canonical = AgentReplyEnvelope(
+            content = AgentMessageContent(
+                text = cleanedReply.ifBlank { normalizedRaw },
+                speech = if (internalEvent == null) cleanedReply.ifBlank { normalizedRaw } else ""
+            ),
+            needsAttention = needsAttention,
+            shouldSpeak = !needsAttention && internalEvent == null,
+            tags = buildList {
+                if (needsAttention) add("uncertain_target")
+                if (internalEvent != null) add("internal_event")
+            },
+            audit = AgentAuditDecision(),
+            internalEvent = internalEvent?.canonicalType
+        )
         return OpenClawReplyEnvelope(
             rawText = normalizedRaw,
             replyText = internalEvent?.systemMessage ?: cleanedReply.ifBlank { normalizedRaw },
@@ -222,7 +174,8 @@ internal object OpenClawReplyEnvelopeParser {
             },
             confidence = null,
             overlap = false,
-            settingsPatch = null
+            settingsPatch = null,
+            canonicalReply = canonical
         )
     }
 
@@ -245,14 +198,4 @@ internal object OpenClawReplyEnvelopeParser {
         }
     }
 
-    private fun JSONObject.numberOrNull(field: String): Double? {
-        if (!has(field)) {
-            return null
-        }
-        return when (val value = opt(field)) {
-            is Number -> value.toDouble()
-            is String -> value.toDoubleOrNull()
-            else -> null
-        }
-    }
 }

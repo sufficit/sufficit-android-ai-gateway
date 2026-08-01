@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "turnId": "turn-fixture-001",
+  "text": "ligue o video game",
+  "interaction": {
+    "inputMode": "voice",
+    "awakened": true,
+    "wakeWord": "xuxu"
+  }
+}

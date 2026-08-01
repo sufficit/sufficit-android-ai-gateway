@@ -1,5 +1,6 @@
 package com.sufficit.ai.gateway.openclaw
 
+import com.sufficit.ai.gateway.agentinterface.AgentReplyEnvelope
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -55,7 +56,9 @@ data class OpenClawGatewayReply(
     /** Conteúdo visual-apenas (campo "details") — painel expansível, nunca falado. */
     val detailsText: String? = null,
     /** Comandos de ferramenta escolhidos pelo agente (campo "actions"), executados no aparelho. */
-    val actions: List<JSONObject> = emptyList()
+    val actions: List<JSONObject> = emptyList(),
+    /** Representacao neutra para consumidores que nao conhecem OpenClaw. */
+    val canonicalReply: AgentReplyEnvelope? = null
 )
 
 class OpenClawGatewayClient {

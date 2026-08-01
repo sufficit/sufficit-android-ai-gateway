@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "turnId": "turn-fixture-001",
+  "callId": "call-fixture-001",
+  "tool": "wakeonlan",
+  "status": "unverified",
+  "summary": "Pacotes enviados; o equipamento nao respondeu no prazo.",
+  "retryable": true
+}

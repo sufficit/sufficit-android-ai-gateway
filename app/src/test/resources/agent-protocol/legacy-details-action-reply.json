@@ -1,0 +1,13 @@
+{
+  "replyText": "Vou verificar o equipamento.",
+  "spokenReplyText": "Vou verificar o equipamento.",
+  "details": "O resultado tecnico deve permanecer apenas na tela.",
+  "actions": [
+    {
+      "tool": "wakeonlan",
+      "callId": "call-fixture-001",
+      "mac": "02:00:00:00:00:01",
+      "waitSeconds": 30
+    }
+  ]
+}

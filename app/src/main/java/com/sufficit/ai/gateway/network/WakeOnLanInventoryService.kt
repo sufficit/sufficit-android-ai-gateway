@@ -32,7 +32,8 @@ class WakeOnLanInventoryService(context: Context) {
         port: Int = WakeOnLanTool.DEFAULT_PORT,
         repeat: Int = WakeOnLanTool.DEFAULT_REPEAT,
         waitSeconds: Int = WakeOnLanVerificationTool.DEFAULT_WAIT_SECONDS,
-        name: String? = null
+        name: String? = null,
+        isCanceled: () -> Boolean = { false }
     ): WakeOnLanVerificationResult {
         val remembered = store.rememberTarget(
             macAddress = macAddress,
@@ -46,7 +47,8 @@ class WakeOnLanInventoryService(context: Context) {
             broadcastAddress = broadcastAddress?.takeIf { it.isNotBlank() } ?: remembered.broadcastAddress,
             port = port,
             repeat = repeat,
-            waitSeconds = waitSeconds
+            waitSeconds = waitSeconds,
+            isCanceled = isCanceled
         )
         val target = result.targets.single()
         store.rememberTarget(

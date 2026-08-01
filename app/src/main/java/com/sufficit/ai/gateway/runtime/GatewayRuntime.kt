@@ -324,10 +324,11 @@ object GatewayRuntime {
         details: String? = null,
         audioPath: String? = null,
         audioDurationMs: Long? = null,
-        audioExpiresAtEpochMs: Long? = null
+        audioExpiresAtEpochMs: Long? = null,
+        attachments: List<ChatAttachment> = emptyList()
     ): Long {
         return GatewayChatRuntime.appendChatMessage(
-            role, text, details, audioPath, audioDurationMs, audioExpiresAtEpochMs
+            role, text, details, audioPath, audioDurationMs, audioExpiresAtEpochMs, attachments
         )
     }
 

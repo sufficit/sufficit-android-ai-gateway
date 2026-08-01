@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "type": "reply",
+  "turnId": "turn-fixture-002",
+  "message": {
+    "text": "Preparei o relatorio.",
+    "speech": "Preparei o relatorio.",
+    "details": "Os detalhes tecnicos permanecem apenas na tela.",
+    "attachments": [
+      {
+        "kind": "document",
+        "name": "relatorio.md",
+        "uri": "content://com.sufficit.ai.gateway/attachments/report-fixture",
+        "mimeType": "text/markdown",
+        "sizeBytes": 512
+      }
+    ]
+  },
+  "actions": []
+}

@@ -1,6 +1,10 @@
 package com.sufficit.ai.gateway.mcp
 
 import android.content.Context
+import com.sufficit.ai.gateway.agentinterface.AgentClientActionRequest
+import com.sufficit.ai.gateway.capabilities.ClientCapabilityDescriptor
+import com.sufficit.ai.gateway.capabilities.ClientCapabilityCompletionMode
+import com.sufficit.ai.gateway.capabilities.ClientCapabilitySensitivity
 import com.sufficit.ai.gateway.network.WakeOnLanKnownDevice
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,6 +13,14 @@ data class McpServerDiscoveryResult(
     val configuration: McpServerConfiguration,
     val catalog: SufficitMcpCatalog?,
     val error: String?
+)
+
+data class McpCatalogRefreshSummary(
+    val servers: Int,
+    val tools: Int,
+    val prompts: Int,
+    val resources: Int,
+    val failedServers: List<String>
 )
 
 /**
@@ -27,8 +39,13 @@ class SufficitMcpToolBridge(context: Context) {
     @Volatile
     private var cachedTargets: Map<String, ClientToolTarget> = emptyMap()
 
+    @Volatile
+    private var cachedRefreshFailures: List<String> = emptyList()
+
     suspend fun refreshTools(): List<SufficitMcpTool> {
         val runtimes = mutableListOf<ServerRuntime>()
+        val previousById = cachedServers.associateBy { it.configuration.id }
+        val failures = mutableListOf<String>()
         store.list().filter { it.enabled }.forEach { configuration ->
             val result = runCatching {
                 val catalog = clientFor(configuration).discoverCatalog(forceRefresh = true)
@@ -38,12 +55,25 @@ class SufficitMcpToolBridge(context: Context) {
             result.getOrNull()?.let(runtimes::add)
             result.exceptionOrNull()?.let { error ->
                 store.updateDiscovery(configuration.id, error = error.message)
+                failures += configuration.name
+                previousById[configuration.id]
+                    ?.takeIf { previous -> previous.configuration.connectionFingerprint() == configuration.connectionFingerprint() }
+                    ?.let { previous -> runtimes += previous.copy(configuration = configuration) }
             }
         }
         cachedServers = runtimes
         cachedTargets = buildTargetMap(runtimes)
+        cachedRefreshFailures = failures
         return runtimes.flatMap { it.catalog.tools }.map { it.copyForCaller() }
     }
+
+    fun refreshSummary(): McpCatalogRefreshSummary = McpCatalogRefreshSummary(
+        servers = cachedServers.size,
+        tools = cachedServers.sumOf { it.catalog.tools.size },
+        prompts = cachedServers.sumOf { it.catalog.prompts.size },
+        resources = cachedServers.sumOf { it.catalog.resources.size },
+        failedServers = cachedRefreshFailures.toList()
+    )
 
     suspend fun discoverServer(serverId: String): McpServerDiscoveryResult {
         val configuration = store.find(serverId)
@@ -69,96 +99,106 @@ class SufficitMcpToolBridge(context: Context) {
         clients.clear()
         cachedServers = emptyList()
         cachedTargets = emptyMap()
+        cachedRefreshFailures = emptyList()
     }
 
-    fun appendClientToolCatalog(target: JSONArray) {
+    /**
+     * Projeta o catalogo MCP descoberto no mesmo contrato usado pelas
+     * capacidades nativas. Nenhuma credencial e copiada para o descritor.
+     */
+    fun clientCapabilityDescriptors(
+        execute: (AgentClientActionRequest) -> Unit
+    ): List<ClientCapabilityDescriptor> = buildList {
         cachedServers.forEach { runtime ->
+            val provider = "mcp:${runtime.configuration.namespace}"
             runtime.catalog.tools.forEach { tool ->
-                val clientName = clientToolName(runtime.configuration, tool.name)
-                target.put(
-                    JSONObject()
-                        .put("tool", clientName)
-                        .put("mcpTool", tool.name)
-                        .put("mcpServer", runtime.configuration.name)
-                        .put("provider", "mcp:${runtime.configuration.namespace}")
-                        .put(
-                            "authenticated",
-                            runtime.configuration.authenticationMode != McpAuthenticationMode.NONE
-                        )
-                        .put("description", tool.description)
-                        .put("inputSchema", JSONObject(tool.inputSchema.toString()))
+                add(
+                    ClientCapabilityDescriptor(
+                        name = clientToolName(runtime.configuration, tool.name),
+                        description = tool.description.ifBlank { "Ferramenta MCP ${tool.name}." },
+                        inputSchema = JSONObject(tool.inputSchema.toString()),
+                        timeoutMs = MCP_ACTION_TIMEOUT_MS,
+                        provider = provider,
+                        sensitivity = ClientCapabilitySensitivity.AUTHENTICATED_REMOTE,
+                        completionMode = ClientCapabilityCompletionMode.ASYNCHRONOUS,
+                        metadata = JSONObject()
+                            .put("mcpTool", tool.name)
+                            .put("mcpServer", runtime.configuration.name)
+                            .put(
+                                "authenticated",
+                                runtime.configuration.authenticationMode != McpAuthenticationMode.NONE
+                            ),
+                        execute = execute
+                    )
                 )
             }
             if (runtime.catalog.prompts.isNotEmpty()) {
                 val promptNames = runtime.catalog.prompts.map { it.name }
-                target.put(
-                    JSONObject()
-                        .put("tool", protocolPromptToolName(runtime.configuration))
-                        .put("mcpServer", runtime.configuration.name)
-                        .put("provider", "mcp:${runtime.configuration.namespace}")
-                        .put(
-                            "description",
-                            "Carrega um prompt publicado por ${runtime.configuration.name}. Disponiveis: " +
-                                promptNames.joinToString(", ")
-                        )
-                        .put(
-                            "inputSchema",
-                            JSONObject()
-                                .put("type", "object")
-                                .put(
-                                    "properties",
-                                    JSONObject()
-                                        .put(
-                                            "prompt",
-                                            JSONObject()
-                                                .put("type", "string")
-                                                .put("enum", JSONArray(promptNames))
-                                        )
-                                        .put(
-                                            "promptArguments",
-                                            JSONObject().put("type", "object")
-                                        )
-                                )
-                                .put("required", JSONArray().put("prompt"))
-                        )
+                add(
+                    ClientCapabilityDescriptor(
+                        name = protocolPromptToolName(runtime.configuration),
+                        description = "Carrega um prompt publicado por ${runtime.configuration.name}.",
+                        inputSchema = JSONObject()
+                            .put("type", "object")
+                            .put(
+                                "properties",
+                                JSONObject()
+                                    .put(
+                                        "prompt",
+                                        JSONObject()
+                                            .put("type", "string")
+                                            .put("enum", JSONArray(promptNames))
+                                    )
+                                    .put("promptArguments", JSONObject().put("type", "object"))
+                            )
+                            .put("required", JSONArray().put("prompt")),
+                        timeoutMs = MCP_ACTION_TIMEOUT_MS,
+                        provider = provider,
+                        sensitivity = ClientCapabilitySensitivity.AUTHENTICATED_REMOTE,
+                        completionMode = ClientCapabilityCompletionMode.ASYNCHRONOUS,
+                        metadata = JSONObject().put("mcpServer", runtime.configuration.name),
+                        validate = { request ->
+                            val prompt = request.arguments.optString("prompt").trim()
+                                .ifBlank { request.raw.optString("prompt").trim() }
+                            if (prompt.isBlank()) "Informe o prompt MCP." else null
+                        },
+                        execute = execute
+                    )
                 )
             }
             if (runtime.catalog.resources.isNotEmpty()) {
                 val resourceUris = runtime.catalog.resources.map { it.uri }
-                target.put(
-                    JSONObject()
-                        .put("tool", protocolResourceToolName(runtime.configuration))
-                        .put("mcpServer", runtime.configuration.name)
-                        .put("provider", "mcp:${runtime.configuration.namespace}")
-                        .put(
-                            "description",
-                            "Le um recurso publicado por ${runtime.configuration.name}."
-                        )
-                        .put(
-                            "inputSchema",
-                            JSONObject()
-                                .put("type", "object")
-                                .put(
-                                    "properties",
-                                    JSONObject().put(
-                                        "uri",
-                                        JSONObject()
-                                            .put("type", "string")
-                                            .put("enum", JSONArray(resourceUris))
-                                    )
+                add(
+                    ClientCapabilityDescriptor(
+                        name = protocolResourceToolName(runtime.configuration),
+                        description = "Le um recurso publicado por ${runtime.configuration.name}.",
+                        inputSchema = JSONObject()
+                            .put("type", "object")
+                            .put(
+                                "properties",
+                                JSONObject().put(
+                                    "uri",
+                                    JSONObject()
+                                        .put("type", "string")
+                                        .put("enum", JSONArray(resourceUris))
                                 )
-                                .put("required", JSONArray().put("uri"))
-                        )
+                            )
+                            .put("required", JSONArray().put("uri")),
+                        timeoutMs = MCP_ACTION_TIMEOUT_MS,
+                        provider = provider,
+                        sensitivity = ClientCapabilitySensitivity.AUTHENTICATED_REMOTE,
+                        completionMode = ClientCapabilityCompletionMode.ASYNCHRONOUS,
+                        metadata = JSONObject().put("mcpServer", runtime.configuration.name),
+                        validate = { request ->
+                            val uri = request.arguments.optString("uri").trim()
+                                .ifBlank { request.raw.optString("uri").trim() }
+                            if (uri.isBlank()) "Informe o recurso MCP." else null
+                        },
+                        execute = execute
+                    )
                 )
             }
         }
-    }
-
-    fun isMcpClientTool(toolName: String): Boolean {
-        val normalized = toolName.trim().lowercase()
-        return cachedTargets.containsKey(normalized) ||
-            normalized.startsWith(SufficitMcpClient.CLIENT_TOOL_PREFIX) ||
-            normalized.startsWith(SufficitMcpClient.GENERIC_CLIENT_TOOL_PREFIX)
     }
 
     fun displayNameForClientTool(toolName: String): String =
@@ -288,11 +328,7 @@ class SufficitMcpToolBridge(context: Context) {
     }
 
     private fun clientFor(configuration: McpServerConfiguration): SufficitMcpClient {
-        val fingerprint = listOf(
-            configuration.endpoint,
-            configuration.authenticationMode.persistedValue,
-            configuration.bearerToken
-        ).joinToString("\u0000")
+        val fingerprint = configuration.connectionFingerprint()
         val current = clients[configuration.id]
         if (current != null && current.fingerprint == fingerprint) return current.client
         val replacement = McpClientFactory.create(appContext, configuration)
@@ -404,6 +440,7 @@ class SufficitMcpToolBridge(context: Context) {
     }
 
     companion object {
+        private const val MCP_ACTION_TIMEOUT_MS = 60_000L
         private const val MEMORY_TYPE = "client-device-preference"
         private val ACTION_ENVELOPE_KEYS = setOf(
             "tool",
@@ -415,3 +452,9 @@ class SufficitMcpToolBridge(context: Context) {
         )
     }
 }
+
+private fun McpServerConfiguration.connectionFingerprint(): String = listOf(
+    endpoint,
+    authenticationMode.persistedValue,
+    bearerToken
+).joinToString("\u0000")

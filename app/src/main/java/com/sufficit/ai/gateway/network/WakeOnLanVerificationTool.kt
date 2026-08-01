@@ -3,6 +3,7 @@ package com.sufficit.ai.gateway.network
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.CancellationException
 
 enum class WakeOnLanVerificationStatus {
     ALREADY_REACHABLE,
@@ -77,8 +78,10 @@ object WakeOnLanVerificationTool {
         broadcastAddress: String? = null,
         port: Int = WakeOnLanTool.DEFAULT_PORT,
         repeat: Int = WakeOnLanTool.DEFAULT_REPEAT,
-        waitSeconds: Int = DEFAULT_WAIT_SECONDS
+        waitSeconds: Int = DEFAULT_WAIT_SECONDS,
+        isCanceled: () -> Boolean = { false }
     ): WakeOnLanVerificationResult {
+        if (isCanceled()) throw CancellationException("Verificacao Wake-on-LAN cancelada.")
         val normalizedMac = WakeOnLanDeviceInventoryStore.normalizeMac(macAddress)
             ?: throw IllegalArgumentException("MAC Wake-on-LAN invalido.")
         val safeWait = waitSeconds.coerceIn(MIN_WAIT_SECONDS, MAX_WAIT_SECONDS)
@@ -89,6 +92,7 @@ object WakeOnLanVerificationTool {
             activeProbe = false
         )
         val wakeResult = runCatching {
+            if (isCanceled()) throw CancellationException("Envio Wake-on-LAN cancelado.")
             WakeOnLanTool.send(
                 macAddress = normalizedMac,
                 broadcastAddress = broadcastAddress,
@@ -97,6 +101,7 @@ object WakeOnLanVerificationTool {
                 targetIpAddress = ipAddress
             )
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
             val elapsed = System.currentTimeMillis() - startedAt
             return WakeOnLanVerificationResult(
                 targets = listOf(
@@ -146,6 +151,7 @@ object WakeOnLanVerificationTool {
         var attempts = 0
         var latest = before
         do {
+            if (isCanceled()) throw CancellationException("Verificacao Wake-on-LAN cancelada.")
             attempts += 1
             latest = observePresence(
                 macAddress = normalizedMac,

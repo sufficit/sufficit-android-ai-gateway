@@ -4,6 +4,7 @@ import android.content.Context
 import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatMessage
 import com.sufficit.ai.gateway.runtime.ChatAudioState
+import com.sufficit.ai.gateway.runtime.ChatAttachment
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.openclaw.OpenClawInternalEventClassifier
@@ -33,6 +34,27 @@ class ChatHistoryStore(context: Context) {
                     val o = array.optJSONObject(i) ?: continue
                     val text = o.optString("text")
                     val imagePath = o.optString("imagePath").takeIf { it.isNotBlank() }
+                    val attachments = o.optJSONArray("attachments")?.let { values ->
+                        buildList {
+                            for (index in 0 until values.length()) {
+                                val attachment = values.optJSONObject(index) ?: continue
+                                val kind = attachment.optString("kind").trim()
+                                val name = attachment.optString("name").trim()
+                                val uri = attachment.optString("uri").trim()
+                                if (kind.isBlank() || name.isBlank() || uri.isBlank()) continue
+                                add(
+                                    ChatAttachment(
+                                        kind = kind,
+                                        name = name,
+                                        uri = uri,
+                                        mimeType = attachment.optString("mimeType").trim()
+                                            .takeIf { it.isNotBlank() },
+                                        sizeBytes = attachment.optLong("sizeBytes").takeIf { it > 0L }
+                                    )
+                                )
+                            }
+                        }
+                    }.orEmpty()
                     // Mantem a referencia mesmo se o arquivo sumiu: o card de
                     // midia mostra um placeholder "midia indisponivel" em vez de
                     // descartar silenciosamente para texto.
@@ -94,6 +116,7 @@ class ChatHistoryStore(context: Context) {
                             atEpochMs = o.optLong("atEpochMs"),
                             details = o.optString("details").takeIf { it.isNotBlank() },
                             imagePath = imagePath,
+                            attachments = attachments,
                             audioPath = audioPath?.takeIf { audioStillAvailable },
                             audioDurationMs = o.optLong("audioDurationMs").takeIf { it > 0L },
                             audioExpiresAtEpochMs = audioExpiresAt?.takeIf { audioStillAvailable },
@@ -242,6 +265,7 @@ class ChatHistoryStore(context: Context) {
                     role = ChatRole.SYSTEM,
                     text = event.systemMessage,
                     details = null,
+                    attachments = emptyList(),
                     audioPath = null,
                     audioDurationMs = null,
                     audioExpiresAtEpochMs = null,
@@ -300,6 +324,20 @@ class ChatHistoryStore(context: Context) {
                             .apply {
                                 m.details?.let { put("details", it) }
                                 m.imagePath?.let { put("imagePath", it) }
+                                if (m.attachments.isNotEmpty()) {
+                                    put("attachments", JSONArray().apply {
+                                        m.attachments.forEach { attachment ->
+                                            put(
+                                                JSONObject()
+                                                    .put("kind", attachment.kind)
+                                                    .put("name", attachment.name)
+                                                    .put("uri", attachment.uri)
+                                                    .put("mimeType", attachment.mimeType)
+                                                    .put("sizeBytes", attachment.sizeBytes)
+                                            )
+                                        }
+                                    })
+                                }
                                 val audioAvailable = m.audioPath != null &&
                                     (m.audioExpiresAtEpochMs ?: 0L) > System.currentTimeMillis() &&
                                     File(m.audioPath).isFile

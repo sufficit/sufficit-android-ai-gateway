@@ -57,6 +57,14 @@ data class PendingAudioCapture(
     val backendLabel: String
 )
 
+data class ChatAttachment(
+    val kind: String,
+    val name: String,
+    val uri: String,
+    val mimeType: String? = null,
+    val sizeBytes: Long? = null
+)
+
 /** Mensagem do historico de conversa (estilo WhatsApp/Telegram). */
 data class ChatMessage(
     val id: Long,
@@ -74,6 +82,8 @@ data class ChatMessage(
      * Null = mensagem so de texto.
      */
     val imagePath: String? = null,
+    /** Anexos canônicos devolvidos pelo agente remoto. */
+    val attachments: List<ChatAttachment> = emptyList(),
     /** WAV do trecho que originou esta mensagem; expira para preservar privacidade. */
     val audioPath: String? = null,
     val audioDurationMs: Long? = null,
@@ -174,7 +184,8 @@ internal object GatewayChatRuntime {
         details: String? = null,
         audioPath: String? = null,
         audioDurationMs: Long? = null,
-        audioExpiresAtEpochMs: Long? = null
+        audioExpiresAtEpochMs: Long? = null,
+        attachments: List<ChatAttachment> = emptyList()
     ): Long {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return 0L
@@ -184,6 +195,7 @@ internal object GatewayChatRuntime {
             text = trimmed,
             atEpochMs = System.currentTimeMillis(),
             details = details?.trim()?.takeIf { it.isNotBlank() },
+            attachments = attachments,
             audioPath = audioPath?.trim()?.takeIf { it.isNotBlank() },
             audioDurationMs = audioDurationMs,
             audioExpiresAtEpochMs = audioExpiresAtEpochMs

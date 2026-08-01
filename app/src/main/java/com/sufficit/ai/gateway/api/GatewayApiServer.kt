@@ -321,6 +321,20 @@ class GatewayApiServer(
                     .apply {
                         m.details?.let { put("details", it) }
                         m.imagePath?.let { put("imagePath", it) }
+                        if (m.attachments.isNotEmpty()) {
+                            put("attachments", JSONArray().apply {
+                                m.attachments.forEach { attachment ->
+                                    put(
+                                        JSONObject()
+                                            .put("kind", attachment.kind)
+                                            .put("name", attachment.name)
+                                            .put("uri", attachment.uri)
+                                            .put("mimeType", attachment.mimeType)
+                                            .put("sizeBytes", attachment.sizeBytes)
+                                    )
+                                }
+                            })
+                        }
                     }
             )
         }

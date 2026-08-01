@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "type": "system.internal",
+  "turnId": "turn-fixture-003",
+  "internalType": "context_compaction",
+  "message": {
+    "text": "Context compacted.",
+    "speech": "Context compacted."
+  }
+}

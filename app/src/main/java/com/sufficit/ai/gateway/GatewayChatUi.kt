@@ -74,6 +74,7 @@ import androidx.activity.compose.BackHandler
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.sufficit.ai.gateway.runtime.ChatMessage
+import com.sufficit.ai.gateway.runtime.ChatAttachment
 import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatAudioState
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
@@ -266,19 +267,30 @@ fun ChatMessagesList(
                     timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
                 )
             } else {
-                ChatBubble(
-                    text = message.text,
-                    role = message.role,
-                    timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs)),
-                    details = message.details,
-                    audioPath = message.audioPath?.takeIf {
-                        (message.audioExpiresAtEpochMs ?: 0L) > System.currentTimeMillis() &&
-                            java.io.File(it).isFile
-                    },
-                    audioDurationMs = message.audioDurationMs,
-                    audioState = message.audioState,
-                    audioError = message.audioError
-                )
+                val timeLabel = ChatTimeFormatter.format(Instant.ofEpochMilli(message.atEpochMs))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (
+                        message.text.isNotBlank() || message.details != null ||
+                        message.audioPath != null || message.audioState != null
+                    ) {
+                        ChatBubble(
+                            text = message.text,
+                            role = message.role,
+                            timeLabel = timeLabel,
+                            details = message.details,
+                            audioPath = message.audioPath?.takeIf {
+                                (message.audioExpiresAtEpochMs ?: 0L) > System.currentTimeMillis() &&
+                                    java.io.File(it).isFile
+                            },
+                            audioDurationMs = message.audioDurationMs,
+                            audioState = message.audioState,
+                            audioError = message.audioError
+                        )
+                    }
+                    message.attachments.forEach { attachment ->
+                        AgentAttachmentCard(attachment, timeLabel)
+                    }
+                }
             }
         }
         if (messages.isEmpty() && partialTranscript.isBlank()) {
@@ -825,6 +837,131 @@ private fun decodeAgentMedia(imagePath: String, isImage: Boolean): DecodedAgentM
         }
     }.getOrNull()
     return DecodedAgentMedia(fileExists, bitmap)
+}
+
+/** Anexo remoto compacto, tocavel e separado do texto falado da resposta. */
+@Composable
+private fun AgentAttachmentCard(attachment: ChatAttachment, timeLabel: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val rawUri = attachment.uri.trim()
+    val localPath = when {
+        rawUri.startsWith("file://", ignoreCase = true) ->
+            android.net.Uri.parse(rawUri).path
+        rawUri.startsWith("/") -> rawUri
+        else -> null
+    }
+    val localFile = localPath?.let { java.io.File(it) }
+    val isLocalAvailable = localFile?.isFile == true
+    val remoteScheme = runCatching { android.net.Uri.parse(rawUri).scheme?.lowercase() }.getOrNull()
+    val remoteOpenable = remoteScheme in setOf("https", "http", "content")
+    val openable = isLocalAvailable || remoteOpenable
+    val isLocalImage = isLocalAvailable && (
+        attachment.mimeType?.startsWith("image/", ignoreCase = true) == true ||
+            listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
+                .any { localFile!!.name.lowercase().endsWith(it) }
+        )
+    if (isLocalImage) {
+        AgentMediaCard(
+            imagePath = requireNotNull(localFile).absolutePath,
+            caption = attachment.name,
+            timeLabel = timeLabel
+        )
+        return
+    }
+
+    val kindLabel = when {
+        attachment.mimeType?.startsWith("image/", ignoreCase = true) == true -> "IMAGEM"
+        attachment.mimeType == "application/pdf" -> "PDF"
+        attachment.kind.isNotBlank() -> attachment.kind.uppercase(Locale.getDefault()).take(24)
+        else -> "ANEXO"
+    }
+    val openModifier = if (!openable) Modifier else Modifier.clickable(
+        role = Role.Button,
+        onClick = {
+            runCatching {
+                val uri = if (isLocalAvailable) {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        requireNotNull(localFile)
+                    )
+                } else {
+                    android.net.Uri.parse(rawUri)
+                }
+                context.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, attachment.mimeType ?: "*/*")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
+        }
+    )
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .heightIn(min = 56.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MediaFrame)
+                .border(1.dp, MediaBorder, RoundedCornerShape(14.dp))
+                .then(openModifier)
+                .semantics {
+                    contentDescription = if (openable) {
+                        "Abrir $kindLabel ${attachment.name}"
+                    } else {
+                        "$kindLabel ${attachment.name} indisponivel"
+                    }
+                }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MediaAccent.copy(alpha = 0.18f))
+                    .padding(horizontal = 7.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = kindLabel,
+                    color = MediaAccent,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = attachment.name,
+                    color = BubbleText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    text = buildString {
+                        attachment.sizeBytes?.takeIf { it > 0L }?.let {
+                            append(formatAttachmentBytes(it))
+                            append(" • ")
+                        }
+                        append(if (openable) "Toque para abrir" else "Indisponivel neste aparelho")
+                    },
+                    color = BubbleTime,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+            Text(text = timeLabel, color = BubbleTime, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+private fun formatAttachmentBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MB".format(Locale.US, bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KB".format(Locale.US, bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 /**

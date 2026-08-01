@@ -1,0 +1,7 @@
+{
+  "replyText": "A luz foi acesa.",
+  "spokenReplyText": "A luz foi acesa.",
+  "shouldSpeak": true,
+  "tags": ["voice_reply_default"],
+  "confidence": 0.98
+}

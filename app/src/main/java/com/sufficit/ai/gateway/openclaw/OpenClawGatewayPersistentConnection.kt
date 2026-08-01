@@ -103,11 +103,15 @@ class OpenClawGatewayPersistentConnection(
         socketRef.getAndSet(null)?.close(1000, "disconnect")
     }
 
-    fun sendTranscript(config: OpenClawGatewayConfig, transcript: String): String {
+    fun sendTranscript(
+        config: OpenClawGatewayConfig,
+        transcript: String,
+        segmentId: String = UUID.randomUUID().toString()
+    ): String {
         val normalizedTranscript = transcript.trim()
         require(normalizedTranscript.isNotBlank()) { "Transcript vazio." }
+        require(segmentId.isNotBlank()) { "segmentId vazio." }
         connect(config)
-        val segmentId = UUID.randomUUID().toString()
         pendingMessages.add(buildFinalTranscriptPayload(config, normalizedTranscript, segmentId))
         flushPendingMessages()
         return segmentId
@@ -423,7 +427,8 @@ class OpenClawGatewayPersistentConnection(
             shouldForwardToFinalAgent = envelope.shouldForwardToFinalAgent,
             errorText = envelope.errorText,
             detailsText = envelope.detailsText,
-            actions = envelope.actions
+            actions = envelope.actions,
+            canonicalReply = envelope.canonicalReply
         )
     }
 

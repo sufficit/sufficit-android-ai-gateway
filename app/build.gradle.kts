@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
     id("io.gitlab.arturbosch.detekt")
 }
 
@@ -66,6 +67,10 @@ detekt {
     baseline = file("$rootDir/config/detekt/baseline.xml")
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
@@ -90,8 +95,14 @@ dependencies {
     implementation(files("libs/sherpa_onnx-nnapi-release.aar"))
     implementation("net.openid:appauth:0.11.1")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
 
     testImplementation("junit:junit:4.13.2")
+    // Android fornece org.json em producao; esta implementacao permite testar
+    // os mesmos envelopes JSON nas unit tests JVM sem depender dos stubs do SDK.
+    testImplementation("org.json:json:20260719")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

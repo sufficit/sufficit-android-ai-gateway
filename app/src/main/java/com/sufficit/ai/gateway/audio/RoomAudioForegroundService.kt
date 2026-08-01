@@ -33,6 +33,23 @@ import com.sufficit.ai.gateway.audio.wake.WakeWordProfileConfig
 import com.sufficit.ai.gateway.audio.wake.WakeWordStore
 import com.sufficit.ai.gateway.audio.wake.WakeWordTemplateProfile
 import com.sufficit.ai.gateway.audio.wake.WakeWordThresholdPolicy
+import com.sufficit.ai.gateway.agentinterface.AgentChannelContext
+import com.sufficit.ai.gateway.agentinterface.AgentClientActionRequest
+import com.sufficit.ai.gateway.agentinterface.AgentInputMode
+import com.sufficit.ai.gateway.agentinterface.AgentTurnEnvelope
+import com.sufficit.ai.gateway.agentinterface.RemoteAgentEventClassifier
+import com.sufficit.ai.gateway.agentinterface.transport.RemoteAgentConnectionConfig
+import com.sufficit.ai.gateway.agentinterface.transport.RemoteAgentReply
+import com.sufficit.ai.gateway.agentinterface.transport.RemoteAgentTransport
+import com.sufficit.ai.gateway.agentinterface.transport.RemoteAgentProvider
+import com.sufficit.ai.gateway.agentinterface.transport.RemoteAgentTransportFactory
+import com.sufficit.ai.gateway.capabilities.ClientActionCoordinator
+import com.sufficit.ai.gateway.capabilities.ClientActionState
+import com.sufficit.ai.gateway.capabilities.ClientActionUpdate
+import com.sufficit.ai.gateway.capabilities.ClientCapabilityRegistry
+import com.sufficit.ai.gateway.capabilities.adapters.NativeCapabilityDescriptors
+import com.sufficit.ai.gateway.capabilities.adapters.WakeOnLanCapability
+import com.sufficit.ai.gateway.capabilities.toAgentClientActionRequest
 import com.sufficit.ai.gateway.vision.GestureCommandIds
 import com.sufficit.ai.gateway.vision.GestureCommandPolicy
 import com.sufficit.ai.gateway.config.AssistantVoiceStyle
@@ -42,6 +59,7 @@ import com.sufficit.ai.gateway.config.GatewaySettingsStore
 import com.sufficit.ai.gateway.config.LocalExecutionMode
 import com.sufficit.ai.gateway.config.LocalModelCatalog
 import com.sufficit.ai.gateway.config.TranscriptionMode
+import com.sufficit.ai.gateway.diagnostics.GatewayDoctor
 import com.sufficit.ai.gateway.config.applyWebSocketSettingsPatch
 import com.sufficit.ai.gateway.history.TranscriptHistoryEntry
 import com.sufficit.ai.gateway.history.TranscriptHistoryLogger
@@ -49,14 +67,13 @@ import com.sufficit.ai.gateway.history.SpeakerContinuityHistoryEntry
 import com.sufficit.ai.gateway.history.SpeakerContinuityHistoryLogger
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsEntry
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger
+import com.sufficit.ai.gateway.ledger.InteractionLedger
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
-import com.sufficit.ai.gateway.openclaw.OpenClawInternalEventClassifier
-import com.sufficit.ai.gateway.openclaw.OpenClawGatewayConfig
-import com.sufficit.ai.gateway.openclaw.OpenClawGatewayPersistentConnection
 import com.sufficit.ai.gateway.mcp.SufficitMcpToolBridge
 import com.sufficit.ai.gateway.runtime.ChatAgentActivityState
 import com.sufficit.ai.gateway.runtime.ChatRole
 import com.sufficit.ai.gateway.runtime.ChatAudioState
+import com.sufficit.ai.gateway.runtime.ChatAttachment
 import com.sufficit.ai.gateway.runtime.ChatDeliveryState
 import com.sufficit.ai.gateway.runtime.GatewayRuntime
 import com.sufficit.ai.gateway.runtime.GatewayUiState
@@ -133,9 +150,23 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val elevenLabsRealtimeClient = ElevenLabsRealtimeClient()
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
     private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
+    private val pendingRemoteTurnIds = ConcurrentLinkedQueue<String>()
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
     private val sufficitMcpToolBridge by lazy { SufficitMcpToolBridge(this) }
-    private var persistentOpenClawConnection: OpenClawGatewayPersistentConnection? = null
+    private val interactionLedger by lazy { InteractionLedger(this) }
+    private val clientCapabilityRegistry by lazy {
+        ClientCapabilityRegistry(
+            NativeCapabilityDescriptors.create(::executeNativeCapability) +
+                WakeOnLanCapability.descriptor(::executeWakeOnLanCapability)
+        )
+    }
+    private val clientActionCoordinator by lazy {
+        ClientActionCoordinator(
+            registry = clientCapabilityRegistry,
+            onUpdate = ::handleClientActionUpdate
+        )
+    }
+    private var remoteAgentTransport: RemoteAgentTransport? = null
     private val selfTestExecuted = AtomicBoolean(false)
     private val openClawHandshakeStarted = AtomicBoolean(false)
     @Volatile private var phraseCommitPending = false
@@ -255,7 +286,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // Historico de conversa persistido: carrega o salvo e passa a gravar a
         // cada mensagem (sobrevive a reinicio do app e a `install -r`).
         val chatStore = com.sufficit.ai.gateway.history.ChatHistoryStore(this)
-        GatewayRuntime.attachChatPersistence(chatStore.load()) { messages ->
+        val restoredChat = chatStore.load()
+        GatewayRuntime.attachChatPersistence(restoredChat) { messages ->
             chatStore.save(messages)
         }
         // `assistantProcessing` fica no runtime da UI, enquanto o pedido e o
@@ -282,12 +314,31 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             }
         }
         openClawExecutor = Executors.newSingleThreadExecutor()
+        openClawExecutor?.execute {
+            runCatching { interactionLedger.importLegacyChat(restoredChat) }
+                .onSuccess { imported ->
+                    if (imported > 0) Log.i(TAG, "Ledger importou $imported correlacao(oes) do chat legado.")
+                }
+                .onFailure { Log.w(TAG, "Falha ao importar correlacoes do chat legado.", it) }
+            runCatching { interactionLedger.recoverInterrupted() }
+                .onSuccess { recovered ->
+                    if (recovered.interruptedTurns > 0 || recovered.interruptedActions > 0) {
+                        Log.w(
+                            TAG,
+                            "Ledger recuperado: turnos=${recovered.interruptedTurns} " +
+                                "acoes=${recovered.interruptedActions}."
+                        )
+                    }
+                }
+                .onFailure { Log.e(TAG, "Falha ao recuperar o ledger de interacoes.", it) }
+        }
         clientToolExecutor = Executors.newSingleThreadExecutor()
         wakeOnLanExecutor = Executors.newSingleThreadExecutor()
         textToSpeech = TextToSpeech(applicationContext, this)
         Log.i(TAG, "Camera gesture gate at create: open=${GatewayRuntime.cameraGestureGate().value}")
-        persistentOpenClawConnection = OpenClawGatewayPersistentConnection(
-            object : OpenClawGatewayPersistentConnection.Listener {
+        remoteAgentTransport = RemoteAgentTransportFactory.create(
+            provider = RemoteAgentProvider.OPENCLAW,
+            listener = object : RemoteAgentTransport.Listener {
                 override fun onConnected() {
                     Log.i(TAG, "Handshake OpenClaw validado: hello-ack")
                     GatewayRuntime.update {
@@ -300,8 +351,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     failAssistantProcessing(reason)
                 }
 
-                override fun onReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply) {
-                    handleOpenClawReply(reply)
+                override fun onReply(reply: RemoteAgentReply) {
+                    handleRemoteAgentReply(reply)
                 }
 
                 override fun onError(message: String, throwable: Throwable?) {
@@ -434,8 +485,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         clientToolExecutor = null
         wakeOnLanExecutor?.shutdownNow()
         wakeOnLanExecutor = null
-        persistentOpenClawConnection?.disconnect()
-        persistentOpenClawConnection = null
+        remoteAgentTransport?.disconnect()
+        remoteAgentTransport = null
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -4240,8 +4291,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     it.copy(openClawStatus = "Validando websocket OpenClaw...")
                 }
             try {
-                val config = buildOpenClawConfig(settings)
-                persistentOpenClawConnection?.connect(config)
+                val config = buildRemoteAgentConfig(settings)
+                remoteAgentTransport?.connect(config)
                 Log.i(TAG, "Handshake OpenClaw iniciado em modo persistente.")
             } catch (ex: Exception) {
                 Log.e(TAG, "Falha no handshake OpenClaw", ex)
@@ -4411,17 +4462,55 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             return
         }
         executor.execute {
+            var ledgerTurnId: String? = null
+            var ledgerDeliveryId: String? = null
             try {
-                val segmentId = persistentOpenClawConnection?.sendTranscript(
-                    config = buildOpenClawConfig(
+                val config = buildRemoteAgentConfig(
                         settings = settings,
                         state = state,
                         voiceDecision = decision,
                         transcript = phrase,
                         awakened = awakened,
                         wakeWord = wakeWord
-                    ),
-                    transcript = phrase
+                )
+                val turn = buildAgentTurn(
+                    phrase = phrase,
+                    state = state,
+                    config = config,
+                    awakened = awakened,
+                    wakeWord = wakeWord
+                )
+                ledgerTurnId = turn.turnId
+                val sourceMessage = GatewayRuntime.chatMessages().value
+                    .firstOrNull { it.id == assistantActivityMessageId }
+                val sources = sourceMessage?.deliverySourceMessageIds.orEmpty().mapIndexed { index, id ->
+                    id to sourceMessage?.deliverySourceTexts?.getOrNull(index).orEmpty().ifBlank { phrase }
+                }
+                if (!interactionLedger.beginTurn(turn, sources)) {
+                    Log.w(TAG, "Turno ${turn.turnId} ja existe no ledger; reenvio bloqueado.")
+                    failAssistantProcessing("Este turno ja havia sido enviado; reenvio duplicado bloqueado.")
+                    return@execute
+                }
+                interactionLedger.transitionTurn(
+                    turn.turnId,
+                    "sending",
+                    "Enviando turno ao agente remoto."
+                )
+                ledgerDeliveryId = interactionLedger.recordDelivery(turn.turnId, "queued").deliveryId
+                val transport = remoteAgentTransport
+                    ?: throw IllegalStateException("Transporte remoto indisponivel.")
+                val segmentId = transport.sendTurn(config, turn)
+                pendingRemoteTurnIds.add(turn.turnId)
+                interactionLedger.recordDelivery(
+                    turn.turnId,
+                    "sent",
+                    deliveryId = ledgerDeliveryId,
+                    receipt = segmentId
+                )
+                interactionLedger.transitionTurn(
+                    turn.turnId,
+                    "awaiting_reply",
+                    "Turno entregue; aguardando resposta."
                 )
                 GatewayRuntime.update {
                     it.copy(
@@ -4432,6 +4521,21 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 // ate handleOpenClawReply concluir este turno.
             } catch (ex: Exception) {
                 Log.e(TAG, "Falha ao enviar frase para OpenClaw", ex)
+                ledgerTurnId?.let { turnId ->
+                    runCatching {
+                        interactionLedger.recordDelivery(
+                            turnId,
+                            "failed",
+                            deliveryId = ledgerDeliveryId,
+                            error = ex.message ?: ex.javaClass.simpleName
+                        )
+                        interactionLedger.transitionTurn(
+                            turnId,
+                            "failed",
+                            "Falha ao enviar turno ao agente."
+                        )
+                    }
+                }
                 failAssistantProcessing("Falha OpenClaw: ${ex.message ?: ex.javaClass.simpleName}")
                 GatewayRuntime.update {
                     it.copy(
@@ -4475,7 +4579,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private fun buildOpenClawMetadata(
         state: GatewayUiState,
         settings: GatewaySettings,
-        voiceDecision: VoiceChannelSkillDecision,
         transcript: String? = null,
         awakenedOverride: Boolean? = null,
         wakeWordOverride: String? = null
@@ -4498,11 +4601,6 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             put("origin", "android")
             put("deviceId", openClawGatewayClient.describeAndroidDevice())
             put("voiceChannelSkillEnabled", settings.voiceChannelSkillEnabled)
-            put("reason", voiceDecision.reason)
-            put("isDirectAddress", voiceDecision.isDirectAddress)
-            put("contextResetRequested", voiceDecision.shouldResetConversationContext)
-            put("forceVoiceReplyByDefault", voiceDecision.forceVoiceReplyByDefault)
-            put("shouldAskForWakeConfirmation", voiceDecision.shouldAskForWakeConfirmation)
             // Contrato deliberadamente minimo para a wake word: a chamada
             // reconhecida e se a escuta atual foi acordada por ela. Nada de
             // flags paralelas de sessao ou origem de endereco.
@@ -4546,58 +4644,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             // Catalogo de ferramentas que o agente pode acionar no aparelho:
             // ele escolhe emitindo {"tool":"<name>",...} no array "actions" da
             // resposta. Executadas pela conexao de saida — sem rede de entrada.
-            put("availableTools", buildAgentToolCatalog())
-            voiceDecision.matchedWakeTerm?.let { put("matchedWakeTerm", it) }
-            voiceDecision.secondsSinceDirectAddress?.let { put("secondsSinceDirectAddress", it) }
+            put("availableTools", clientCapabilityRegistry.catalog())
             if (interruptedReplyContext.isNotBlank()) {
                 put("interruptedAssistantReplyPreview", interruptedReplyContext)
             }
-        }
-    }
-
-    /**
-     * Lista as ferramentas que o agente pode acionar emitindo "actions" na
-     * resposta. Enviada em todo metadata para o agente saber o que existe.
-     */
-    private fun buildAgentToolCatalog(): org.json.JSONArray {
-        fun tool(name: String, desc: String, args: JSONObject? = null) = JSONObject().apply {
-            put("tool", name)
-            put("description", desc)
-            if (args != null) put("args", args)
-        }
-        return org.json.JSONArray().apply {
-            put(tool("photo", "Tira uma foto com a camera e mostra no chat como sua. Acorde a tela antes (tool wake).",
-                JSONObject().put("camera", "front|back (padrao front)").put("label", "legenda opcional")))
-            put(tool("screenshot", "Captura a tela do app e mostra no chat.",
-                JSONObject().put("label", "legenda opcional")))
-            put(tool("wake", "Acorda/acende a tela e retoma a escuta."))
-            put(tool("effect", "Dispara um flash visual + som de aviso.",
-                JSONObject().put("label", "texto do aviso")))
-            put(tool("say", "Fala um texto pelo TTS.", JSONObject().put("text", "o que falar")))
-            put(tool("listen", "Inicia/retoma a escuta do microfone."))
-            put(tool("standby", "Coloca em espera (so palavra de ativacao reabre)."))
-            put(tool("interrupt", "Interrompe a fala do assistente em andamento."))
-            put(tool("config", "Edita configuracoes do app.", JSONObject().put("patch", "{chave:valor}")))
-            put(tool("wakeonlan", "Liga um computador na mesma rede por Wake-on-LAN. Despacha o Magic Packet por broadcast da sub-rede, broadcast limitado, unicast do ultimo IP e portas UDP 9/7; monitora por ate 30 segundos e distingue pacote despachado de equipamento confirmado.",
-                JSONObject()
-                    .put("mac", "MAC do computador, ex.: AA:BB:CC:DD:EE:FF")
-                    .put("name", "nome amigavel opcional do dispositivo")
-                    .put("ip", "ultimo IPv4 opcional; tambem recebe Magic Packet unicast")
-                    .put("broadcast", "IPv4 de broadcast opcional; padrao detecta a rede Wi-Fi")
-                    .put("port", "porta UDP preferida opcional; portas 9 e 7 tambem sao cobertas")
-                    .put("repeat", "repeticoes opcionais de 1 a 5, padrao 3")
-                    .put("waitSeconds", "monitoramento entre 5 e 60 segundos; padrao 30")))
-            put(tool("discover_wol_devices", "Descobre MACs/IPs Wake-on-LAN na rede local sem senha de roteador. Consulta automaticamente o companion Sufficit na LAN e preserva os MACs aprendidos.",
-                JSONObject().put("probe", "true para consulta ativa e companion local (padrao true)")))
-            put(tool("verify_wol_devices", "Envia Wake-on-LAN a todos os MACs cadastrados (ou aos MACs informados), monitora a inicializacao e verifica quais ficaram acessiveis. Use para identificar novos dispositivos antes de nomea-los.",
-                JSONObject().put("macs", "lista opcional de MACs; vazio testa todos")
-                    .put("waitSeconds", "monitoramento entre 5 e 60 segundos; padrao 30")))
-            put(tool("name_wol_device", "Da um nome a um MAC aprendido e salva a preferencia na memoria Sufficit autenticada.",
-                JSONObject()
-                    .put("mac", "MAC ja presente no inventario")
-                    .put("name", "nome escolhido pelo usuario")))
-            put(tool("clearChat", "Limpa o historico de conversa exibido."))
-            sufficitMcpToolBridge.appendClientToolCatalog(this)
         }
     }
 
@@ -4659,7 +4709,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun recordOpenClawDeliveryAudit(
-        reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply,
+        reply: RemoteAgentReply,
         displayReply: String
     ): Long {
         val evaluatedTranscript = reply.transcript?.trim().orEmpty()
@@ -4679,7 +4729,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             reply.actions.isNotEmpty() ->
                 ChatDeliveryState.ACTION_EXECUTED to (reply.preAgentReason ?: "device_action")
 
-            displayReply.isNotBlank() ->
+            displayReply.isNotBlank() || reply.envelope.content.attachments.isNotEmpty() ->
                 ChatDeliveryState.AGENT_REPLIED to (reply.preAgentReason ?: "agent_replied")
 
             else ->
@@ -4712,7 +4762,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun isPreAgentDecisionOnly(
-        reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply
+        reply: RemoteAgentReply
     ): Boolean {
         if (reply.shouldForwardToFinalAgent != false) return false
         return reply.preAgentAction?.trim()?.lowercase() in setOf(
@@ -4720,7 +4770,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         )
     }
 
-    private fun handleOpenClawReply(reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply) {
+    private fun handleRemoteAgentReply(reply: RemoteAgentReply) {
+        val replyTurnId = if (reply.internalEvent == null) {
+            reply.envelope.turnId?.trim()?.takeIf { it.isNotBlank() }?.also {
+                pendingRemoteTurnIds.remove(it)
+            } ?: pendingRemoteTurnIds.poll()
+        } else {
+            null
+        }
         var replyActivityId = GatewayRuntime.findAgentActivityMessageId(
             reply.transcript.orEmpty()
         ).takeIf { it > 0L } ?: assistantActivityMessageId
@@ -4752,6 +4809,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     "O agente remoto falhou ao processar o pedido."
                 )
             }
+            replyTurnId?.let { turnId ->
+                runCatching {
+                    interactionLedger.transitionTurn(
+                        turnId,
+                        "failed",
+                        "O agente remoto devolveu uma falha."
+                    )
+                }
+            }
             return
         }
         val loadedSettings = runCatching {
@@ -4762,6 +4828,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 replyActivityId,
                 "A resposta chegou, mas não consegui carregar a configuração local."
             )
+            replyTurnId?.let { turnId ->
+                runCatching {
+                    interactionLedger.transitionTurn(
+                        turnId,
+                        "failed",
+                        "A resposta chegou, mas a configuracao local falhou."
+                    )
+                }
+            }
             return
         }
         val patchResult = applyRemoteSettingsPatchIfNeeded(reply, loadedSettings)
@@ -4775,6 +4850,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val assistantReply = reply.replyText.trim()
         val spokenReply = reply.spokenReplyText.ifBlank { assistantReply }
         val displayReply = spokenReply.ifBlank { assistantReply }
+        val chatAttachments = reply.envelope.content.attachments.map { attachment ->
+            ChatAttachment(
+                kind = attachment.kind,
+                name = attachment.name,
+                uri = attachment.uri,
+                mimeType = attachment.mimeType,
+                sizeBytes = attachment.sizeBytes
+            )
+        }
         // Manutencao de contexto e um evento do motor, nao uma decisao sobre
         // a fala do usuario. Nao a transforma em auditoria de entrega nem em
         // resposta do assistente.
@@ -4842,9 +4926,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 internalEvent == null &&
                 !requiresAttention &&
                 !isPreAgentDecisionOnly(reply) &&
-                displayReply.isNotBlank()
+                (displayReply.isNotBlank() || chatAttachments.isNotEmpty())
         ) {
-            GatewayRuntime.appendChatMessage(ChatRole.ASSISTANT, displayReply, reply.detailsText)
+            GatewayRuntime.appendChatMessage(
+                role = ChatRole.ASSISTANT,
+                text = displayReply,
+                details = reply.detailsText,
+                attachments = chatAttachments
+            )
         } else {
             0L
         }
@@ -4877,18 +4966,52 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 statusText = "Executando a ação solicitada…"
             )
         }
-        executeAgentActions(reply.actions)
+        executeAgentActions(
+            reply.actions.map { request ->
+                if (request.raw.length() > 0) {
+                    JSONObject(request.raw.toString())
+                } else {
+                    JSONObject().put("tool", request.tool).apply {
+                        request.callId?.let { put("callId", it) }
+                        val keys = request.arguments.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            put(key, request.arguments.opt(key))
+                        }
+                    }
+                }
+            },
+            originTurnId = replyTurnId
+        )
         if (auditMessageId > 0L || systemMessageId > 0L || assistantMessageId > 0L || reply.actions.isNotEmpty()) {
             finishAgentActivity(replyActivityId)
+            replyTurnId?.let { turnId ->
+                runCatching {
+                    interactionLedger.transitionTurn(
+                        turnId,
+                        "completed",
+                        "Resposta do agente processada pelo aplicativo."
+                    )
+                }
+            }
         } else {
             failAgentActivity(
                 replyActivityId,
                 "O agente respondeu sem texto, decisão ou ação executável."
             )
+            replyTurnId?.let { turnId ->
+                runCatching {
+                    interactionLedger.transitionTurn(
+                        turnId,
+                        "failed",
+                        "Resposta remota sem conteudo ou acao executavel."
+                    )
+                }
+            }
         }
         Log.i(
             TAG,
-            "OpenClaw reply recebida: ${reply.rawReplyText.take(180)} | patch=${patchSummary ?: "nenhum"} | actions=${reply.actions.size}"
+            "OpenClaw reply recebida: ${reply.rawText.take(180)} | patch=${patchSummary ?: "nenhum"} | actions=${reply.actions.size}"
         )
     }
 
@@ -4917,160 +5040,175 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
      * superficie GatewayApiActions usada pela UI/gestos/HTTP. O agente escolhe
      * a tool emitindo {"tool":"<nome>", ...args} no campo "actions" do envelope.
      */
-    private fun executeAgentActions(actions: List<JSONObject>) {
+    private fun executeAgentActions(
+        actions: List<JSONObject>,
+        originTurnId: String? = null
+    ) {
         if (actions.isEmpty()) return
         for (action in actions) {
             val tool = action.optString("tool").trim()
                 .ifBlank { action.optString("name").trim() }
                 .ifBlank { action.optString("type").trim() }
             if (tool.isBlank()) continue
-            if (sufficitMcpToolBridge.isMcpClientTool(tool)) {
-                executeSufficitMcpClientTool(action, tool)
+            val capabilityRequest = action.toAgentClientActionRequest()
+            if (clientCapabilityRegistry.resolve(tool) != null) {
+                val correlatedRequest = capabilityRequest.copy(
+                    callId = capabilityRequest.callId ?: UUID.randomUUID().toString()
+                )
+                if (!interactionLedger.reserveAction(correlatedRequest, originTurnId)) {
+                    val previous = interactionLedger.findAction(requireNotNull(correlatedRequest.callId))
+                    val summary = "Acao duplicada bloqueada; estado anterior: " +
+                        (previous?.state ?: "desconhecido") + "."
+                    Log.w(TAG, "${correlatedRequest.tool}/${correlatedRequest.callId}: $summary")
+                    remoteAgentTransport?.sendClientActionResult(
+                        callId = requireNotNull(correlatedRequest.callId),
+                        tool = correlatedRequest.tool,
+                        result = previous?.summary.orEmpty(),
+                        error = "duplicate_call_id"
+                    )
+                    continue
+                }
+                val update = clientActionCoordinator.submit(correlatedRequest)
+                reportClientActionFailureIfNeeded(update)
                 continue
             }
-            val label = action.optString("label").trim()
-            runCatching {
-                when (tool.lowercase()) {
-                    "screenshot", "print" -> {
-                        // Captura e publica no chat como imagem do agente.
-                        val bytes = screenshot(label.ifBlank { "Captura de tela" })
-                        if (bytes != null) {
-                            val file = java.io.File(
-                                getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES) ?: filesDir,
-                                "agent-screenshot-${System.currentTimeMillis()}.png"
-                            )
-                            runCatching { file.writeBytes(bytes) }
-                                .onSuccess {
-                                    GatewayRuntime.appendChatImage(
-                                        ChatRole.ASSISTANT,
-                                        label.ifBlank { "Captura de tela" },
-                                        file.absolutePath
-                                    )
-                                }
-                        } else {
-                            GatewayRuntime.appendChatMessage(
-                                ChatRole.SYSTEM,
-                                "Nao consegui capturar a tela (app em segundo plano)."
-                            )
-                        }
-                    }
-                    "photo", "camera", "takephoto", "take_photo" -> {
-                        // camera: "front" (padrao) | "back"/"rear"/"traseira".
-                        val cam = action.optString("camera").trim()
-                            .ifBlank { action.optString("lens").trim() }
-                            .lowercase()
-                        val useBack = cam == "back" || cam == "rear" || cam == "traseira" ||
-                            action.optBoolean("back", false)
-                        takePhoto(useBack, label)
-                    }
-                    "wake" -> wake()
-                    "effect", "flash" -> playEffect(label.ifBlank { "Aviso" })
-                    "say", "speak" -> {
-                        val text = action.optString("text").trim().ifBlank { label }
-                        if (text.isNotBlank()) say(text)
-                    }
-                    "listen", "startlistening", "start_listening" -> startListening()
-                    "stoplistening", "stop_listening" -> stopListening()
-                    "standby" -> standby()
-                    "interrupt" -> interruptAssistant()
-                    "finalize", "finalizesegment" -> finalizeSegment()
-                    "clearchat", "clear_chat" -> clearChat()
-                    "gesture" -> {
-                        val g = action.optString("gestureId").trim()
-                            .ifBlank { action.optString("gesture").trim() }
-                        if (g.isNotBlank()) triggerGesture(g)
-                    }
-                    "config", "editconfig", "edit_config", "settings" -> {
-                        val patch = action.optJSONObject("patch")
-                            ?: action.optJSONObject("settings")
-                            ?: action
-                        applyConfigPatch(patch)
-                    }
-                    "discover_wol_devices", "discover_wakeonlan", "discover_wake_on_lan", "wol_discover", "discoverwol" -> {
-                        val activeProbe = when {
-                            action.has("probe") -> action.optBoolean("probe", true)
-                            action.has("activeProbe") -> action.optBoolean("activeProbe", true)
-                            else -> true
-                        }
-                        discoverWakeOnLanDevices(activeProbe)
-                    }
-                    "verify_wol_devices", "verify_wakeonlan", "verify_wake_on_lan", "wol_verify" -> {
-                        val macs = buildList {
-                            val array = action.optJSONArray("macs")
-                            if (array != null) {
-                                for (index in 0 until array.length()) {
-                                    array.optString(index).trim().takeIf { it.isNotBlank() }?.let(::add)
-                                }
-                            }
-                            action.optString("mac").trim().takeIf { it.isNotBlank() }?.let(::add)
-                        }
-                        verifyWakeOnLanDevices(macs, action.optInt("waitSeconds", 30))
-                    }
-                    "name_wol_device", "name_wakeonlan", "remember_wol_device" -> {
-                        val mac = action.optString("mac").trim()
-                            .ifBlank { action.optString("macAddress").trim() }
-                        val name = action.optString("name").trim()
-                            .ifBlank { action.optString("deviceName").trim() }
-                        nameWakeOnLanDevice(mac, name)
-                    }
-                    "wakeonlan", "wake_on_lan", "wol" -> {
-                        val macAddress = action.optString("mac").trim()
-                            .ifBlank { action.optString("macAddress").trim() }
-                            .ifBlank { action.optString("targetMac").trim() }
-                        if (macAddress.isBlank()) {
-                            throw IllegalArgumentException("A tool Wake-on-LAN exige o MAC do computador.")
-                        }
-                        val broadcastAddress = action.optString("broadcast").trim()
-                            .ifBlank { action.optString("broadcastAddress").trim() }
-                        val targetIpAddress = action.optString("ip").trim()
-                            .ifBlank { action.optString("ipAddress").trim() }
-                            .ifBlank { action.optString("targetIp").trim() }
-                        val port = action.optInt(
-                            "port",
-                            com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_PORT
-                        )
-                        val repeat = if (action.has("repeat")) {
-                            action.optInt(
-                                "repeat",
-                                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
-                            )
-                        } else {
-                            // Aceita a forma natural que modelos costumam gerar.
-                            action.optInt(
-                                "repetitions",
-                                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
-                            )
-                        }
-                        val targetName = action.optString("name").trim()
-                            .ifBlank { action.optString("deviceName").trim() }
-                            .ifBlank { action.optString("label").trim() }
-                        val callId = action.optString("callId").trim()
-                            .ifBlank { action.optString("call_id").trim() }
-                            .ifBlank { UUID.randomUUID().toString() }
-                        executeWakeOnLanWithVerification(
-                            callId = callId,
-                            tool = tool.lowercase(),
-                            macAddress = macAddress,
-                            targetName = targetName,
-                            targetIpAddress = targetIpAddress,
-                            broadcastAddress = broadcastAddress,
-                            port = port,
-                            repeat = repeat,
-                            waitSeconds = action.optInt(
-                                "waitSeconds",
-                                com.sufficit.ai.gateway.network.WakeOnLanVerificationTool.DEFAULT_WAIT_SECONDS
-                            )
-                        )
-                    }
-                    else -> Log.w(TAG, "Tool de agente desconhecida ignorada: $tool")
+            Log.w(TAG, "Tool de agente desconhecida ignorada: $tool")
+        }
+    }
+
+    private fun handleClientActionUpdate(update: ClientActionUpdate) {
+        runCatching { interactionLedger.transitionAction(update) }
+            .onFailure { Log.w(TAG, "Falha ao atualizar acao ${update.callId} no ledger.", it) }
+        Log.i(
+            TAG,
+            "Client action ${update.callId}: tool=${update.tool} state=${update.state} summary=${update.summary}"
+        )
+        if (update.state == ClientActionState.CANCELED || update.state == ClientActionState.TIMED_OUT) {
+            GatewayRuntime.appendChatMessage(ChatRole.SYSTEM, "${update.tool}: ${update.summary}")
+            remoteAgentTransport?.sendClientActionResult(
+                callId = update.callId,
+                tool = update.tool,
+                result = "",
+                error = update.error ?: update.state.name.lowercase()
+            )
+        }
+    }
+
+    private fun reportClientActionFailureIfNeeded(update: ClientActionUpdate) {
+        val visibleFailure = update.state in setOf(
+            ClientActionState.WAITING_PERMISSION,
+            ClientActionState.UNVERIFIED,
+            ClientActionState.FAILED,
+            ClientActionState.TIMED_OUT,
+            ClientActionState.CANCELED,
+            ClientActionState.DENIED
+        )
+        if (!visibleFailure) return
+        val message = "${update.tool}: ${update.summary}"
+        GatewayRuntime.appendChatMessage(ChatRole.SYSTEM, message)
+        remoteAgentTransport?.sendClientActionResult(
+            callId = update.callId,
+            tool = update.tool,
+            result = "",
+            error = update.error ?: update.state.name.lowercase()
+        )
+    }
+
+    private fun executeNativeCapability(
+        canonicalName: String,
+        request: AgentClientActionRequest
+    ) {
+        val arguments = request.arguments
+        fun stringArgument(vararg names: String): String = names.firstNotNullOfOrNull { name ->
+            arguments.optString(name).trim().takeIf { it.isNotBlank() }
+                ?: request.raw.optString(name).trim().takeIf { it.isNotBlank() }
+        }.orEmpty()
+        fun booleanArgument(name: String, fallback: Boolean): Boolean = when {
+            arguments.has(name) -> arguments.optBoolean(name, fallback)
+            request.raw.has(name) -> request.raw.optBoolean(name, fallback)
+            else -> fallback
+        }
+        fun intArgument(name: String, fallback: Int): Int = when {
+            arguments.has(name) -> arguments.optInt(name, fallback)
+            request.raw.has(name) -> request.raw.optInt(name, fallback)
+            else -> fallback
+        }
+
+        when (canonicalName) {
+            "screenshot" -> {
+                val label = stringArgument("label").ifBlank { "Captura de tela" }
+                val bytes = screenshot(label)
+                if (bytes != null) {
+                    val file = File(
+                        getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES) ?: filesDir,
+                        "agent-screenshot-${System.currentTimeMillis()}.png"
+                    )
+                    file.writeBytes(bytes)
+                    GatewayRuntime.appendChatImage(ChatRole.ASSISTANT, label, file.absolutePath)
+                } else {
+                    GatewayRuntime.appendChatMessage(
+                        ChatRole.SYSTEM,
+                        "Nao consegui capturar a tela (app em segundo plano)."
+                    )
                 }
-            }.onFailure { ex ->
-                Log.w(TAG, "Falha ao executar tool de agente '$tool'", ex)
-                GatewayRuntime.appendChatMessage(
-                    ChatRole.SYSTEM,
-                    "Falha ao executar ${tool.lowercase()}: ${ex.message ?: "erro desconhecido"}"
+            }
+            "photo" -> {
+                val camera = stringArgument("camera", "lens").lowercase()
+                val useBack = camera in setOf("back", "rear", "traseira") ||
+                    booleanArgument("back", false)
+                takePhoto(useBack, stringArgument("label"))
+            }
+            "wake" -> wake()
+            "effect" -> playEffect(stringArgument("label").ifBlank { "Aviso" })
+            "say" -> say(stringArgument("text", "label"))
+            "listen" -> startListening()
+            "stop_listening" -> stopListening()
+            "standby" -> standby()
+            "interrupt" -> interruptAssistant()
+            "finalize" -> finalizeSegment()
+            "clear_chat" -> clearChat()
+            "gesture" -> triggerGesture(stringArgument("gestureId", "gesture"))
+            "config" -> {
+                val patch = arguments.optJSONObject("patch")
+                    ?: arguments.optJSONObject("settings")
+                    ?: request.raw.optJSONObject("patch")
+                    ?: request.raw.optJSONObject("settings")
+                    ?: arguments
+                applyConfigPatch(patch)
+            }
+            "export_diagnostics" -> {
+                val report = GatewayDoctor.export(this, clientCapabilityRegistry.catalog())
+                GatewayRuntime.appendChatImage(
+                    ChatRole.ASSISTANT,
+                    "Diagnostico do gateway pronto para compartilhar.",
+                    report.absolutePath
                 )
             }
+            "discover_wol_devices" -> discoverWakeOnLanDevices(
+                when {
+                    arguments.has("probe") -> booleanArgument("probe", true)
+                    arguments.has("activeProbe") -> booleanArgument("activeProbe", true)
+                    request.raw.has("activeProbe") -> booleanArgument("activeProbe", true)
+                    else -> true
+                }
+            )
+            "verify_wol_devices" -> {
+                val macs = buildList {
+                    val array = arguments.optJSONArray("macs") ?: request.raw.optJSONArray("macs")
+                    if (array != null) {
+                        for (index in 0 until array.length()) {
+                            array.optString(index).trim().takeIf { it.isNotBlank() }?.let(::add)
+                        }
+                    }
+                    stringArgument("mac").takeIf { it.isNotBlank() }?.let(::add)
+                }
+                verifyWakeOnLanDevices(macs, intArgument("waitSeconds", 30))
+            }
+            "name_wol_device" -> nameWakeOnLanDevice(
+                stringArgument("mac", "macAddress"),
+                stringArgument("name", "deviceName")
+            )
+            else -> error("Capacidade nativa sem adaptador: $canonicalName")
         }
     }
 
@@ -5080,12 +5218,41 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             runCatching {
                 runBlocking {
                     val tools = sufficitMcpToolBridge.refreshTools()
-                    Log.i(TAG, "MCPs autenticados: ${tools.size} ferramenta(s) descoberta(s).")
+                    val summary = sufficitMcpToolBridge.refreshSummary()
+                    clientCapabilityRegistry.replaceDynamic(
+                        MCP_CAPABILITY_GROUP,
+                        sufficitMcpToolBridge.clientCapabilityDescriptors { request ->
+                            val action = JSONObject(request.raw.toString())
+                                .put("tool", request.tool)
+                                .put("callId", request.callId)
+                            executeSufficitMcpClientTool(action, request.tool)
+                        }
+                    )
+                    Log.i(
+                        TAG,
+                        "MCPs autenticados: ${summary.servers} servidor(es), " +
+                            "${tools.size} ferramenta(s), ${summary.prompts} prompt(s), " +
+                            "${summary.resources} recurso(s)."
+                    )
+                    if (summary.failedServers.isNotEmpty()) {
+                        Log.w(
+                            TAG,
+                            "MCPs temporariamente indisponiveis, mantendo catalogo anterior quando possivel: " +
+                                summary.failedServers.joinToString()
+                        )
+                    }
                     val namedDevices = com.sufficit.ai.gateway.network.WakeOnLanInventoryService(
                         this@RoomAudioForegroundService
                     ).knownDevices().filter { !it.name.isNullOrBlank() }
                     namedDevices.forEach { device ->
-                        sufficitMcpToolBridge.saveWakeOnLanPreference(device)
+                        runCatching { sufficitMcpToolBridge.saveWakeOnLanPreference(device) }
+                            .onFailure { error ->
+                                Log.w(
+                                    TAG,
+                                    "Preferencia Wake-on-LAN nao sincronizada para ${device.macAddress}: " +
+                                        (error.message ?: error.javaClass.simpleName)
+                                )
+                            }
                     }
                     if (namedDevices.isNotEmpty()) {
                         Log.i(TAG, "Memoria Sufficit sincronizada: ${namedDevices.size} dispositivo(s) Wake-on-LAN.")
@@ -5098,7 +5265,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 runCatching {
                     runBlocking { sufficitMcpToolBridge.reset() }
                 }
-                Log.w(TAG, "MCP Sufficit indisponivel: ${error.message}")
+                clientCapabilityRegistry.removeDynamic(MCP_CAPABILITY_GROUP)
+                Log.w(
+                    TAG,
+                    "MCP Sufficit indisponivel: ${error.message ?: error.javaClass.simpleName}",
+                    error
+                )
             }
         }
     }
@@ -5119,9 +5291,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     sufficitMcpToolBridge.executeClientToolAction(action)
                 }
             }
+            val terminalState = clientActionCoordinator.current(callId)?.state
+            if (terminalState == ClientActionState.CANCELED || terminalState == ClientActionState.TIMED_OUT) {
+                Log.w(
+                    TAG,
+                    "Resultado tardio da ferramenta MCP '$tool' descartado: state=$terminalState."
+                )
+                return@execute
+            }
             val resultText = outcome.getOrNull()?.text.orEmpty()
             val errorText = outcome.exceptionOrNull()?.message.orEmpty()
-            val queued = persistentOpenClawConnection?.sendClientToolResult(
+            val queued = remoteAgentTransport?.sendClientActionResult(
                 callId = callId,
                 tool = tool,
                 result = resultText,
@@ -5132,6 +5312,21 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     errorText.ifBlank { "Nao foi possivel devolver o resultado da ferramenta ao agente." }
                 )
             }
+            if (outcome.isSuccess) {
+                clientActionCoordinator.transition(
+                    callId = callId,
+                    state = ClientActionState.SUCCEEDED,
+                    summary = "$mcpToolName concluida."
+                )
+            } else {
+                clientActionCoordinator.transition(
+                    callId = callId,
+                    state = ClientActionState.FAILED,
+                    summary = errorText.ifBlank { "Falha na ferramenta MCP." },
+                    retryable = true,
+                    error = errorText.ifBlank { "mcp_action_failed" }
+                )
+            }
             outcome.exceptionOrNull()?.let {
                 Log.w(TAG, "Falha na client tool MCP '$tool'", it)
             }
@@ -5139,7 +5334,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun buildBlockingAnnouncementMessage(
-        reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply
+        reply: RemoteAgentReply
     ): String {
         val assistantReply = reply.replyText.trim()
         if (assistantReply.isNotBlank()) {
@@ -5169,7 +5364,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     private fun applyRemoteSettingsPatchIfNeeded(
-        reply: com.sufficit.ai.gateway.openclaw.OpenClawGatewayReply,
+        reply: RemoteAgentReply,
         currentSettings: GatewaySettings
     ): GatewaySettingsPatchResult? {
         val patch = reply.settingsPatch ?: return null
@@ -5238,13 +5433,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             settings.openClawDeviceToken.isBlank() ||
             settings.openClawSessionKey.isBlank()
         ) {
-            persistentOpenClawConnection?.disconnect()
+            remoteAgentTransport?.disconnect()
             Log.i(TAG, "Conexao OpenClaw encerrada apos patch remoto por configuracao incompleta.")
             return
         }
 
         runCatching {
-            persistentOpenClawConnection?.connect(buildOpenClawConfig(settings))
+            remoteAgentTransport?.connect(buildRemoteAgentConfig(settings))
         }.onFailure {
             Log.w(TAG, "Falha ao reconfigurar websocket OpenClaw apos patch remoto", it)
         }
@@ -5341,6 +5536,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }
 
     override fun interruptAssistant() {
+        val canceledActions = clientActionCoordinator.cancelActive(
+            "Acao interrompida pelo usuario."
+        )
+        if (canceledActions > 0) {
+            Log.i(TAG, "$canceledActions acao(oes) cliente marcada(s) como cancelada(s).")
+        }
         interruptAssistantSpeechByTouch()
     }
 
@@ -5463,6 +5664,67 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         return result
     }
 
+    /**
+     * Adaptador da capacidade canonica para a implementacao Android existente.
+     * Aceita tanto argumentos no nivel raiz (legado OpenClaw) quanto o objeto
+     * `arguments` do contrato canonico.
+     */
+    private fun executeWakeOnLanCapability(request: AgentClientActionRequest) {
+        val arguments = request.arguments
+        fun stringArgument(vararg names: String): String = names.firstNotNullOfOrNull { name ->
+            arguments.optString(name).trim().takeIf { it.isNotBlank() }
+                ?: request.raw.optString(name).trim().takeIf { it.isNotBlank() }
+        }.orEmpty()
+
+        val macAddress = stringArgument("mac", "macAddress", "targetMac")
+        require(macAddress.isNotBlank()) { "A ferramenta Wake-on-LAN exige o MAC do equipamento." }
+        val port = if (arguments.has("port")) {
+            arguments.optInt("port", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_PORT)
+        } else {
+            request.raw.optInt("port", com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_PORT)
+        }
+        val repeat = when {
+            arguments.has("repeat") -> arguments.optInt(
+                "repeat",
+                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
+            )
+            arguments.has("repetitions") -> arguments.optInt(
+                "repetitions",
+                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
+            )
+            request.raw.has("repeat") -> request.raw.optInt(
+                "repeat",
+                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
+            )
+            else -> request.raw.optInt(
+                "repetitions",
+                com.sufficit.ai.gateway.network.WakeOnLanTool.DEFAULT_REPEAT
+            )
+        }
+        val waitSeconds = if (arguments.has("waitSeconds")) {
+            arguments.optInt(
+                "waitSeconds",
+                com.sufficit.ai.gateway.network.WakeOnLanVerificationTool.DEFAULT_WAIT_SECONDS
+            )
+        } else {
+            request.raw.optInt(
+                "waitSeconds",
+                com.sufficit.ai.gateway.network.WakeOnLanVerificationTool.DEFAULT_WAIT_SECONDS
+            )
+        }
+        executeWakeOnLanWithVerification(
+            callId = request.callId ?: UUID.randomUUID().toString(),
+            tool = request.tool.lowercase(),
+            macAddress = macAddress,
+            targetName = stringArgument("name", "deviceName", "label"),
+            targetIpAddress = stringArgument("ip", "ipAddress", "targetIp"),
+            broadcastAddress = stringArgument("broadcast", "broadcastAddress"),
+            port = port,
+            repeat = repeat,
+            waitSeconds = waitSeconds
+        )
+    }
+
     private fun executeWakeOnLanWithVerification(
         callId: String,
         tool: String,
@@ -5494,10 +5756,20 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     port = port,
                     repeat = repeat,
                     waitSeconds = safeWait,
-                    name = targetName.takeIf { it.isNotBlank() }
+                    name = targetName.takeIf { it.isNotBlank() },
+                    isCanceled = { clientActionCoordinator.isCanceled(callId) }
                 )
             }
             outcome.onSuccess { result ->
+                val terminalState = clientActionCoordinator.current(callId)?.state
+                if (terminalState == ClientActionState.CANCELED || terminalState == ClientActionState.TIMED_OUT) {
+                    GatewayRuntime.updateChatMessageText(
+                        statusMessageId,
+                        "Wake-on-LAN · $displayTarget: resultado tardio descartado ($terminalState)."
+                    )
+                    Log.w(TAG, "Resultado Wake-on-LAN tardio descartado: callId=$callId state=$terminalState")
+                    return@onSuccess
+                }
                 val target = result.targets.single()
                 val elapsedSeconds = (target.elapsedMs / 100L).toDouble() / 10.0
                 val ipSuffix = target.ipAddress.takeIf { it.isNotBlank() }?.let { " em $it" }.orEmpty()
@@ -5553,7 +5825,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                             target.status == com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.UNVERIFIABLE ||
                             target.status == com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.SEND_FAILED
                     )
-                val queued = persistentOpenClawConnection?.sendClientToolResult(
+                val queued = remoteAgentTransport?.sendClientActionResult(
                     callId = callId,
                     tool = tool,
                     result = resultPayload.toString(),
@@ -5562,15 +5834,48 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (!queued) {
                     Log.w(TAG, "Resultado Wake-on-LAN ficou somente local: OpenClaw desconectado.")
                 }
-            }.onFailure { error ->
-                val finalText = "Wake-on-LAN · $displayTarget: falha ao executar ou verificar. " +
-                    "${error.message ?: "erro desconhecido"}. Voce pode pedir para tentar novamente."
-                GatewayRuntime.updateChatMessageText(statusMessageId, finalText)
-                persistentOpenClawConnection?.sendClientToolResult(
+                val finalState = when (target.status) {
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.ALREADY_REACHABLE,
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.CONFIRMED_ONLINE ->
+                        ClientActionState.SUCCEEDED
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.NOT_RESPONDING,
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.UNVERIFIABLE ->
+                        ClientActionState.UNVERIFIED
+                    com.sufficit.ai.gateway.network.WakeOnLanVerificationStatus.SEND_FAILED ->
+                        ClientActionState.FAILED
+                }
+                clientActionCoordinator.transition(
                     callId = callId,
-                    tool = tool,
-                    result = "",
-                    error = error.message ?: "falha ao executar ou verificar Wake-on-LAN"
+                    state = finalState,
+                    summary = finalText,
+                    retryable = resultPayload.optBoolean("retrySuggested", false),
+                    error = target.error.takeIf { !it.isNullOrBlank() }
+                )
+            }.onFailure { error ->
+                val canceled = error is CancellationException ||
+                    clientActionCoordinator.isCanceled(callId)
+                val finalText = if (canceled) {
+                    "Wake-on-LAN · $displayTarget: verificacao cancelada pelo usuario."
+                } else {
+                    "Wake-on-LAN · $displayTarget: falha ao executar ou verificar. " +
+                        "${error.message ?: "erro desconhecido"}. Voce pode pedir para tentar novamente."
+                }
+                GatewayRuntime.updateChatMessageText(statusMessageId, finalText)
+                if (!canceled) {
+                    remoteAgentTransport?.sendClientActionResult(
+                        callId = callId,
+                        tool = tool,
+                        result = "",
+                        error = error.message ?: "falha ao executar ou verificar Wake-on-LAN"
+                    )
+                }
+                clientActionCoordinator.transition(
+                    callId = callId,
+                    state = if (canceled) ClientActionState.CANCELED else ClientActionState.FAILED,
+                    summary = finalText,
+                    retryable = !canceled,
+                    error = if (canceled) "canceled" else
+                        (error.message ?: "falha ao executar ou verificar Wake-on-LAN")
                 )
                 Log.w(TAG, "Falha no Wake-on-LAN monitorado para $displayTarget", error)
             }
@@ -5733,17 +6038,17 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
     }
 
-    private fun buildOpenClawConfig(
+    private fun buildRemoteAgentConfig(
         settings: GatewaySettings,
         state: GatewayUiState? = null,
         voiceDecision: VoiceChannelSkillDecision? = null,
         transcript: String? = null,
         awakened: Boolean? = null,
         wakeWord: String? = null
-    ): OpenClawGatewayConfig {
-        return OpenClawGatewayConfig(
-            gatewayUrl = settings.openClawGatewayUrl,
-            gatewayToken = settings.openClawGatewayToken,
+    ): RemoteAgentConnectionConfig {
+        return RemoteAgentConnectionConfig(
+            endpoint = settings.openClawGatewayUrl,
+            accessToken = settings.openClawGatewayToken,
             deviceToken = settings.openClawDeviceToken,
             sessionKey = settings.openClawSessionKey,
             userId = settings.openClawUserId,
@@ -5754,14 +6059,39 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 buildOpenClawMetadata(
                     state = state,
                     settings = settings,
-                    voiceDecision = voiceDecision,
                     transcript = transcript,
                     awakenedOverride = awakened,
                     wakeWordOverride = wakeWord
                 )
-            } else {
-                null
+            } else JSONObject()
+        )
+    }
+
+    private fun buildAgentTurn(
+        phrase: String,
+        state: GatewayUiState,
+        config: RemoteAgentConnectionConfig,
+        awakened: Boolean,
+        wakeWord: String
+    ): AgentTurnEnvelope {
+        val tools = buildList {
+            val source = config.metadata.optJSONArray("availableTools") ?: return@buildList
+            for (index in 0 until source.length()) {
+                source.optJSONObject(index)?.let { add(JSONObject(it.toString())) }
             }
+        }
+        return AgentTurnEnvelope(
+            turnId = UUID.randomUUID().toString(),
+            text = phrase,
+            interaction = AgentChannelContext(
+                inputMode = if (state.textInputModeActive) AgentInputMode.TEXT else AgentInputMode.VOICE,
+                awakened = awakened,
+                wakeWord = wakeWord.trim().takeIf { awakened },
+                voiceReplyAvailable = loadCurrentSettings().assistantVoiceEnabled,
+                multipleVoicesLikely = state.multipleVoicesLikely
+            ),
+            availableTools = tools,
+            metadata = JSONObject(config.metadata.toString())
         )
     }
 
@@ -5853,7 +6183,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     }.getOrDefault(0L)
 
     private fun sanitizeReplyForSpeech(replyText: String): String {
-        if (OpenClawInternalEventClassifier.detect(replyText) != null) {
+        if (RemoteAgentEventClassifier.detectInternalEvent(null, replyText) != null) {
             Log.i(TAG, "Evento interno de contexto bloqueado antes do TTS.")
             return ""
         }
@@ -6115,6 +6445,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         )
 
         private const val TAG = "RoomAudioGateway"
+        private const val MCP_CAPABILITY_GROUP = "mcp"
         private const val TRANSCRIPT_AUDIO_RETENTION_MS = 6L * 60L * 60L * 1_000L
         private const val CHANNEL_ID = "room-audio-gateway-v2"
         private const val WAKE_CHANNEL_ID = "room-audio-gateway-wake-v2"
