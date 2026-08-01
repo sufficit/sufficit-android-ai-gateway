@@ -124,7 +124,6 @@ fun WakeWordWizardPage(onBack: () -> Unit) {
     val selectedSummary = profiles.firstOrNull { it.profile.id == selectedProfileId }
     val selectedProfile = selectedSummary?.profile
     val sampleCount = selectedSummary?.sampleCount ?: 0
-    val xpPoints = profiles.sumOf { min(it.sampleCount, WAKE_LAB_REQUIRED_SAMPLES) * 100 }
     var phraseDraft by rememberSaveable { mutableStateOf(selectedProfile?.phraseLabel.orEmpty()) }
     var lastObservedSampleCount by remember { mutableIntStateOf(sampleCount) }
     var testStartedAt by rememberSaveable { mutableLongStateOf(0L) }
@@ -258,7 +257,6 @@ fun WakeWordWizardPage(onBack: () -> Unit) {
         ) {
             WakeLabTopBar(
                 stage = stage,
-                xpPoints = xpPoints,
                 onBack = {
                     if (stage == WakeLabStage.INTRO) onBack() else {
                         moveTo(previousStage())
@@ -404,7 +402,6 @@ fun WakeWordWizardPage(onBack: () -> Unit) {
 @Composable
 private fun WakeLabTopBar(
     stage: WakeLabStage,
-    xpPoints: Int,
     onBack: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -433,7 +430,6 @@ private fun WakeLabTopBar(
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        WakeLabXpBadge(points = xpPoints)
         TextButton(onClick = onClose, modifier = Modifier.height(48.dp)) {
             Text("Sair", color = ConfigTheme.TextSecondary)
         }
@@ -554,7 +550,7 @@ private fun WakeLabIntroStage(
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null)
                     Spacer(Modifier.size(8.dp))
-                    Text("Adicionar outra wake word")
+                    Text("Adicionar outra chamada")
                 }
             }
         }
@@ -923,7 +919,7 @@ private fun WakeLabCompleteStage(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                WakeLabBadge("+${min(sampleCount, WAKE_LAB_REQUIRED_SAMPLES) * 100} XP", WakeLabAmber)
+                WakeLabBadge("${min(sampleCount, WAKE_LAB_REQUIRED_SAMPLES)} amostras", WakeLabAmber)
                 Text(
                     text = "Despertar conquistado",
                     color = ConfigTheme.TextPrimary,
@@ -1242,11 +1238,6 @@ private fun WakeLabBadge(text: String, color: Color) {
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold
     )
-}
-
-@Composable
-private fun WakeLabXpBadge(points: Int) {
-    WakeLabBadge(text = "$points XP", color = WakeLabAmber)
 }
 
 @Composable

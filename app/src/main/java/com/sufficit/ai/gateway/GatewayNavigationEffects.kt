@@ -57,7 +57,7 @@ fun GatewayBackHandler(
         when {
             pagerState.currentPage == configPageIndex &&
                 uiState.configDestination != ConfigSectionDestination.HOME -> {
-                updateUiState(uiState.copy(configDestination = ConfigSectionDestination.HOME))
+                updateUiState(uiState.copy(configDestination = uiState.configDestination.parent()))
             }
 
             pagerState.currentPage != initialPage -> {

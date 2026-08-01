@@ -1,6 +1,7 @@
 package com.sufficit.ai.gateway
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -22,7 +23,7 @@ fun ConfigAssistantVoiceSectionPage(
     actions: ConfigPageActions,
     onBack: () -> Unit
 ) {
-    ConfigSectionScaffold("Voz do Assistente", "Texto para voz nas respostas do OpenClaw", onBack) {
+    ConfigSectionScaffold("Responder em voz", "Escolha como o agente fala", onBack) {
         item {
             ConfigSection(title = "Sintese de voz") {
                 SettingToggleRow(
@@ -33,12 +34,12 @@ fun ConfigAssistantVoiceSectionPage(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     assistantVoiceOptions().forEach { option ->
-                        OutlinedButton(
+                        ConfigChoiceChip(
+                            label = option.label,
+                            selected = option.persistedValue == state.assistantVoiceStyle,
                             onClick = { actions.onAssistantVoiceStyleChange(option.persistedValue) },
                             modifier = Modifier.weight(1f)
-                        ) {
-                            Text(option.label)
-                        }
+                        )
                     }
                 }
                 MetadataChip(
@@ -86,23 +87,21 @@ fun ConfigScreenSectionPage(
     actions: ConfigPageActions,
     onBack: () -> Unit
 ) {
-    ConfigSectionScaffold("Tela", "Wake e permanencia da tela", onBack) {
+    ConfigSectionScaffold("Tela e energia", "Quando acender e quando descansar", onBack) {
         item {
             ConfigSection(title = "Comportamento") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ScreenMode.entries.forEach { option ->
-                        OutlinedButton(
+                        ConfigChoiceChip(
+                            label = when (option) {
+                                ScreenMode.ALWAYS_ON -> "Sempre ligada"
+                                ScreenMode.ALWAYS_OFF -> "Sempre apagada"
+                                ScreenMode.ACTIVITY -> "Por atividade"
+                            },
+                            selected = option.persistedValue == state.screenMode,
                             onClick = { actions.onScreenModeChange(option.persistedValue) },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                when (option) {
-                                    ScreenMode.ALWAYS_ON -> "Sempre ligado"
-                                    ScreenMode.ALWAYS_OFF -> "Sempre desligado"
-                                    ScreenMode.ACTIVITY -> "Activity"
-                                }
-                            )
-                        }
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
                 MetadataChip(
@@ -110,7 +109,7 @@ fun ConfigScreenSectionPage(
                     when (ScreenMode.fromPersistedValue(state.screenMode)) {
                         ScreenMode.ALWAYS_ON -> "Sempre ligado durante voz"
                         ScreenMode.ALWAYS_OFF -> "Sempre desligado"
-                        ScreenMode.ACTIVITY -> "Activity"
+                        ScreenMode.ACTIVITY -> "Enquanto houver atividade"
                     }
                 )
                 Text(
@@ -154,7 +153,7 @@ fun ConfigHistorySectionPage(
     actions: ConfigPageActions,
     onBack: () -> Unit
 ) {
-    ConfigSectionScaffold("Historico Local", "Frases, metadados e exportacao", onBack) {
+    ConfigSectionScaffold("Histórico e backup", "Guarde conversas e configurações", onBack) {
         item {
             ConfigSection(title = "Arquivo") {
                 MetadataChip("Frases registradas", state.historySnapshot.entryCount.toString())
@@ -188,6 +187,36 @@ fun ConfigHistorySectionPage(
                 }
             }
         }
+        item {
+            ConfigSection(title = "Backup das configurações") {
+                Text(
+                    text = "Leve os ajustes deste gateway para outro aparelho ou restaure uma copia anterior.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ConfigTheme.TextSecondary
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = actions.onExportSettings,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Exportar")
+                    }
+                    OutlinedButton(
+                        onClick = actions.onImportSettings,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Restaurar")
+                    }
+                }
+                if (state.settingsBackupStatus.isNotBlank()) {
+                    Text(
+                        text = state.settingsBackupStatus,
+                        color = ConfigTheme.TextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -197,7 +226,7 @@ fun ConfigDebugSectionPage(
     actions: ConfigPageActions,
     onBack: () -> Unit
 ) {
-    ConfigSectionScaffold("Depuracao", "Ajustes finos para segmentacao e diagnostico", onBack) {
+    ConfigSectionScaffold("Oficina técnica", "Calibragem e diagnóstico avançado", onBack) {
         item {
             ConfigSection(title = "Captura") {
                 OutlinedButton(

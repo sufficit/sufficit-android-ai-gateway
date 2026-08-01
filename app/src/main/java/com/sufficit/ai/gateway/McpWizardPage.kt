@@ -379,7 +379,6 @@ private fun McpLabOverview(
     val tools = servers.sumOf { it.summary.tools.size }
     val prompts = servers.sumOf { it.summary.prompts.size }
     val resources = servers.sumOf { it.summary.resources.size }
-    val xp = enabled * 100 + tools * 40 + prompts * 70 + resources * 25
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -395,29 +394,17 @@ private fun McpLabOverview(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Rede de capacidades",
-                                color = ConfigTheme.TextPrimary,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "$enabled MCP ativo${if (enabled == 1) "" else "s"}",
-                                color = ConfigTheme.TextSecondary,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                    Column {
                         Text(
-                            text = "$xp XP",
-                            color = ConfigTheme.Accent,
+                            text = "Rede de capacidades",
+                            color = ConfigTheme.TextPrimary,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "$enabled MCP ativo${if (enabled == 1) "" else "s"}",
+                            color = ConfigTheme.TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                     Row(

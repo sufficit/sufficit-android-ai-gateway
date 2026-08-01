@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.config.GatewaySettingsStore
 import com.sufficit.ai.gateway.config.LocalExecutionMode
@@ -37,7 +38,7 @@ fun ConfigGeneralSectionPage(
     onBack: () -> Unit,
     onOpenWakeWord: () -> Unit
 ) {
-    ConfigSectionScaffold("Geral", "Permissao, autoplay e modo de trabalho", onBack) {
+    ConfigSectionScaffold("Permissões e sensores", "O que este aparelho pode perceber", onBack) {
         item {
             ConfigSection(title = "Aplicativo") {
                 MetadataChip("Microfone", if (state.hasPermission) "Autorizado" else "Sem permissao")
@@ -78,42 +79,14 @@ fun ConfigGeneralSectionPage(
         item {
             SpeakerVoiceConfigSection()
         }
-        item {
-            IdentityConfigSection()
-        }
-        item {
-            ApiConfigSection()
-        }
-        item {
-            ConfigSection(title = "Backup JSON") {
-                Text(
-                    text = "Exporte ou restaure todas as configuracoes do app em JSON para backup e padronizacao.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ConfigTheme.TextSecondary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = actions.onExportSettings,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Exportar JSON")
-                    }
-                    OutlinedButton(
-                        onClick = actions.onImportSettings,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Importar JSON")
-                    }
-                }
-                if (state.settingsBackupStatus.isNotBlank()) {
-                    Text(
-                        text = state.settingsBackupStatus,
-                        color = ConfigTheme.TextSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
+    }
+}
+
+@Composable
+fun ConfigAccessSectionPage(onBack: () -> Unit) {
+    ConfigSectionScaffold("Conta e acesso", "Identidade Sufficit e conexão local", onBack) {
+        item { IdentityConfigSection() }
+        item { ApiConfigSection() }
     }
 }
 
@@ -123,7 +96,7 @@ fun ConfigOpenClawSectionPage(
     actions: ConfigPageActions,
     onBack: () -> Unit
 ) {
-    ConfigSectionScaffold("OpenClaw", "WebSocket, sessao e contexto do canal", onBack) {
+    ConfigSectionScaffold("Agente remoto", "Conexão com o OpenClaw", onBack) {
         item {
             ConfigSection(title = "Gateway") {
                 OutlinedTextField(
@@ -140,6 +113,7 @@ fun ConfigOpenClawSectionPage(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Token do gateway") },
                     supportingText = { Text("Token global do gateway websocket.") },
+                    visualTransformation = PasswordVisualTransformation(),
                     colors = configTextFieldColors()
                 )
                 OutlinedTextField(
@@ -148,6 +122,7 @@ fun ConfigOpenClawSectionPage(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Token do device") },
                     supportingText = { Text("Token aprovado para este Android.") },
+                    visualTransformation = PasswordVisualTransformation(),
                     colors = configTextFieldColors()
                 )
                 OutlinedTextField(

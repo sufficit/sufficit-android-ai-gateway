@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-01T20:08:08-03:00",
+  "title": "Design System: Sufficit Android AI Gateway",
+  "extensions": {
+    "colorMeta": {
+      "night-deep": { "role": "neutral", "displayName": "Noite Profunda", "canonical": "#050B14", "tonalRamp": ["#020508", "#050B14", "#0B1826", "#172B42", "#2A435D", "#5D7590", "#B4C5D6", "#F1F6FB"] },
+      "success": { "role": "primary", "displayName": "Sinal Verde", "canonical": "#35D08C", "tonalRamp": ["#062A1C", "#0D4C34", "#176C4A", "#228E61", "#35D08C", "#6BE1AE", "#A5EFD0", "#E1FAEF"] },
+      "connection": { "role": "secondary", "displayName": "Conexão Azul", "canonical": "#55B8F5", "tonalRamp": ["#07253A", "#0D4164", "#155F8F", "#247FB9", "#55B8F5", "#82CBF8", "#B4DFFB", "#E5F5FE"] },
+      "voice": { "role": "tertiary", "displayName": "Voz Âmbar", "canonical": "#FFC857", "tonalRamp": ["#302306", "#59400A", "#825E10", "#AD801D", "#FFC857", "#FFD77F", "#FFE7AD", "#FFF7E4"] },
+      "identity": { "role": "tertiary", "displayName": "Identidade Lilás", "canonical": "#C8A5FF", "tonalRamp": ["#251638", "#432A63", "#62418E", "#835FBA", "#C8A5FF", "#D7BDFF", "#E6D6FF", "#F7F1FF"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline Material", "purpose": "Títulos de tela e estado geral." },
+      "title": { "displayName": "Título de rota", "purpose": "Caminhos, seções e ações relevantes." },
+      "body": { "displayName": "Corpo legível", "purpose": "Explicações curtas em português." },
+      "label": { "displayName": "Estado", "purpose": "Status real, métricas e controles." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "material-native", "value": "Material 3 native", "purpose": "Ripple, AnimatedContent e navegação respeitando a escala de animação do Android." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "single-column" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Path Card",
+      "kind": "nav",
+      "refersTo": "path-card",
+      "description": "Rota inteira clicável com nó, título, descrição, estado e seta.",
+      "html": "<button class=\"ds-path-card\"><span class=\"ds-path-node\">✓</span><span><strong>Começar</strong><small>Prepare o acesso e ensine como chamar o agente</small><em>Tudo pronto</em></span><span aria-hidden=\"true\">›</span></button>",
+      "css": ".ds-path-card{width:100%;min-height:104px;display:grid;grid-template-columns:48px 1fr auto;gap:16px;align-items:center;padding:16px 18px;border:1px solid #2A435D;border-radius:16px;background:#102033;color:#F1F6FB;text-align:left}.ds-path-card:hover,.ds-path-card:focus-visible{border-color:#35D08C;outline:none}.ds-path-card:active{background:#172B42}.ds-path-card span:nth-child(2){display:grid;gap:4px}.ds-path-card strong{font:700 18px Roboto,sans-serif}.ds-path-card small{color:#B4C5D6;font:400 14px Roboto,sans-serif}.ds-path-card em{color:#35D08C;font:500 14px Roboto,sans-serif;font-style:normal}.ds-path-node{width:48px;height:48px;display:grid;place-items:center;border-radius:999px;background:rgba(53,208,140,.18);color:#35D08C}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "description": "Ação dominante de um bloco.",
+      "html": "<button class=\"ds-button-primary\">Descobrir</button>",
+      "css": ".ds-button-primary{min-height:48px;padding:12px 24px;border:0;border-radius:999px;background:#35D08C;color:#050B14;font:700 15px Roboto,sans-serif}.ds-button-primary:hover,.ds-button-primary:focus-visible{background:#6BE1AE;outline:2px solid #F1F6FB;outline-offset:2px}.ds-button-primary:active{background:#228E61}"
+    },
+    {
+      "name": "Choice Chip",
+      "kind": "chip",
+      "description": "Escolha compacta com estado selecionado inequívoco.",
+      "html": "<button class=\"ds-choice-chip\">✓ Remoto</button>",
+      "css": ".ds-choice-chip{min-height:48px;padding:10px 16px;border:1px solid #35D08C;border-radius:999px;background:rgba(53,208,140,.2);color:#F1F6FB;font:500 14px Roboto,sans-serif}.ds-choice-chip:hover,.ds-choice-chip:focus-visible{background:rgba(53,208,140,.3);outline:none}.ds-choice-chip:active{background:rgba(53,208,140,.4)}"
+    },
+    {
+      "name": "Config Card",
+      "kind": "card",
+      "description": "Contêiner tonal para uma tarefa ou conjunto coerente de controles.",
+      "html": "<section class=\"ds-config-card\"><h3>Modo</h3><p>Escolha como esta capacidade funciona.</p></section>",
+      "css": ".ds-config-card{padding:16px;border:1px solid #2A435D;border-radius:16px;background:#172B42;color:#F1F6FB}.ds-config-card h3{margin:0 0 8px;font:700 16px Roboto,sans-serif}.ds-config-card p{margin:0;color:#B4C5D6;font:400 14px/1.45 Roboto,sans-serif}"
+    },
+    {
+      "name": "Outlined Input",
+      "kind": "input",
+      "description": "Campo técnico reservado às telas folha; segredos usam máscara.",
+      "html": "<label class=\"ds-input\"><span>Endpoint remoto</span><input value=\"https://example.com/mcp\"></label>",
+      "css": ".ds-input{display:grid;gap:6px;color:#B4C5D6;font:500 13px Roboto,sans-serif}.ds-input input{min-height:48px;padding:10px 14px;border:1px solid #2A435D;border-radius:12px;background:#1B314A;color:#F1F6FB;font:400 14px Roboto,sans-serif}.ds-input input:focus{border-color:#35D08C;outline:none}.ds-input input:disabled{color:#8298AD;background:#102033}"
+    }
+  ],
+  "narrative": {
+    "northStar": "O mapa noturno de missões",
+    "overview": "A configuração é um mapa curto de caminhos em uma sala noturna. A sensação de jogo vem de escolher uma rota e enxergar estados reais, nunca de pontos ou competição.",
+    "keyCharacteristics": ["Quatro áreas principais", "Uma ação dominante por bloco", "Detalhes técnicos nas telas folha", "Estados reais no lugar de placares", "Alvos de toque de pelo menos 48 dp"],
+    "rules": [
+      { "name": "Route Color", "body": "Cada caminho mantém um único acento; verde continua reservado à ação principal ou ao sucesso comprovado.", "section": "colors" },
+      { "name": "Plain Language", "body": "Títulos descrevem a intenção humana antes do protocolo ou modelo.", "section": "typography" },
+      { "name": "Tonal Depth", "body": "Elevação é informação de hierarquia, não decoração.", "section": "elevation" }
+    ],
+    "dos": ["Mostrar estado real e próximo passo em cada rota.", "Manter entre duas e quatro escolhas em categorias.", "Preservar controles avançados nas telas folha.", "Usar português do Brasil e linguagem orientada à tarefa.", "Garantir alvos de toque de 48 dp."],
+    "donts": ["Não reintroduzir uma lista única de cartões técnicos.", "Não usar pontos, XP ou ranking.", "Não usar emoji estrutural.", "Não revelar credenciais.", "Não adicionar sombras ou vidro."]
+  }
+}

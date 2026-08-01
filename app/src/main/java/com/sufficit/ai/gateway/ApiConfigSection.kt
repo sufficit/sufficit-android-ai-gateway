@@ -95,7 +95,10 @@ fun ApiConfigSection() {
                 modifier = Modifier.weight(1f)
             ) { Text("Gerar token") }
         }
-        MetadataChip("Token", if (settings.apiToken.isBlank()) "(nenhum)" else settings.apiToken)
+        MetadataChip(
+            "Token",
+            if (settings.apiToken.isBlank()) "(nenhum)" else "Protegido • ${settings.apiToken.takeLast(4)}"
+        )
         if (settings.apiToken.isNotBlank()) {
             OutlinedButton(
                 onClick = { copyToClipboard(context, "api-token", settings.apiToken) },

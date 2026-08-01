@@ -4,11 +4,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedButton
@@ -37,7 +45,7 @@ fun ConfigSection(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = ConfigTheme.Surface,
+                color = ConfigTheme.SurfaceRaised,
                 shape = RoundedCornerShape(ConfigTheme.RadiusCard)
             )
             .border(
@@ -48,19 +56,30 @@ fun ConfigSection(
             .padding(ConfigTheme.CardPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = ConfigTheme.TextPrimary,
-                fontWeight = FontWeight.SemiBold
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 5.dp)
+                    .size(10.dp)
+                    .background(ConfigTheme.Accent, RoundedCornerShape(3.dp))
             )
-            if (!subtitle.isNullOrBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ConfigTheme.TextSecondary
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ConfigTheme.TextPrimary,
+                    fontWeight = FontWeight.Bold
                 )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ConfigTheme.TextSecondary
+                    )
+                }
             }
         }
         content()
@@ -78,7 +97,9 @@ fun SettingToggleRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 6.dp),
+            .heightIn(min = 64.dp)
+            .background(ConfigTheme.SurfaceVariant, RoundedCornerShape(ConfigTheme.RadiusInner))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -106,18 +127,22 @@ fun SettingToggleRow(
 
 @Composable
 fun MetadataChip(label: String, value: String) {
-    Column(
+    Row(
         modifier = Modifier
+            .fillMaxWidth()
             .background(
                 color = ConfigTheme.SurfaceVariant,
                 shape = RoundedCornerShape(ConfigTheme.RadiusInner)
             )
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             color = ConfigTheme.TextMuted,
-            style = MaterialTheme.typography.labelMedium
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.weight(0.42f)
         )
         Text(
             text = value,
@@ -125,9 +150,49 @@ fun MetadataChip(label: String, value: String) {
             overflow = TextOverflow.Ellipsis,
             color = ConfigTheme.TextPrimary,
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(0.58f)
         )
     }
+}
+
+@Composable
+fun ConfigChoiceChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, maxLines = 1) },
+        leadingIcon = if (selected) {
+            {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                )
+            }
+        } else {
+            null
+        },
+        modifier = modifier.heightIn(min = 48.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = ConfigTheme.SurfaceVariant,
+            labelColor = ConfigTheme.TextSecondary,
+            selectedContainerColor = ConfigTheme.Accent.copy(alpha = 0.2f),
+            selectedLabelColor = ConfigTheme.TextPrimary,
+            selectedLeadingIconColor = ConfigTheme.Accent
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = ConfigTheme.Border,
+            selectedBorderColor = ConfigTheme.Accent
+        )
+    )
 }
 
 @Composable
@@ -162,11 +227,7 @@ fun SliderSettingRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = ConfigTheme.SurfaceVariant,
-                shape = RoundedCornerShape(ConfigTheme.RadiusInner)
-            )
-            .padding(14.dp),
+            .padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(

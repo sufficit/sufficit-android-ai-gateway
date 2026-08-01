@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.config.GatewaySettingsStore
 import com.sufficit.ai.gateway.config.LocalExecutionMode
@@ -52,7 +53,7 @@ fun ConfigTranscriptionSectionPage(
 ) {
     var localModelDropdownExpanded by rememberSaveable { mutableStateOf(false) }
 
-    ConfigSectionScaffold("Transcricao", "Whisper, captura e modelos", onBack) {
+    ConfigSectionScaffold("Entender sua voz", "Captura sensibilidade e modelo", onBack) {
         item {
             ConfigSection(title = "Modo") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -118,6 +119,7 @@ fun ConfigTranscriptionSectionPage(
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Bearer token") },
                             supportingText = { Text("Opcional quando o endpoint remoto nao exige autenticacao.") },
+                            visualTransformation = PasswordVisualTransformation(),
                             colors = configTextFieldColors()
                         )
                     }

@@ -120,9 +120,14 @@ data class ConfigPageSideEffectActions(
 
 enum class ConfigSectionDestination {
     HOME,
+    START,
+    VOICE,
+    CONNECTIONS,
+    DEVICE,
     WIZARD,
     WAKE_WORD,
     GENERAL,
+    ACCESS,
     OPENCLAW,
     MCP,
     TRANSCRIPTION,
@@ -130,6 +135,25 @@ enum class ConfigSectionDestination {
     SCREEN,
     HISTORY,
     DEBUG
+}
+
+fun ConfigSectionDestination.parent(): ConfigSectionDestination = when (this) {
+    ConfigSectionDestination.HOME -> ConfigSectionDestination.HOME
+    ConfigSectionDestination.START,
+    ConfigSectionDestination.VOICE,
+    ConfigSectionDestination.CONNECTIONS,
+    ConfigSectionDestination.DEVICE -> ConfigSectionDestination.HOME
+    ConfigSectionDestination.WIZARD,
+    ConfigSectionDestination.WAKE_WORD -> ConfigSectionDestination.START
+    ConfigSectionDestination.TRANSCRIPTION,
+    ConfigSectionDestination.ASSISTANT_VOICE -> ConfigSectionDestination.VOICE
+    ConfigSectionDestination.OPENCLAW,
+    ConfigSectionDestination.MCP,
+    ConfigSectionDestination.ACCESS -> ConfigSectionDestination.CONNECTIONS
+    ConfigSectionDestination.GENERAL,
+    ConfigSectionDestination.SCREEN,
+    ConfigSectionDestination.HISTORY,
+    ConfigSectionDestination.DEBUG -> ConfigSectionDestination.DEVICE
 }
 
 fun currentConfigPageState(
@@ -260,52 +284,64 @@ fun ConfigPage(
             state = state,
             onOpenSection = onDestinationChange
         )
+        ConfigSectionDestination.START,
+        ConfigSectionDestination.VOICE,
+        ConfigSectionDestination.CONNECTIONS,
+        ConfigSectionDestination.DEVICE -> ConfigCategoryPage(
+            destination = destination,
+            state = state,
+            onOpenSection = onDestinationChange,
+            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+        )
         ConfigSectionDestination.WIZARD -> SetupWizardPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.START) }
         )
         ConfigSectionDestination.WAKE_WORD -> WakeWordWizardPage(
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.START) }
         )
         ConfigSectionDestination.GENERAL -> ConfigGeneralSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) },
+            onBack = { onDestinationChange(ConfigSectionDestination.DEVICE) },
             onOpenWakeWord = { onDestinationChange(ConfigSectionDestination.WAKE_WORD) }
+        )
+        ConfigSectionDestination.ACCESS -> ConfigAccessSectionPage(
+            onBack = { onDestinationChange(ConfigSectionDestination.CONNECTIONS) }
         )
         ConfigSectionDestination.OPENCLAW -> ConfigOpenClawSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.CONNECTIONS) }
         )
         ConfigSectionDestination.MCP -> McpWizardPage(
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.CONNECTIONS) }
         )
         ConfigSectionDestination.TRANSCRIPTION -> ConfigTranscriptionSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.VOICE) }
         )
         ConfigSectionDestination.ASSISTANT_VOICE -> ConfigAssistantVoiceSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.VOICE) }
         )
         ConfigSectionDestination.SCREEN -> ConfigScreenSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.DEVICE) }
         )
         ConfigSectionDestination.HISTORY -> ConfigHistorySectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.DEVICE) }
         )
         ConfigSectionDestination.DEBUG -> ConfigDebugSectionPage(
             state = state,
             actions = actions,
-            onBack = { onDestinationChange(ConfigSectionDestination.HOME) }
+            onBack = { onDestinationChange(ConfigSectionDestination.DEVICE) }
         )
     }
 }
