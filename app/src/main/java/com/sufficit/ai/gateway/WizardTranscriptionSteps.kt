@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.sufficit.ai.gateway.config.TranscriptionMode
 import kotlinx.coroutines.Dispatchers
@@ -173,6 +174,7 @@ fun WizardTranscriptionConfigStep(
                     onValueChange = actions.onWhisperAuthTokenChange,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Bearer token") },
+                    visualTransformation = PasswordVisualTransformation(),
                     colors = configTextFieldColors()
                 )
                 Button(
