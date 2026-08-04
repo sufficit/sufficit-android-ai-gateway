@@ -109,6 +109,7 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.ArrayDeque
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
@@ -118,6 +119,15 @@ import kotlin.math.sqrt
 
 class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.sufficit.ai.gateway.api.GatewayApiActions {
     private data class RetainedTranscriptAudio(val messageId: Long)
+    private data class PendingShortTranscriptionSegment(
+        val pcmBytes: ByteArray,
+        val settings: GatewaySettings,
+        val durationMs: Long,
+        val captureProfile: CaptureProfile,
+        val preRollPrefixBytes: Int,
+        val audioMessageId: Long,
+        val enqueuedAtEpochMs: Long
+    )
     private data class PendingAssistantSpeechAudio(
         val messageId: Long,
         val file: File,
@@ -128,6 +138,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val stopRequested = AtomicBoolean(false)
     private var captureExecutor: ExecutorService? = null
     private var transcriptionExecutor: ThreadPoolExecutor? = null
+    private var shortTranscriptionBatchScheduler: ScheduledExecutorService? = null
     private var audioRecord: AudioRecord? = null
 
     // PARTIAL_WAKE_LOCK mantido durante TODA a captura: sem ele a CPU entra em
@@ -150,6 +161,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val elevenLabsRealtimeClient = ElevenLabsRealtimeClient()
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
     private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
+    private val pendingShortTranscriptionLock = Any()
+    private val pendingShortTranscriptionSegments = ArrayDeque<PendingShortTranscriptionSegment>()
     private val pendingRemoteTurnIds = ConcurrentLinkedQueue<String>()
     private val openClawGatewayClient by lazy { OpenClawGatewayClient() }
     private val sufficitMcpToolBridge by lazy { SufficitMcpToolBridge(this) }
@@ -313,6 +326,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 super.afterExecute(runnable, throwable)
             }
         }
+        shortTranscriptionBatchScheduler = Executors.newSingleThreadScheduledExecutor()
         openClawExecutor = Executors.newSingleThreadExecutor()
         openClawExecutor?.execute {
             runCatching { interactionLedger.importLegacyChat(restoredChat) }
@@ -479,6 +493,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         speakerContinuityState = null
         transcriptionExecutor?.shutdownNow()
         transcriptionExecutor = null
+        shortTranscriptionBatchScheduler?.shutdownNow()
+        shortTranscriptionBatchScheduler = null
+        synchronized(pendingShortTranscriptionLock) {
+            pendingShortTranscriptionSegments.clear()
+        }
         openClawExecutor?.shutdownNow()
         openClawExecutor = null
         clientToolExecutor?.shutdownNow()
@@ -1664,6 +1683,160 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
     }
 
+    /**
+     * Remote STT is much more reliable when very short VAD windows are sent
+     * together. A pause can split one utterance into two or three WAVs (the
+     * individual files often contain no recognizable text), while the joined
+     * audio gives Scribe enough phonetic context. The individual chat bubbles
+     * are created immediately; only the network transcription is coalesced.
+     */
+    private fun queueShortTranscriptionSegment(
+        pcmBytes: ByteArray,
+        settings: GatewaySettings,
+        durationMs: Long,
+        captureProfile: CaptureProfile,
+        preRollPrefixBytes: Int
+    ): Boolean {
+        if (settings.transcriptionMode != TranscriptionMode.REMOTE ||
+            durationMs > SHORT_TRANSCRIPTION_BATCH_SEGMENT_MS
+        ) {
+            return false
+        }
+        val executor = transcriptionExecutor ?: return false
+        val queued = reconcileTranscriptionQueue(executor)
+        val pending = synchronized(pendingShortTranscriptionLock) {
+            pendingShortTranscriptionSegments.size
+        }
+        val active = if (executor.activeCount > 0) 1 else 0
+        if (queued + pending + active >= MAX_TRANSCRIPTION_QUEUE) {
+            return false
+        }
+
+        val now = System.currentTimeMillis()
+        val staleBatch = synchronized(pendingShortTranscriptionLock) {
+            pendingShortTranscriptionSegments.peekLast()?.let {
+                now - it.enqueuedAtEpochMs > SHORT_TRANSCRIPTION_BATCH_GAP_MS
+            } == true
+        }
+        if (staleBatch) {
+            flushPendingShortTranscriptionBatch(force = true)
+        }
+
+        val wavBytes = buildWavPcm16(
+            pcmBytes = pcmBytes,
+            sampleRate = SAMPLE_RATE_HZ,
+            channels = 1,
+            bitsPerSample = 16
+        )
+        val pendingAudioFile = savePendingAudioCapture(wavBytes)
+        val audioMessageId = GatewayRuntime.appendChatAudioMessage(
+            audioPath = pendingAudioFile.absolutePath,
+            audioDurationMs = durationMs,
+            audioExpiresAtEpochMs = now + TRANSCRIPT_AUDIO_RETENTION_MS
+        )
+        val segment = PendingShortTranscriptionSegment(
+            pcmBytes = pcmBytes,
+            settings = settings,
+            durationMs = durationMs,
+            captureProfile = captureProfile,
+            preRollPrefixBytes = preRollPrefixBytes,
+            audioMessageId = audioMessageId,
+            enqueuedAtEpochMs = now
+        )
+        val flushNow = synchronized(pendingShortTranscriptionLock) {
+            pendingShortTranscriptionSegments.addLast(segment)
+            val combinedDuration = pendingShortTranscriptionSegments.sumOf { it.durationMs }
+            pendingShortTranscriptionSegments.size >= SHORT_TRANSCRIPTION_BATCH_MAX_SEGMENTS ||
+                combinedDuration >= SHORT_TRANSCRIPTION_BATCH_MAX_DURATION_MS
+        }
+        Log.i(
+            TAG,
+            "Trecho curto aguardando lote: duracao=${durationMs}ms " +
+                "pendentes=${synchronized(pendingShortTranscriptionLock) { pendingShortTranscriptionSegments.size }}"
+        )
+        if (flushNow) {
+            flushPendingShortTranscriptionBatch(force = true)
+        } else {
+            shortTranscriptionBatchScheduler?.schedule(
+                { flushPendingShortTranscriptionBatch() },
+                SHORT_TRANSCRIPTION_BATCH_WINDOW_MS,
+                TimeUnit.MILLISECONDS
+            )
+        }
+        updateQueueCount()
+        return true
+    }
+
+    private fun flushPendingShortTranscriptionBatch(force: Boolean = false) {
+        val batch = synchronized(pendingShortTranscriptionLock) {
+            if (pendingShortTranscriptionSegments.isEmpty()) {
+                emptyList()
+            } else if (pendingShortTranscriptionSegments.peekLast()?.let { last ->
+                    !force &&
+                        System.currentTimeMillis() - last.enqueuedAtEpochMs <
+                            SHORT_TRANSCRIPTION_BATCH_WINDOW_MS
+                } == true
+            ) {
+                // Each new short segment schedules another debounce check. An
+                // older check must not flush the batch before the latest
+                // sample arrives.
+                emptyList()
+            } else {
+                buildList {
+                    while (pendingShortTranscriptionSegments.isNotEmpty()) {
+                        add(pendingShortTranscriptionSegments.removeFirst())
+                    }
+                }
+            }
+        }
+        if (batch.isEmpty()) return
+        val first = batch.first()
+        val combinedPcm = ByteArrayOutputStream(
+            batch.sumOf { it.pcmBytes.size }
+        ).apply {
+            batch.forEach { write(it.pcmBytes) }
+        }.toByteArray()
+        val combinedDuration = batch.sumOf { it.durationMs }
+        val combinedPreRollBytes = batch.sumOf { it.preRollPrefixBytes }
+        val messageIds = batch.map { it.audioMessageId }
+        Log.i(
+            TAG,
+            "Lote curto enviado para transcricao: trechos=${batch.size} " +
+                "duracao=${combinedDuration}ms bytes=${combinedPcm.size}"
+        )
+        finalizeSpeechSegment(
+            pcmBytes = combinedPcm,
+            settings = first.settings,
+            durationMs = combinedDuration,
+            captureProfile = first.captureProfile,
+            preRollPrefixBytes = combinedPreRollBytes,
+            bypassShortTranscriptionBatch = true,
+            existingAudioMessageId = first.audioMessageId,
+            mergedAudioMessageIds = messageIds
+        )
+    }
+
+    private fun updateTranscriptionAudioBatch(
+        messageIds: List<Long>,
+        primaryMessageId: Long,
+        text: String? = null,
+        state: ChatAudioState,
+        error: String? = null
+    ) {
+        messageIds.distinct().forEach { id ->
+            GatewayRuntime.updateChatAudioMessage(
+                id = id,
+                text = when {
+                    id == primaryMessageId -> text
+                    state == ChatAudioState.TRANSCRIBED -> ""
+                    else -> null
+                },
+                state = state,
+                error = error
+            )
+        }
+    }
+
     private fun finalizeSpeechSegment(
         pcmBytes: ByteArray,
         settings: GatewaySettings,
@@ -1673,15 +1846,30 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // para a transcricao (e o motivo do pre-roll existir), mas ficam
         // FORA da verificacao de locutor — ambiente dilui o embedding e
         // infla a duracao usada no limiar adaptativo de trecho curto.
-        preRollPrefixBytes: Int = 0
+        preRollPrefixBytes: Int = 0,
+        bypassShortTranscriptionBatch: Boolean = false,
+        existingAudioMessageId: Long? = null,
+        mergedAudioMessageIds: List<Long> = emptyList()
     ) {
-        consumeSegmentLipActivity()
-        // Anel zerado: o rabo do segmento que acabou de fechar ja foi (ou
-        // sera) transcrito — prefixa-lo no proximo segmento duplicaria as
-        // ultimas palavras na proxima transcricao.
-        clearPreRoll()
+        if (!bypassShortTranscriptionBatch) {
+            consumeSegmentLipActivity()
+            // Anel zerado: o rabo do segmento que acabou de fechar ja foi (ou
+            // sera) transcrito — prefixa-lo no proximo segmento duplicaria as
+            // ultimas palavras na proxima transcricao.
+            clearPreRoll()
+        }
         if (pcmBytes.isEmpty() || durationMs < captureProfile.minTranscriptionMs) {
             Log.i(TAG, "Segmento descartado: bytes=${pcmBytes.size}, duracao=${durationMs}ms.")
+            return
+        }
+        if (!bypassShortTranscriptionBatch && queueShortTranscriptionSegment(
+                pcmBytes = pcmBytes,
+                settings = settings,
+                durationMs = durationMs,
+                captureProfile = captureProfile,
+                preRollPrefixBytes = preRollPrefixBytes
+            )
+        ) {
             return
         }
         // A transcrição termina de forma assíncrona e pode voltar somente
@@ -1707,15 +1895,24 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         val pendingTranscriptions = queuedTranscriptions + if (executor.activeCount > 0) 1 else 0
         if (pendingTranscriptions >= MAX_TRANSCRIPTION_QUEUE) {
             Log.w(TAG, "Fila de transcricao cheia (${pendingTranscriptions}); segmento descartado.")
-            val queuedWav = buildWavPcm16(pcmBytes, SAMPLE_RATE_HZ, 1, 16)
-            val queuedFile = savePendingAudioCapture(queuedWav)
-            val queuedMessageId = GatewayRuntime.appendChatAudioMessage(
-                queuedFile.absolutePath,
-                durationMs,
-                System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
-            )
-            GatewayRuntime.updateChatAudioMessage(
-                id = queuedMessageId,
+            val queuedMessageIds = if (mergedAudioMessageIds.isNotEmpty()) {
+                mergedAudioMessageIds.distinct()
+            } else if (existingAudioMessageId != null) {
+                listOf(existingAudioMessageId)
+            } else {
+                val queuedWav = buildWavPcm16(pcmBytes, SAMPLE_RATE_HZ, 1, 16)
+                val queuedFile = savePendingAudioCapture(queuedWav)
+                listOf(
+                    GatewayRuntime.appendChatAudioMessage(
+                        queuedFile.absolutePath,
+                        durationMs,
+                        System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
+                    )
+                )
+            }
+            updateTranscriptionAudioBatch(
+                messageIds = queuedMessageIds,
+                primaryMessageId = queuedMessageIds.first(),
                 state = ChatAudioState.ERROR,
                 error = "Fila de transcrição cheia; trecho não processado"
             )
@@ -1749,20 +1946,31 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
         // Entra no histórico no instante em que o bloco é enfileirado. Assim,
         // vários trechos aparecem em sequência mesmo se o primeiro ainda
-        // estiver ocupando o motor de transcrição.
-        val pendingAudioFile = savePendingAudioCapture(wavBytes)
-        val audioMessageId = GatewayRuntime.appendChatAudioMessage(
-            audioPath = pendingAudioFile.absolutePath,
-            audioDurationMs = durationMs,
-            audioExpiresAtEpochMs = System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
-        )
+        // estiver ocupando o motor de transcrição. Para um lote curto, as
+        // bolhas já foram criadas individualmente pelo agregador; o áudio
+        // combinado usa a primeira como âncora do texto devolvido.
+        val audioMessageId: Long
+        val audioMessageIds: List<Long>
+        if (existingAudioMessageId != null) {
+            audioMessageId = existingAudioMessageId
+            audioMessageIds = (mergedAudioMessageIds + existingAudioMessageId).distinct()
+        } else {
+            val pendingAudioFile = savePendingAudioCapture(wavBytes)
+            audioMessageId = GatewayRuntime.appendChatAudioMessage(
+                audioPath = pendingAudioFile.absolutePath,
+                audioDurationMs = durationMs,
+                audioExpiresAtEpochMs = System.currentTimeMillis() + TRANSCRIPT_AUDIO_RETENTION_MS
+            )
+            audioMessageIds = listOf(audioMessageId)
+        }
 
         executor.execute(
             QueuedTranscriptionTask(
                 enqueuedAtEpochMs = System.currentTimeMillis(),
                 onDropped = {
-                    GatewayRuntime.updateChatAudioMessage(
-                        id = audioMessageId,
+                    updateTranscriptionAudioBatch(
+                        messageIds = audioMessageIds,
+                        primaryMessageId = audioMessageId,
                         state = ChatAudioState.ERROR,
                         error = "Tempo de espera excedido na fila"
                     )
@@ -1774,8 +1982,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 // Retorna false quando o segmento foi consumido pelo cadastro
                 // de voz ou rejeitado por nao ser a voz do usuario.
                 if (!evaluateSpeakerVoiceGate(pcmBytes, preRollPrefixBytes)) {
-                    GatewayRuntime.updateChatAudioMessage(
-                        id = audioMessageId,
+                    updateTranscriptionAudioBatch(
+                        messageIds = audioMessageIds,
+                        primaryMessageId = audioMessageId,
                         state = ChatAudioState.ERROR,
                         error = "Trecho rejeitado pela verificação de voz"
                     )
@@ -1910,8 +2119,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         ChatRole.SYSTEM,
                         "palavra de ativacao reconhecida: \u201C$wakeTermOnly\u201D"
                     )
-                    GatewayRuntime.updateChatAudioMessage(
-                        id = audioMessageId,
+                    updateTranscriptionAudioBatch(
+                        messageIds = audioMessageIds,
+                        primaryMessageId = audioMessageId,
                         text = correctedText,
                         state = ChatAudioState.TRANSCRIBED
                     )
@@ -1929,10 +2139,16 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 if (ambientTranscriptLikely) {
                     Log.i(TAG, "Marcador de ambiente mantido para avaliacao do OpenClaw: $correctedText")
                 }
-                GatewayRuntime.updateChatAudioMessage(
-                    id = audioMessageId,
+                val audioState = if (correctedText.isBlank()) {
+                    ChatAudioState.ERROR
+                } else {
+                    ChatAudioState.TRANSCRIBED
+                }
+                updateTranscriptionAudioBatch(
+                    messageIds = audioMessageIds,
+                    primaryMessageId = audioMessageId,
                     text = correctedText.takeIf { it.isNotBlank() },
-                    state = if (correctedText.isBlank()) ChatAudioState.ERROR else ChatAudioState.TRANSCRIBED,
+                    state = audioState,
                     error = if (correctedText.isBlank()) "Nenhum texto reconhecido" else null
                 )
                 val enriched = enrichLocalVoiceAnalysisIfNeeded(
@@ -1990,7 +2206,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 // deste segmento na fila antes, para o agendador atualiza-la
                 // como SENDING em vez de criar uma segunda bolha de texto.
                 if (correctedText.isNotBlank() && !neutralTranscriptMarker) {
-                    completedTranscriptAudio.add(RetainedTranscriptAudio(audioMessageId))
+                    audioMessageIds.forEach { id ->
+                        completedTranscriptAudio.add(RetainedTranscriptAudio(id))
+                    }
                 }
                 GatewayRuntime.update {
                     val currentState = it
@@ -2097,8 +2315,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             } catch (ex: Exception) {
                 if (ex is CancellationException || ex is InterruptedException || stopRequested.get()) {
                     Log.i(TAG, "Transcricao cancelada durante parada do servico.")
-                    GatewayRuntime.updateChatAudioMessage(
-                        id = audioMessageId,
+                    updateTranscriptionAudioBatch(
+                        messageIds = audioMessageIds,
+                        primaryMessageId = audioMessageId,
                         state = ChatAudioState.ERROR,
                         error = "Transcrição interrompida"
                     )
@@ -2117,8 +2336,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
                 Log.e(TAG, "Whisper transcription failed", ex)
                 val msg = ex.message.orEmpty()
-                GatewayRuntime.updateChatAudioMessage(
-                    id = audioMessageId,
+                updateTranscriptionAudioBatch(
+                    messageIds = audioMessageIds,
+                    primaryMessageId = audioMessageId,
                     state = ChatAudioState.ERROR,
                     error = msg.ifBlank { "Falha na transcrição" }.take(120)
                 )
@@ -2605,7 +2825,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             0
         } else {
             val pendingQueue = reconcileTranscriptionQueue(executor)
-            pendingQueue + if (activeTranscriptionStartedAtEpochMs > 0L) 1 else 0
+            val pendingShort = synchronized(pendingShortTranscriptionLock) {
+                pendingShortTranscriptionSegments.size
+            }
+            pendingQueue + pendingShort + if (activeTranscriptionStartedAtEpochMs > 0L) 1 else 0
         }
         GatewayRuntime.update {
             it.copy(transcriptionQueueCount = queueSize)
@@ -6495,6 +6718,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // sendo o dono — limiar ganha desconto abaixo desta duracao.
         private const val SHORT_SEGMENT_FOR_SPEAKER_MS = 2_000L
         private const val SHORT_SEGMENT_THRESHOLD_DISCOUNT = 0.08
+
+        // Lotes curtos para STT remoto: trechos pequenos consecutivos podem
+        // ser foneticamente incompreensíveis isolados, mas recuperam contexto
+        // quando enviados juntos. As bolhas permanecem individuais no chat.
+        private const val SHORT_TRANSCRIPTION_BATCH_SEGMENT_MS = 2_400L
+        private const val SHORT_TRANSCRIPTION_BATCH_GAP_MS = 2_500L
+        private const val SHORT_TRANSCRIPTION_BATCH_WINDOW_MS = 1_400L
+        private const val SHORT_TRANSCRIPTION_BATCH_MAX_SEGMENTS = 3
+        private const val SHORT_TRANSCRIPTION_BATCH_MAX_DURATION_MS = 8_000L
 
         // Faixa cinzenta da verificacao de voz: abaixo do limiar mas dentro
         // desta margem o segmento NAO e descartado — segue com o score no
