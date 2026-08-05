@@ -42,6 +42,7 @@ private val CAPTURE_RESTART_PATCH_KEYS = setOf(
     "transcriptionTerms",
     "transcriptionDictionary",
     "transcriptionContextMessageCount",
+    "elevenLabsRichAudioAnalysisEnabled",
     "noiseGateMultiplier",
     "minSpeechRms",
     "minSpeechPeakNormalized",
@@ -119,6 +120,7 @@ fun flattenSectionedJson(root: JSONObject): JSONObject {
         copyKey(s, "terms", "transcriptionTerms")
         copyKey(s, "dictionary", "transcriptionDictionary")
         copyKey(s, "contextMessageCount", "transcriptionContextMessageCount")
+        copyKey(s, "elevenLabsRichAudioAnalysis", "elevenLabsRichAudioAnalysisEnabled")
         copyKey(s, "repeatSuppression", "transcriptionRepeatSuppression")
         copyKey(s, "colloquialNormalization", "colloquialNormalizationStrength")
     }
@@ -487,6 +489,14 @@ fun GatewaySettings.applyWebSocketSettingsPatch(patch: JSONObject?): GatewaySett
                             )
                         )
                     )
+                }
+            }
+            "elevenLabsRichAudioAnalysisEnabled" -> {
+                val value = booleanValue(key)
+                if (value == null) {
+                    ignored += key
+                } else {
+                    applyIfChanged(key, updated.copy(elevenLabsRichAudioAnalysisEnabled = value))
                 }
             }
             "screenMode" -> {

@@ -149,7 +149,14 @@ class CompanionTranscriptionClient(private val appContext: Context) {
         val result = CompletableFuture<WhisperTranscriptionResult>()
         val callback = object : ISufficitTranscriptionCallback.Stub() {
             override fun onResult(id: String, text: String) {
-                if (id == requestId) result.complete(WhisperTranscriptionResult(text = text))
+                if (id == requestId) result.complete(
+                    WhisperTranscriptionResult(
+                        text = text,
+                        audioMetadata = TranscriptionAudioMetadata(
+                            analysisSources = listOf("companion_transcription")
+                        )
+                    )
+                )
             }
 
             override fun onError(id: String, errorCode: Int, message: String) {

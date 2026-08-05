@@ -3,6 +3,7 @@ package com.sufficit.ai.gateway.transcription.local
 import android.content.Context
 import android.util.Log
 import com.sufficit.ai.gateway.transcription.WhisperTranscriptionResult
+import com.sufficit.ai.gateway.transcription.TranscriptionAudioMetadata
 import java.io.File
 
 class LocalWhisperEngine(private val context: Context) : AutoCloseable {
@@ -48,7 +49,12 @@ class LocalWhisperEngine(private val context: Context) : AutoCloseable {
             audioData = audioData
         )
 
-        return WhisperTranscriptionResult(text = text)
+        return WhisperTranscriptionResult(
+            text = text,
+            audioMetadata = TranscriptionAudioMetadata(
+                analysisSources = listOf("local_whisper")
+            )
+        )
     }
 
     private fun transcribeWithContext(

@@ -107,6 +107,10 @@ data class GatewaySettings(
     val transcriptionTerms: String = "",
     val transcriptionDictionary: String = "",
     val transcriptionContextMessageCount: Int = GatewaySettingsStore.DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT,
+    // Experimento opcional: uma segunda chamada Scribe v2 batch adiciona
+    // diarizacao e eventos nao verbais ao commit Realtime. Desligado por
+    // padrao porque duplica o audio faturado.
+    val elevenLabsRichAudioAnalysisEnabled: Boolean = GatewaySettingsStore.DEFAULT_ELEVENLABS_RICH_AUDIO_ANALYSIS_ENABLED,
     val screenMode: ScreenMode = GatewaySettingsStore.DEFAULT_SCREEN_MODE,
     val screenHoldSeconds: Int = GatewaySettingsStore.DEFAULT_SCREEN_HOLD_SECONDS,
     val transcriptClearTimeoutSecs: Int = GatewaySettingsStore.DEFAULT_TRANSCRIPT_CLEAR_TIMEOUT_SECS,
@@ -380,6 +384,20 @@ class GatewaySettingsStore(private val context: Context) {
         )
         val normalizedServerAddress = normalizeOpenClawServerAddress(settings.openClawServerAddress)
         val normalizedOpenClawSessionKey = normalizeOpenClawSessionKey(settings.openClawSessionKey)
+        // Migra o valor padrão antigo (4 s) para a nova janela conversacional
+        // (1 s). O campo foi introduzido sem versão própria, portanto o valor
+        // 4 não pode ser distinguido de uma preferência antiga: ele é tratado
+        // como o padrão legado. Outros valores entre 1 e 10 s continuam
+        // configuráveis.
+        val normalizedAccumulationWindowSecs =
+            if (
+                settings.openClawAccumulationWindowSecs == LEGACY_DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS &&
+                    seedSettings.openClawAccumulationWindowSecs < LEGACY_DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS
+            ) {
+                seedSettings.openClawAccumulationWindowSecs
+            } else {
+                settings.openClawAccumulationWindowSecs.coerceIn(1, 10)
+            }
 
         return settings.copy(
             localEndpointUrl = settings.localEndpointUrl.trim().ifEmpty { seedSettings.localEndpointUrl },
@@ -393,6 +411,7 @@ class GatewaySettingsStore(private val context: Context) {
             cameraGestureEnabled = settings.cameraGestureEnabled,
             transcriptionMode = loadedTranscriptionMode,
             localModelPath = fixedModelPath,
+            openClawAccumulationWindowSecs = normalizedAccumulationWindowSecs,
             whisperNoSpeechThreshold = settings.whisperNoSpeechThreshold.coerceIn(0.0, 1.0),
             whisperCompressionRatioThreshold = settings.whisperCompressionRatioThreshold.coerceIn(1.0, 5.0),
             whisperRepetitionPenalty = settings.whisperRepetitionPenalty.coerceIn(1.0, 2.0)
@@ -595,6 +614,7 @@ class GatewaySettingsStore(private val context: Context) {
         private const val KEY_TRANSCRIPTION_TERMS = "transcription_terms"
         private const val KEY_TRANSCRIPTION_DICTIONARY = "transcription_dictionary"
         private const val KEY_SCREEN_MODE = "screen_mode"
+        private const val LEGACY_DEFAULT_OPENCLAW_ACCUMULATION_WINDOW_SECS = 4
         private const val KEY_SCREEN_HOLD_SECONDS = "screen_hold_seconds"
 
         val DEFAULT_LOCAL_ENDPOINT_URL: String
@@ -744,6 +764,7 @@ class GatewaySettingsStore(private val context: Context) {
         const val DEFAULT_API_BIND_ALL_INTERFACES = true
         const val DEFAULT_API_TOKEN = ""
         const val DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT = 10
+        const val DEFAULT_ELEVENLABS_RICH_AUDIO_ANALYSIS_ENABLED = false
 
         private fun resolveTranscriptionMode(
             storedMode: TranscriptionMode,

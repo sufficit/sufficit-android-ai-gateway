@@ -21,7 +21,9 @@ class ElevenLabsRealtimeClient(
 ) {
     private data class PendingRequest(
         val completed: CountDownLatch,
+        val metadataReceived: CountDownLatch,
         val committedText: AtomicReference<String>,
+        val audioMetadata: AtomicReference<TranscriptionAudioMetadata>,
         val failure: AtomicReference<Throwable?>,
         val onPartialTranscript: (String) -> Unit,
         val startedAtNanos: Long
@@ -64,12 +66,16 @@ class ElevenLabsRealtimeClient(
 
         val webSocket = ensureConnected(apiKey)
         val completed = CountDownLatch(1)
+        val metadataReceived = CountDownLatch(1)
         val startedAtNanos = System.nanoTime()
         val committedText = AtomicReference("")
+        val audioMetadata = AtomicReference(TranscriptionAudioMetadata())
         val failure = AtomicReference<Throwable?>(null)
         pendingRequest = PendingRequest(
             completed = completed,
+            metadataReceived = metadataReceived,
             committedText = committedText,
+            audioMetadata = audioMetadata,
             failure = failure,
             onPartialTranscript = onPartialTranscript,
             startedAtNanos = startedAtNanos
@@ -107,17 +113,21 @@ class ElevenLabsRealtimeClient(
                 throw IllegalStateException("Tempo esgotado na transcricao ElevenLabs realtime.")
             }
             failure.get()?.let { throw it }
-            return WhisperTranscriptionResult(text = committedText.get())
+            if (!metadataReceived.await(METADATA_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                // Sem o evento atrasado nao e seguro associar um evento futuro
+                // ao proximo commit. Reconecta no proximo trecho.
+                Log.w(TAG, "Metadados Realtime nao chegaram; reiniciando a sessao antes do proximo trecho.")
+                resetConnection()
+            }
+            return WhisperTranscriptionResult(
+                text = committedText.get(),
+                audioMetadata = audioMetadata.get()
+            )
         } finally {
             pendingRequest = null
-            // Scribe v2 Realtime aceita múltiplos commits, mas na prática o
-            // servidor encerra sessões ociosas e pode rejeitar o próximo input
-            // após um commit. Uma sessão por trecho é mais confiável e mantém
-            // a fila livre para o agrupamento por pausa.
-            webSocket.close(NORMAL_CLOSE_CODE, "segment_complete")
-            if (socket === webSocket) {
-                clearConnectionState()
-            }
+            // A sessao permanece aberta entre commits. Se o servidor a
+            // encerrar por ociosidade, ensureConnected abre outra no proximo
+            // trecho e transcribe() repete uma vez em caso de corrida.
         }
     }
 
@@ -150,7 +160,8 @@ class ElevenLabsRealtimeClient(
             .url(
                 "wss://api.elevenlabs.io/v1/speech-to-text/realtime" +
                     "?model_id=scribe_v2_realtime&language_code=pt" +
-                    "&audio_format=pcm_16000&include_timestamps=false"
+                    "&audio_format=pcm_16000&include_timestamps=true" +
+                    "&include_language_detection=true"
             )
             .header("xi-api-key", apiKey.trim())
             .build()
@@ -170,8 +181,29 @@ class ElevenLabsRealtimeClient(
                     "partial_transcript" -> event.optString("text").trim()
                         .takeIf { it.isNotBlank() }
                         ?.let { partial -> pending?.onPartialTranscript?.invoke(partial) }
-                    "committed_transcript", "committed_transcript_with_timestamps" -> {
+                    "committed_transcript" -> {
                         pending?.committedText?.set(event.optString("text").trim())
+                        pending?.completed?.countDown()
+                    }
+                    "committed_transcript_with_timestamps" -> {
+                        event.optString("text").trim()
+                            .takeIf { it.isNotBlank() }
+                            ?.let { pending?.committedText?.set(it) }
+                        pending?.audioMetadata?.updateAndGet { current ->
+                            current.merge(
+                                ElevenLabsTranscriptionEventParser.metadata(
+                                    event = event,
+                                    source = "elevenlabs_scribe_v2_realtime",
+                                    signals = listOf(
+                                        TranscriptionSignal.PARTIAL_TRANSCRIPT,
+                                        TranscriptionSignal.LANGUAGE_DETECTION,
+                                        TranscriptionSignal.LANGUAGE_PROBABILITY,
+                                        TranscriptionSignal.WORD_TIMESTAMPS
+                                    )
+                                )
+                            )
+                        }
+                        pending?.metadataReceived?.countDown()
                         pending?.completed?.countDown()
                     }
                     "error", "input_error" -> {
@@ -184,17 +216,22 @@ class ElevenLabsRealtimeClient(
                             IllegalStateException(detail)
                         )
                         pending?.completed?.countDown()
+                        pending?.metadataReceived?.countDown()
                     }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, throwable: Throwable, response: Response?) {
                 val detail = response?.let { " HTTP ${it.code}" }.orEmpty()
+                // Em falhas de upgrade o OkHttp entrega a Response ao
+                // listener; o cliente e responsavel por fecha-la.
+                response?.close()
                 val error = IllegalStateException("ElevenLabs realtime falhou.$detail", throwable)
                 connectFailure.compareAndSet(null, error)
                 ready.countDown()
                 pendingRequest?.failure?.compareAndSet(null, error)
                 pendingRequest?.completed?.countDown()
+                pendingRequest?.metadataReceived?.countDown()
                 socket = null
             }
 
@@ -203,6 +240,7 @@ class ElevenLabsRealtimeClient(
                 val error = IllegalStateException("Sessao ElevenLabs encerrada: $code $reason")
                 pendingRequest?.failure?.compareAndSet(null, error)
                 pendingRequest?.completed?.countDown()
+                pendingRequest?.metadataReceived?.countDown()
             }
         })
         socket = createdSocket
@@ -220,6 +258,7 @@ class ElevenLabsRealtimeClient(
         const val SAMPLE_RATE_HZ = 16_000
         const val AUDIO_CHUNK_BYTES = 6_400 // 200 ms de PCM16 mono.
         const val REALTIME_TIMEOUT_SECONDS = 45L
+        const val METADATA_TIMEOUT_SECONDS = 5L
         const val CONNECTION_TIMEOUT_SECONDS = 20L
         const val NORMAL_CLOSE_CODE = 1000
 

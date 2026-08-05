@@ -121,7 +121,11 @@ object GatewayConfigCatalog {
             screenMode = ScreenMode.ACTIVITY,
             screenHoldSeconds = 4,
             transcriptClearTimeoutSecs = 30,
-            openClawAccumulationWindowSecs = 4,
+            // Uma janela longa fazia a conversa parecer travada: o texto já
+            // estava transcrito, mas o despacho ainda aguardava quatro
+            // segundos. Um segundo preserva a união de microtrechos sem
+            // acrescentar uma pausa perceptível.
+            openClawAccumulationWindowSecs = 1,
             noiseGateMultiplier = 1.8,
             minSpeechRms = 0.010,
             minSpeechPeakNormalized = 0.035,

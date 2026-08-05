@@ -11,7 +11,8 @@ import java.util.UUID
 data class WhisperTranscriptionResult(
     val text: String,
     val gender: String? = null,
-    val emotion: String? = null
+    val emotion: String? = null,
+    val audioMetadata: TranscriptionAudioMetadata = TranscriptionAudioMetadata()
 )
 
 /**
@@ -101,7 +102,8 @@ class WhisperApiClient {
 
         val json = JSONObject(responseBody)
         return WhisperTranscriptionResult(
-            text = json.optString("text").trim()
+            text = json.optString("text").trim(),
+            audioMetadata = genericWhisperMetadata(json)
         )
     }
 
@@ -137,9 +139,9 @@ class WhisperApiClient {
         DataOutputStream(connection.outputStream).use { output ->
             writeFormField(output, boundary, "model_id", modelId)
             writeFormField(output, boundary, "language_code", "pt")
-            // Sem marcacao de eventos de audio (risadas etc.): o gateway quer
-            // texto limpo para o OpenClaw.
-            writeFormField(output, boundary, "tag_audio_events", "false")
+            writeFormField(output, boundary, "tag_audio_events", "true")
+            writeFormField(output, boundary, "diarize", "true")
+            writeFormField(output, boundary, "timestamps_granularity", "word")
             writeFileField(output, boundary, "file", "segment.wav", wavBytes)
             output.writeBytes("--$boundary--\r\n")
             output.flush()
@@ -161,7 +163,35 @@ class WhisperApiClient {
 
         val json = JSONObject(responseBody)
         return WhisperTranscriptionResult(
-            text = json.optString("text").trim()
+            text = json.optString("text").trim(),
+            audioMetadata = ElevenLabsTranscriptionEventParser.metadata(
+                event = json,
+                richAnalysisPerformed = true,
+                source = "elevenlabs_scribe_v2_batch",
+                signals = listOf(
+                    TranscriptionSignal.LANGUAGE_DETECTION,
+                    TranscriptionSignal.LANGUAGE_PROBABILITY,
+                    TranscriptionSignal.WORD_TIMESTAMPS,
+                    TranscriptionSignal.SPEAKER_DIARIZATION,
+                    TranscriptionSignal.AUDIO_EVENTS
+                )
+            )
+        )
+    }
+
+    private fun genericWhisperMetadata(json: JSONObject): TranscriptionAudioMetadata {
+        val language = json.optString("language").trim().ifBlank { null }
+        val probability = json.optDouble("language_probability", Double.NaN)
+            .takeUnless(Double::isNaN)
+        val signals = buildList {
+            if (language != null) add(TranscriptionSignal.LANGUAGE_DETECTION)
+            if (probability != null) add(TranscriptionSignal.LANGUAGE_PROBABILITY)
+        }
+        return TranscriptionAudioMetadata(
+            analysisSources = listOf("whisper_compatible"),
+            availableSignals = signals,
+            languageCode = language,
+            languageProbability = probability
         )
     }
 

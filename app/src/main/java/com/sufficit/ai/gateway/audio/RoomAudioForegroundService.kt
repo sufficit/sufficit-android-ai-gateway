@@ -81,12 +81,17 @@ import com.sufficit.ai.gateway.transcription.local.LocalSherpaOnnxEngine
 import com.sufficit.ai.gateway.transcription.local.LocalWhisperEngine
 import com.sufficit.ai.gateway.transcription.CompanionTranscriptionClient
 import com.sufficit.ai.gateway.transcription.CompanionTranscriptionException
+import com.sufficit.ai.gateway.transcription.ElevenLabsRichAudioAnalysisClient
 import com.sufficit.ai.gateway.transcription.ElevenLabsRealtimeClient
+import com.sufficit.ai.gateway.transcription.TranscriptionAudioMetadata
+import com.sufficit.ai.gateway.transcription.TranscriptionSignal
+import com.sufficit.ai.gateway.transcription.TranscriptionReliabilityPolicy
 import com.sufficit.ai.gateway.transcription.WhisperApiClient
 import com.sufficit.ai.gateway.transcription.WhisperConfigurationCheck
 import com.sufficit.ai.gateway.transcription.WhisperHttpException
 import com.sufficit.ai.gateway.transcription.checkWhisperConfiguration
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.io.BufferedInputStream
 import java.io.File
@@ -139,6 +144,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private var captureExecutor: ExecutorService? = null
     private var transcriptionExecutor: ThreadPoolExecutor? = null
     private var shortTranscriptionBatchScheduler: ScheduledExecutorService? = null
+    // A análise rica do Scribe é opcional e secundária à conversa. Ela usa
+    // outro executor para que uma segunda requisição HTTP nunca segure a
+    // fila principal de transcrição.
+    private var richAnalysisExecutor: ExecutorService? = null
     private var audioRecord: AudioRecord? = null
 
     // PARTIAL_WAKE_LOCK mantido durante TODA a captura: sem ele a CPU entra em
@@ -159,6 +168,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     @Volatile private var suppressNextReplySpeech = false
     private val whisperApiClient = WhisperApiClient()
     private val elevenLabsRealtimeClient = ElevenLabsRealtimeClient()
+    private val elevenLabsRichAudioAnalysisClient = ElevenLabsRichAudioAnalysisClient()
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
     private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
     private val pendingShortTranscriptionLock = Any()
@@ -327,6 +337,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             }
         }
         shortTranscriptionBatchScheduler = Executors.newSingleThreadScheduledExecutor()
+        richAnalysisExecutor = Executors.newSingleThreadExecutor()
         openClawExecutor = Executors.newSingleThreadExecutor()
         openClawExecutor?.execute {
             runCatching { interactionLedger.importLegacyChat(restoredChat) }
@@ -495,6 +506,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         transcriptionExecutor = null
         shortTranscriptionBatchScheduler?.shutdownNow()
         shortTranscriptionBatchScheduler = null
+        richAnalysisExecutor?.shutdownNow()
+        richAnalysisExecutor = null
         synchronized(pendingShortTranscriptionLock) {
             pendingShortTranscriptionSegments.clear()
         }
@@ -1468,7 +1481,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     if (!runtimeSnapshot.transcribing) {
                         Log.i(
                             TAG,
-                            "Commit automatico (${if (autoCommitBySilence) "silencio" else "pos-transcricao"}): despachando frase."
+                            "Commit automatico (${if (autoCommitBySilence) "silencio" else "pos-transcricao"}): " +
+                                "despachando frase; esperaTexto=" +
+                                (lastTextTranscriptionAtEpochMs.takeIf { it > 0L }?.let { now - it } ?: 0L) + "ms."
                         )
                         commitCurrentTranscriptToPrevious()
                         phraseCommitPending = false
@@ -1964,9 +1979,10 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             audioMessageIds = listOf(audioMessageId)
         }
 
+        val transcriptionQueuedAtEpochMs = System.currentTimeMillis()
         executor.execute(
             QueuedTranscriptionTask(
-                enqueuedAtEpochMs = System.currentTimeMillis(),
+                enqueuedAtEpochMs = transcriptionQueuedAtEpochMs,
                 onDropped = {
                     updateTranscriptionAudioBatch(
                         messageIds = audioMessageIds,
@@ -1977,6 +1993,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 }
             ) {
                 updateQueueCount()
+                Log.i(
+                    TAG,
+                    "Transcricao iniciada: audio=$audioMessageId " +
+                        "esperaFila=${(System.currentTimeMillis() - transcriptionQueuedAtEpochMs).coerceAtLeast(0L)}ms " +
+                        "duracao=${durationMs}ms."
+                )
                 // Verificacao de locutor ("so a minha voz"): roda aqui no
                 // executor de transcricao (custo de CPU fora da captura).
                 // Retorna false quando o segmento foi consumido pelo cadastro
@@ -2033,9 +2055,9 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         }
 
                         if (settings.whisperUrl.contains("api.elevenlabs.io", ignoreCase = true)) {
-                            elevenLabsRealtimeClient.transcribe(
+                            transcribeWithElevenLabs(
+                                settings = settings,
                                 pcmBytes = pcmBytes,
-                                apiKey = settings.whisperAuthToken,
                                 previousText = buildTranscriptionPreviousText(
                                     settings.transcriptionContextMessageCount
                                 ),
@@ -2078,6 +2100,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     }
                 }
 
+                Log.i(
+                    TAG,
+                    "Transcricao concluida: audio=$audioMessageId " +
+                        "tempo=${(System.currentTimeMillis() - transcriptionQueuedAtEpochMs).coerceAtLeast(0L)}ms " +
+                        "texto=${rawResult.text.length} chars."
+                )
                 val correctedTextRaw = TranscriptTextPipeline.applyCorrections(this, rawResult.text, settings)
                 // Depuracao: associa o texto devolvido ao WAV salvo do
                 // segmento (cru + corrigido) para auditoria local.
@@ -2262,6 +2290,14 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                         sameSpeakerProbability = speakerContinuityState?.sameSpeakerProbability,
                         voiceLearningProgress = speakerContinuityState?.anchorConfidence,
                         multipleVoicesLikely = enriched.analysis?.multipleVoicesLikely == true,
+                        detectedSpeakerCount = result.audioMetadata.speakerCount,
+                        nonVerbalAudioEvents = result.audioMetadata.nonVerbalEvents,
+                        transcriptionAnalysisSources = result.audioMetadata.analysisSources,
+                        transcriptionAvailableSignals = result.audioMetadata.availableSignals,
+                        transcriptionReliabilityScore = result.audioMetadata.reliabilityScore,
+                        transcriptionNoiseScore = result.audioMetadata.noiseScore,
+                        transcriptionLanguageCode = result.audioMetadata.languageCode,
+                        transcriptionLanguageProbability = result.audioMetadata.languageProbability,
                         statusText = if (mergedCurrent.isBlank()) {
                             "Trecho processado, sem texto retornado."
                         } else if (neutralTranscriptMarker) {
@@ -2412,6 +2448,61 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
     }
 
+    private fun transcribeWithElevenLabs(
+        settings: GatewaySettings,
+        pcmBytes: ByteArray,
+        previousText: String,
+        onPartialTranscript: (String) -> Unit
+    ): com.sufficit.ai.gateway.transcription.WhisperTranscriptionResult {
+        val realtime = elevenLabsRealtimeClient.transcribe(
+            pcmBytes = pcmBytes,
+            apiKey = settings.whisperAuthToken,
+            previousText = previousText,
+            onPartialTranscript = onPartialTranscript
+        )
+        if (!settings.elevenLabsRichAudioAnalysisEnabled) {
+            return realtime
+        }
+
+        // O Scribe v2 Realtime já entregou o texto utilizável. A chamada
+        // Batch, que traz diarização/eventos, é apenas enriquecimento: aguarde
+        // no máximo um orçamento curto e nunca transforme uma análise lenta
+        // em atraso perceptível no envio ao agente. Se exceder o orçamento,
+        // ela é cancelada e o texto Realtime segue normalmente.
+        val richExecutor = richAnalysisExecutor
+        if (richExecutor == null) return realtime
+        val richFuture = richExecutor.submit<TranscriptionAudioMetadata?> {
+            runCatching {
+                elevenLabsRichAudioAnalysisClient.analyzePcm16(
+                    pcmBytes = pcmBytes,
+                    apiKey = settings.whisperAuthToken
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Analise rica ElevenLabs indisponivel; mantendo commit Realtime.", error)
+            }.getOrNull()
+        }
+        val richMetadata = runCatching {
+            richFuture.get(RICH_ANALYSIS_LATENCY_BUDGET_MS, TimeUnit.MILLISECONDS)
+        }.onFailure { error ->
+            richFuture.cancel(true)
+            if (error is TimeoutException) {
+                Log.i(
+                    TAG,
+                    "Analise rica excedeu ${RICH_ANALYSIS_LATENCY_BUDGET_MS}ms; " +
+                        "continuando com Scribe Realtime."
+                )
+            } else {
+                Log.w(TAG, "Falha ao aguardar analise rica; mantendo commit Realtime.", error)
+            }
+        }.getOrNull()
+
+        return if (richMetadata == null) {
+            realtime
+        } else {
+            realtime.copy(audioMetadata = realtime.audioMetadata.merge(richMetadata))
+        }
+    }
+
     private fun savePendingAudioCapture(wavBytes: ByteArray): File {
         val directory = File(filesDir, "transcription-audio")
         directory.mkdirs()
@@ -2513,13 +2604,45 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             pcmBytes = pcmBytes,
             sampleRate = SAMPLE_RATE_HZ
         )
+        val runtimeState = GatewayRuntime.state().value
+        val remoteMetadata = transcriptionResult.audioMetadata
+        val multipleVoicesLikely =
+            analysis.multipleVoicesLikely || (remoteMetadata.speakerCount ?: 0) > 1
+        val noiseScore = runtimeState.ambientNoiseScore
+            ?.takeIf { runtimeState.ambientNoiseDetected }
+            ?.coerceIn(0.0, 1.0)
+        val localEvents = buildList {
+            when (runtimeState.ambientNoiseKind?.trim()?.lowercase()) {
+                "music" -> add("music")
+                "noise" -> add("background_noise")
+            }
+        }
+        val reliability = TranscriptionReliabilityPolicy.score(
+            multipleVoicesLikely = multipleVoicesLikely,
+            noiseScore = noiseScore,
+            voicedRatio = analysis.voiceSignature?.voicedRatio,
+            languageProbability = remoteMetadata.languageProbability
+        )
+        val localMetadata = TranscriptionAudioMetadata(
+            analysisSources = listOf("gateway_audio_heuristic"),
+            availableSignals = buildList {
+                add(TranscriptionSignal.LOCAL_VOICE_HEURISTICS)
+                if (noiseScore != null) add(TranscriptionSignal.LOCAL_NOISE_HEURISTIC)
+            },
+            detectedSpeakerCount = 2.takeIf { analysis.multipleVoicesLikely },
+            nonVerbalEvents = localEvents,
+            noiseScore = noiseScore,
+            reliabilityScore = reliability,
+            reliabilitySource = "gateway_audio_heuristic"
+        )
 
         return EnrichedTranscriptionResult(
             result = transcriptionResult.copy(
                 gender = analysis.gender,
-                emotion = analysis.emotion
+                emotion = analysis.emotion,
+                audioMetadata = remoteMetadata.merge(localMetadata)
             ),
-            analysis = analysis
+            analysis = analysis.copy(multipleVoicesLikely = multipleVoicesLikely)
         )
     }
 
@@ -4403,12 +4526,29 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // Mantém também o estado leve usado pelo cabeçalho/notificação.
         setAssistantProcessing(true, pendingLabel)
         updateOpenClawDispatchQueueCount()
+        val dispatchQueuedAtEpochMs = System.currentTimeMillis()
+        Log.i(
+            TAG,
+            "Despacho OpenClaw enfileirado: chars=${normalizedPhrase.length} " +
+                "imediato=$immediate awakened=$phraseAwakened."
+        )
 
         val executor = openClawExecutor ?: run {
             failAssistantProcessing("Fila do OpenClaw indisponivel.")
             return
         }
         executor.execute {
+            // Falha determinística de configuração não deve ficar escondida
+            // atrás da janela de agrupamento: mostre-a imediatamente, em vez
+            // de fazer o usuário esperar para descobrir que não há destino.
+            val preflightSettings = runCatching {
+                settingsStore?.load() ?: GatewaySettingsStore(this)
+                    .load()
+            }.getOrNull()
+            if (preflightSettings != null && !hasOpenClawCredentials(preflightSettings)) {
+                failAssistantProcessing("OpenClaw desativado na configuracao.")
+                return@execute
+            }
             if (!immediate) {
                 try {
                     Thread.sleep(openClawAccumulationWindowMs)
@@ -4417,6 +4557,12 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                     return@execute
                 }
             }
+
+            Log.i(
+                TAG,
+                "Despacho OpenClaw liberado: espera=${(System.currentTimeMillis() - dispatchQueuedAtEpochMs).coerceAtLeast(0L)}ms " +
+                    "imediato=$immediate."
+            )
 
             if (pendingOpenClawDispatchGeneration.get() != generation) {
                 return@execute
@@ -4456,6 +4602,13 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 wakeWord = dispatchWakeWord
             )
         }
+    }
+
+    private fun hasOpenClawCredentials(settings: GatewaySettings): Boolean {
+        return settings.openClawGatewayToken.isNotBlank() &&
+            settings.openClawDeviceToken.isNotBlank() &&
+            settings.openClawSessionKey.isNotBlank() &&
+            settings.openClawServerAddress.isNotBlank()
     }
 
     private fun mergePendingDispatchText(
@@ -4830,6 +4983,21 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             put("awakened", awakened)
             put("wakeWord", if (awakened && wakeWordPhrase.isNotBlank()) wakeWordPhrase else JSONObject.NULL)
             put("multipleVoicesLikely", state.multipleVoicesLikely)
+            put("transcriptionAnalysis", JSONObject().apply {
+                put("reliabilityScore", state.transcriptionReliabilityScore ?: JSONObject.NULL)
+                put("reliabilitySource", "gateway_audio_heuristic")
+                put("noiseScore", state.transcriptionNoiseScore ?: JSONObject.NULL)
+                put("detectedSpeakerCount", state.detectedSpeakerCount ?: JSONObject.NULL)
+                put("multipleVoicesLikely", state.multipleVoicesLikely)
+                put("nonVerbalEvents", JSONArray(state.nonVerbalAudioEvents))
+                put("analysisSources", JSONArray(state.transcriptionAnalysisSources))
+                put("availableSignals", JSONArray(state.transcriptionAvailableSignals))
+                put("languageCode", state.transcriptionLanguageCode ?: JSONObject.NULL)
+                put(
+                    "languageProbability",
+                    state.transcriptionLanguageProbability ?: JSONObject.NULL
+                )
+            })
             transcript?.let {
                 put("neutralTranscriptMarker", TranscriptTextPipeline.isNeutralMarkerTranscript(it))
                 put("ambientTranscriptLikely", TranscriptTextPipeline.shouldIgnoreAmbientTranscript(it))
@@ -6311,7 +6479,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 awakened = awakened,
                 wakeWord = wakeWord.trim().takeIf { awakened },
                 voiceReplyAvailable = loadCurrentSettings().assistantVoiceEnabled,
-                multipleVoicesLikely = state.multipleVoicesLikely
+                multipleVoicesLikely = state.multipleVoicesLikely,
+                detectedSpeakerCount = state.detectedSpeakerCount,
+                nonVerbalAudioEvents = state.nonVerbalAudioEvents,
+                transcriptionAnalysisSources = state.transcriptionAnalysisSources,
+                transcriptionAvailableSignals = state.transcriptionAvailableSignals,
+                transcriptionReliabilityScore = state.transcriptionReliabilityScore,
+                transcriptionNoiseScore = state.transcriptionNoiseScore,
+                transcriptionLanguageCode = state.transcriptionLanguageCode,
+                transcriptionLanguageProbability = state.transcriptionLanguageProbability
             ),
             availableTools = tools,
             metadata = JSONObject(config.metadata.toString())
@@ -6707,11 +6883,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
         // Commit automatico: tempo apos a ultima transcricao com texto, sem
         // fala ativa e sem fila, para despachar sozinho ao OpenClaw.
-        private const val AUTO_COMMIT_AFTER_TRANSCRIPTION_MS = 3_500L
+        private const val AUTO_COMMIT_AFTER_TRANSCRIPTION_MS = 1_200L
 
         // Frase pendente com cara de inacabada (vide transcriptLooksUnfinished):
         // janelas de commit esticadas — pausa para pensar nao despacha.
-        private const val AUTO_COMMIT_UNFINISHED_TRANSCRIPTION_MS = 9_000L
+        private const val AUTO_COMMIT_UNFINISHED_TRANSCRIPTION_MS = 4_500L
         private const val UNFINISHED_SPEECH_SILENCE_MULTIPLIER = 4L
 
         // Verificacao de voz: segmentos curtos pontuam mais baixo mesmo
@@ -6723,10 +6899,11 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         // ser foneticamente incompreensíveis isolados, mas recuperam contexto
         // quando enviados juntos. As bolhas permanecem individuais no chat.
         private const val SHORT_TRANSCRIPTION_BATCH_SEGMENT_MS = 2_400L
-        private const val SHORT_TRANSCRIPTION_BATCH_GAP_MS = 2_500L
-        private const val SHORT_TRANSCRIPTION_BATCH_WINDOW_MS = 1_400L
+        private const val SHORT_TRANSCRIPTION_BATCH_GAP_MS = 1_200L
+        private const val SHORT_TRANSCRIPTION_BATCH_WINDOW_MS = 650L
         private const val SHORT_TRANSCRIPTION_BATCH_MAX_SEGMENTS = 3
         private const val SHORT_TRANSCRIPTION_BATCH_MAX_DURATION_MS = 8_000L
+        private const val RICH_ANALYSIS_LATENCY_BUDGET_MS = 600L
 
         // Faixa cinzenta da verificacao de voz: abaixo do limiar mas dentro
         // desta margem o segmento NAO e descartado — segue com o score no

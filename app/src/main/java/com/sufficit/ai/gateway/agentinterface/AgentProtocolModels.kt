@@ -25,11 +25,22 @@ data class AgentChannelContext(
     val wakeWord: String? = null,
     val surface: String = "android_mobile_chat",
     val voiceReplyAvailable: Boolean = true,
-    val multipleVoicesLikely: Boolean = false
+    val multipleVoicesLikely: Boolean = false,
+    val detectedSpeakerCount: Int? = null,
+    val nonVerbalAudioEvents: List<String> = emptyList(),
+    val transcriptionAnalysisSources: List<String> = emptyList(),
+    val transcriptionAvailableSignals: List<String> = emptyList(),
+    val transcriptionReliabilityScore: Double? = null,
+    val transcriptionNoiseScore: Double? = null,
+    val transcriptionLanguageCode: String? = null,
+    val transcriptionLanguageProbability: Double? = null
 ) {
     init {
         require(!awakened || !wakeWord.isNullOrBlank()) {
             "wakeWord deve identificar a chamada quando awakened=true."
+        }
+        require(detectedSpeakerCount == null || detectedSpeakerCount > 0) {
+            "detectedSpeakerCount deve ser positivo quando informado."
         }
     }
 }

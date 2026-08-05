@@ -32,6 +32,40 @@ class AgentProtocolContractTest {
         assertEquals("android_mobile_chat", encodedInteraction.getString("surface"))
     }
 
+    @Test
+    fun voiceTurnCarriesAcousticAnalysisWithoutChangingWakeContract() {
+        val encoded = AgentProtocolCodec.encodeTurn(
+            AgentTurnEnvelope(
+                turnId = "turn-audio-analysis",
+                text = "Acenda a luz.",
+                interaction = AgentChannelContext(
+                    inputMode = AgentInputMode.VOICE,
+                    awakened = true,
+                    wakeWord = "xuxu",
+                    multipleVoicesLikely = true,
+                    detectedSpeakerCount = 2,
+                    nonVerbalAudioEvents = listOf("music", "laughter"),
+                    transcriptionReliabilityScore = 0.61,
+                    transcriptionNoiseScore = 0.48,
+                    transcriptionLanguageCode = "por",
+                    transcriptionLanguageProbability = 0.97,
+                    transcriptionAnalysisSources = listOf("elevenlabs_scribe_v2_realtime"),
+                    transcriptionAvailableSignals = listOf("word_timestamps", "audio_events")
+                )
+            )
+        )
+        val interaction = encoded.getJSONObject("interaction")
+
+        assertEquals(2, interaction.getInt("detectedSpeakerCount"))
+        assertEquals("music", interaction.getJSONArray("nonVerbalAudioEvents").getString(0))
+        assertEquals(0.61, interaction.getDouble("transcriptionReliabilityScore"), 0.001)
+        assertEquals("xuxu", interaction.getString("wakeWord"))
+        assertEquals(
+            "elevenlabs_scribe_v2_realtime",
+            interaction.getJSONArray("transcriptionAnalysisSources").getString(0)
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun awakenedTurnRequiresTheDetectedWakeWord() {
         AgentChannelContext(

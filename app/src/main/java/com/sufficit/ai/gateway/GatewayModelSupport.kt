@@ -227,6 +227,12 @@ fun buildSettings(
         transcriptionDictionary = input.transcriptionDictionaryInput.trim(),
         transcriptionContextMessageCount = runtimeCurrent?.transcriptionContextMessageCount
             ?: GatewaySettingsStore.DEFAULT_TRANSCRIPTION_CONTEXT_MESSAGE_COUNT,
+        // Experimento nao exposto no formulario principal. Preserva o valor
+        // importado/configurado; sem isto o efeito de persistencia da tela o
+        // regravava como false 300 ms depois de cada inicializacao.
+        elevenLabsRichAudioAnalysisEnabled =
+            runtimeCurrent?.elevenLabsRichAudioAnalysisEnabled
+                ?: GatewaySettingsStore.DEFAULT_ELEVENLABS_RICH_AUDIO_ANALYSIS_ENABLED,
         screenMode = ScreenMode.fromPersistedValue(input.screenModeValue),
         screenHoldSeconds = numbers.screenHoldSeconds,
         transcriptClearTimeoutSecs = numbers.transcriptClearTimeoutSecs,

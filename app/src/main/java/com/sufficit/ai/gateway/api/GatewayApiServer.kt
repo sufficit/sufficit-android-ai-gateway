@@ -293,7 +293,20 @@ class GatewayApiServer(
             put("lastAssistantReplyTags", JSONArray(s.lastAssistantReplyTags))
             put("cameraGestureStatus", s.cameraGestureStatus)
             put("multipleVoicesLikely", s.multipleVoicesLikely)
+            put("detectedSpeakerCount", s.detectedSpeakerCount ?: JSONObject.NULL)
+            put("nonVerbalAudioEvents", JSONArray(s.nonVerbalAudioEvents))
+            put("transcriptionAnalysisSources", JSONArray(s.transcriptionAnalysisSources))
+            put("transcriptionAvailableSignals", JSONArray(s.transcriptionAvailableSignals))
+            put("transcriptionReliabilityScore", s.transcriptionReliabilityScore ?: JSONObject.NULL)
+            put("transcriptionNoiseScore", s.transcriptionNoiseScore ?: JSONObject.NULL)
+            put("transcriptionLanguageCode", s.transcriptionLanguageCode ?: JSONObject.NULL)
+            put(
+                "transcriptionLanguageProbability",
+                s.transcriptionLanguageProbability ?: JSONObject.NULL
+            )
             put("ambientNoiseDetected", s.ambientNoiseDetected)
+            put("ambientNoiseKind", s.ambientNoiseKind ?: JSONObject.NULL)
+            put("ambientNoiseScore", s.ambientNoiseScore ?: JSONObject.NULL)
             put("currentMicrophoneGain", s.currentMicrophoneGain ?: JSONObject.NULL)
             put("transcriptionBackend", s.transcriptionBackendLabel)
             put("transcriptionModel", s.transcriptionModelLabel)

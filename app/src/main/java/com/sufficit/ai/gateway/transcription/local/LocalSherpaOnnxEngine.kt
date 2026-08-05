@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.getFeatureConfig
 import com.sufficit.ai.gateway.config.LocalExecutionMode
 import com.sufficit.ai.gateway.config.LocalModelCatalog
 import com.sufficit.ai.gateway.transcription.WhisperTranscriptionResult
+import com.sufficit.ai.gateway.transcription.TranscriptionAudioMetadata
 
 class LocalSherpaOnnxEngine(private val context: Context) : AutoCloseable {
     private var recognizer: OfflineRecognizer? = null
@@ -41,7 +42,12 @@ class LocalSherpaOnnxEngine(private val context: Context) : AutoCloseable {
             }
         }
 
-        return WhisperTranscriptionResult(text = resultText)
+        return WhisperTranscriptionResult(
+            text = resultText,
+            audioMetadata = TranscriptionAudioMetadata(
+                analysisSources = listOf("local_sherpa_onnx")
+            )
+        )
     }
 
     fun inspectModel(modelPath: String, executionMode: LocalExecutionMode): String {

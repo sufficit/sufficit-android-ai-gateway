@@ -35,6 +35,7 @@ fun GatewaySettings.toJson(): JSONObject {
             put("terms", transcriptionTerms)
             put("dictionary", transcriptionDictionary)
             put("contextMessageCount", transcriptionContextMessageCount)
+            put("elevenLabsRichAudioAnalysis", elevenLabsRichAudioAnalysisEnabled)
             put("repeatSuppression", transcriptionRepeatSuppression)
             put("colloquialNormalization", colloquialNormalizationStrength)
         })

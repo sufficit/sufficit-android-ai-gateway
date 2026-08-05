@@ -120,6 +120,21 @@ internal object OpenClawTransportMapper {
             turn.interaction.wakeWord?.takeIf { turn.interaction.awakened } ?: JSONObject.NULL
         )
         put("multipleVoicesLikely", turn.interaction.multipleVoicesLikely)
+        put("transcriptionAnalysis", JSONObject().apply {
+            put("reliabilityScore", turn.interaction.transcriptionReliabilityScore ?: JSONObject.NULL)
+            put("reliabilitySource", "gateway_audio_heuristic")
+            put("noiseScore", turn.interaction.transcriptionNoiseScore ?: JSONObject.NULL)
+            put("detectedSpeakerCount", turn.interaction.detectedSpeakerCount ?: JSONObject.NULL)
+            put("multipleVoicesLikely", turn.interaction.multipleVoicesLikely)
+            put("nonVerbalEvents", JSONArray(turn.interaction.nonVerbalAudioEvents))
+            put("analysisSources", JSONArray(turn.interaction.transcriptionAnalysisSources))
+            put("availableSignals", JSONArray(turn.interaction.transcriptionAvailableSignals))
+            put("languageCode", turn.interaction.transcriptionLanguageCode ?: JSONObject.NULL)
+            put(
+                "languageProbability",
+                turn.interaction.transcriptionLanguageProbability ?: JSONObject.NULL
+            )
+        })
         put(
             "presentation",
             JSONObject()
