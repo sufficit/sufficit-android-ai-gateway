@@ -23,6 +23,8 @@
          resolution silently finds nothing. -->
     <queries>
         <package android:name="com.sufficit.ai.mobiledevice" />
+        <package android:name="br.com.sufficit.vpn" />
+        <intent><action android:name="br.com.sufficit.vpn.BIND" /></intent>
     </queries>
 
     <application

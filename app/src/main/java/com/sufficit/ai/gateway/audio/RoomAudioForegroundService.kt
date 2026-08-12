@@ -162,6 +162,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
 
     // API HTTP de controle (servidor embarcado). Sobe/cai conforme apiEnabled.
     private var apiServer: com.sufficit.ai.gateway.api.GatewayApiServer? = null
+    private var apiVpnPort: Int? = null
+    private val vpnClient by lazy { com.sufficit.ai.gateway.network.SufficitVpnClient(applicationContext) }
 
     // injectConversation(speak=false): suprime a fala da PROXIMA resposta do
     // agente uma unica vez (consumido em handleOpenClawReply).
@@ -532,6 +534,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         clearWakeWordConversation("servico encerrado")
         assistantReplyInterruptedPending = false
         interruptedAssistantReplyPreview = ""
+        vpnClient.release()
         synchronized(pendingDispatchLock) {
             pendingOpenClawDispatchText = ""
             pendingOpenClawDispatchState = null
@@ -5857,9 +5860,15 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             tokenProvider = { loadCurrentSettings().apiToken },
             actions = this
         )
+        if (apiServer != null && settings.apiBindAllInterfaces) {
+            apiVpnPort = settings.apiPort
+            Thread({ vpnClient.connectAndRegister(settings.apiPort) }, "sufficit-vpn-register").start()
+        }
     }
 
     private fun stopApiServer() {
+        apiVpnPort?.let(vpnClient::unregister)
+        apiVpnPort = null
         runCatching { apiServer?.stop() }
         apiServer = null
     }

@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
         applyWakeScreenFlags()
 
         // Iniciar automaticamente o RoomAudioForegroundService ao abrir o app
+        com.sufficit.ai.gateway.network.SufficitVpnClient.requestConsent(this)
         RoomAudioForegroundService.start(this)
 
         setContent {
