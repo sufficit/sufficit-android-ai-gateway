@@ -67,6 +67,8 @@ import com.sufficit.ai.gateway.history.SpeakerContinuityHistoryEntry
 import com.sufficit.ai.gateway.history.SpeakerContinuityHistoryLogger
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsEntry
 import com.sufficit.ai.gateway.history.SpectrumDiagnosticsLogger
+import com.sufficit.ai.gateway.identity.SufficitAuthenticationRequiredException
+import com.sufficit.ai.gateway.identity.SufficitDevicePresenceClient
 import com.sufficit.ai.gateway.ledger.InteractionLedger
 import com.sufficit.ai.gateway.openclaw.OpenClawGatewayClient
 import com.sufficit.ai.gateway.mcp.SufficitMcpToolBridge
@@ -144,6 +146,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private var captureExecutor: ExecutorService? = null
     private var transcriptionExecutor: ThreadPoolExecutor? = null
     private var shortTranscriptionBatchScheduler: ScheduledExecutorService? = null
+    private var devicePresenceScheduler: ScheduledExecutorService? = null
     // A análise rica do Scribe é opcional e secundária à conversa. Ela usa
     // outro executor para que uma segunda requisição HTTP nunca segure a
     // fila principal de transcrição.
@@ -172,6 +175,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
     private val elevenLabsRealtimeClient = ElevenLabsRealtimeClient()
     private val elevenLabsRichAudioAnalysisClient = ElevenLabsRichAudioAnalysisClient()
     private val companionTranscriptionClient by lazy { CompanionTranscriptionClient(this) }
+    private val sufficitDevicePresenceClient by lazy { SufficitDevicePresenceClient(this) }
     private val completedTranscriptAudio = ConcurrentLinkedQueue<RetainedTranscriptAudio>()
     private val pendingShortTranscriptionLock = Any()
     private val pendingShortTranscriptionSegments = ArrayDeque<PendingShortTranscriptionSegment>()
@@ -339,6 +343,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
             }
         }
         shortTranscriptionBatchScheduler = Executors.newSingleThreadScheduledExecutor()
+        startDevicePresenceHeartbeat()
         richAnalysisExecutor = Executors.newSingleThreadExecutor()
         openClawExecutor = Executors.newSingleThreadExecutor()
         openClawExecutor?.execute {
@@ -444,6 +449,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
                 refreshOpenClawConnection(s)
                 refreshSufficitMcpToolsAndPreferences()
                 restartApiServer(s)
+                announceDevicePresenceNow()
                 return START_STICKY
             }
             ACTION_RESUME_AMBIENT -> {
@@ -508,6 +514,8 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         transcriptionExecutor = null
         shortTranscriptionBatchScheduler?.shutdownNow()
         shortTranscriptionBatchScheduler = null
+        devicePresenceScheduler?.shutdownNow()
+        devicePresenceScheduler = null
         richAnalysisExecutor?.shutdownNow()
         richAnalysisExecutor = null
         synchronized(pendingShortTranscriptionLock) {
@@ -541,6 +549,32 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         }
         activeOpenClawDispatchStartedAtEpochMs = 0L
         super.onDestroy()
+    }
+
+    private fun startDevicePresenceHeartbeat() {
+        devicePresenceScheduler?.shutdownNow()
+        devicePresenceScheduler = Executors.newSingleThreadScheduledExecutor().also { scheduler ->
+            scheduler.scheduleWithFixedDelay(
+                ::announceDevicePresence,
+                0,
+                DEVICE_PRESENCE_INTERVAL_SECONDS,
+                TimeUnit.SECONDS
+            )
+        }
+    }
+
+    private fun announceDevicePresenceNow() {
+        devicePresenceScheduler?.execute(::announceDevicePresence)
+    }
+
+    private fun announceDevicePresence() {
+        try {
+            runBlocking { sufficitDevicePresenceClient.announce() }
+        } catch (_: SufficitAuthenticationRequiredException) {
+            // The inventory heartbeat starts automatically after the user signs in.
+        } catch (error: Exception) {
+            Log.w(TAG, "Falha ao atualizar presenca do Sufficit AI Gateway.", error)
+        }
     }
 
     override fun onInit(status: Int) {
@@ -6859,6 +6893,7 @@ class RoomAudioForegroundService : Service(), TextToSpeech.OnInitListener, com.s
         private const val WAKE_CHANNEL_ID = "room-audio-gateway-wake-v2"
         private const val NOTIFICATION_ID = 1001
         private const val WAKE_NOTIFICATION_ID = 1002
+        private const val DEVICE_PRESENCE_INTERVAL_SECONDS = 60L
         private const val ACTION_FINALIZE_SEGMENT = "com.sufficit.ai.gateway.action.FINALIZE_SEGMENT"
         private const val ACTION_SEND_TEXT = "com.sufficit.ai.gateway.action.SEND_TEXT"
         private const val ACTION_MARK_DIRECT_ADDRESS = "com.sufficit.ai.gateway.action.MARK_DIRECT_ADDRESS"
