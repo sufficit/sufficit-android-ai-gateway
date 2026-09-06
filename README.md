@@ -1,5 +1,8 @@
 # Sufficit Android AI Gateway
 
+> **Worktrees (padrão Sufficit):** toda árvore de trabalho deste projeto (humanos ou agentes de IA) deve ser criada dentro da pasta do próprio projeto: `git worktree add .worktrees/<nome>`. A pasta `.worktrees/` é ignorada pelo git (`.gitignore` → `**/.worktrees/`) e nunca deve ser versionada ou criada fora da raiz do repositório.
+
+
 [![Release APK](https://github.com/sufficit/sufficit-android-ai-gateway/actions/workflows/release.yml/badge.svg)](https://github.com/sufficit/sufficit-android-ai-gateway/actions/workflows/release.yml)
 
 Interface Android multimodal entre uma pessoa e um agente de inteligência artificial remoto, como OpenClaw ou Hermes Agent.

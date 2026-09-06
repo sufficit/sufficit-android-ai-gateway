@@ -26,3 +26,5 @@ app/src/main/assets/config.local.json
 *.jks
 keystore.properties
 **/__pycache__/
+# Worktrees (padrao): arvores de trabalho em <repo>/.worktrees/
+**/.worktrees/
